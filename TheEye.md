@@ -86,7 +86,11 @@ the public API.
 THINGS TO ADD / CORRECTIONS
 ===========================
 
-(none)
+- New glyphs for aircraft types. Heavy, quad engine, super, heli, prop, t-prop
+- On linux, if we check/uncheck "ATC" on the map, the view only gets updated when we drag the map.
+- The zoom is a bit too aggressive, the steps are too big when we scroll the wheel. Each "step" should be
+one zoom level up or down
+
 
 ## IVAO SIGN-IN (implemented)
 ==========================

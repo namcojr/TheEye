@@ -113,13 +113,25 @@ public static class IvaoMapLayers
         };
     }
 
-    public static MemoryLayer CreateAtcStations(IEnumerable<IvaoAtc> atc, MapPalette palette, double zoom = 1) =>
-        CreateAtcStations(CreateAtcStationPlacements(atc, zoom), palette, zoom);
+    /// <summary>
+    /// Draws the station badges. When <paramref name="supervisors"/> names the
+    /// user ids connected with supervisor rights, the badge of every such
+    /// station gets a ring in <see cref="FacilityPalette.Supervisor"/> around its
+    /// glyph, so a supervisor is recognisable without the map pretending they
+    /// control a fifth facility.
+    /// </summary>
+    public static MemoryLayer CreateAtcStations(
+        IEnumerable<IvaoAtc> atc,
+        MapPalette palette,
+        double zoom = 1,
+        IReadOnlySet<long>? supervisors = null) =>
+        CreateAtcStations(CreateAtcStationPlacements(atc, zoom), palette, zoom, supervisors);
 
     public static MemoryLayer CreateAtcStations(
         IEnumerable<AtcStationPlacement> placements,
         MapPalette palette,
-        double zoom = 1)
+        double zoom = 1,
+        IReadOnlySet<long>? supervisors = null)
     {
         var features = new List<IFeature>();
         foreach (var placement in placements)
@@ -133,6 +145,18 @@ public static class IvaoMapLayers
             feature["Callsign"] = placement.Station.Callsign;
             feature["Frequency"] = placement.Station.FrequencyText;
             feature.Styles.Add(AtcMarkerStyles.CreateImageStyle(placement.Marker));
+
+            // The glyph stays the one of the position the member controls: the
+            // ring is what says the member watches the network. It is drawn
+            // after the glyph so it sits on top of the empty middle, and before
+            // the label so the callsign keeps the last word.
+            if (supervisors is not null && supervisors.Contains(placement.Station.UserId))
+            {
+                feature.Styles.Add(AtcMarkerStyles.CreateRingStyle(
+                    placement.Marker,
+                    FacilityPalette.Supervisor));
+            }
+
             feature.Styles.Add(new LabelStyle
             {
                 LabelColumn = "Callsign",
@@ -392,7 +416,7 @@ public static class IvaoMapLayers
         else if (atc.Position is { } position && position.IsValid)
         {
             var feature = new PointFeature(WorldMap.Project(position));
-            feature.Styles.Add(AtcMarkerStyles.CreateSelectionRingStyle(
+            feature.Styles.Add(AtcMarkerStyles.CreateRingStyle(
                 AtcMarkerStyles.For(atc.Facility, atc.Callsign, zoom),
                 palette.Accent));
             features.Add(feature);

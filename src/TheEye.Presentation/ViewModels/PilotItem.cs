@@ -27,6 +27,8 @@ public sealed class PilotItem : ObservableObject
     private double _y;
     private bool _isVisible;
     private bool _isSelected;
+    private bool _isFriend;
+    private bool _isSupervisor;
 
     public PilotItem(IvaoPilot pilot, IAircraftIconCache icons, IImageCache images)
     {
@@ -73,6 +75,63 @@ public sealed class PilotItem : ObservableObject
     public bool IsMilitary => _pilot.IsMilitary;
 
     public bool IsWorldTour => _pilot.IsWorldTour;
+
+    /// <summary>
+    /// The IVAO member id (VID) of the flight, known before the roster record
+    /// arrives. It is the key of everything that follows a member instead of a
+    /// session: the friend list and the supervisor mark.
+    /// </summary>
+    public long UserId => _detail?.UserId is { } id && id > 0 ? id : _pilot.UserId;
+
+    /// <summary>
+    /// The member behind the callsign. The identity feed of the tracker names
+    /// every connected pilot, so the name is known before the card is opened;
+    /// the roster record of the selected session is preferred when it is there,
+    /// because it is the answer the card describes itself with. Empty means IVAO
+    /// sent no name, which is what a signed-out run looks like.
+    /// </summary>
+    public string MemberName => _detail?.User?.FullName is { Length: > 0 } name
+        ? name
+        : _pilot.MemberName;
+
+    public bool HasMemberName => MemberName.Length > 0;
+
+    /// <summary>The name for a cell that would look broken when left empty.</summary>
+    public string MemberText => HasMemberName ? MemberName : "—";
+
+    /// <summary>
+    /// True when the member is on the friend list of the settings. The shell
+    /// sets it after every refresh, because the list can change without the
+    /// traffic changing.
+    /// </summary>
+    public bool IsFriend
+    {
+        get => _isFriend;
+        set
+        {
+            if (SetProperty(ref _isFriend, value))
+            {
+                OnPropertyChanged(nameof(CallsignLabel));
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when IVAO lists the member with supervisor rights. The traffic list
+    /// keeps the callsign of the position; the mark says who watches the network.
+    /// </summary>
+    public bool IsSupervisor
+    {
+        get => _isSupervisor;
+        set => SetProperty(ref _isSupervisor, value);
+    }
+
+    /// <summary>
+    /// The callsign as the traffic list prints it. A star in front of the
+    /// callsign marks a friend, because a three-column list has no room for a
+    /// column of its own and the star survives a narrow panel.
+    /// </summary>
+    public string CallsignLabel => IsFriend ? $"★ {Callsign}" : Callsign;
 
     public bool HasFlightPlan => Plan is not null;
 
@@ -195,20 +254,33 @@ public sealed class PilotItem : ObservableObject
         }
     }
 
-    /// <summary>"Altitude 0.4.1", the client the member is connected with.</summary>
-    public string SoftwareText => _detail?.SoftwareText is { Length: > 0 } software ? software : "—";
+    /// <summary>
+    /// "Altitude 0.4.1", the client the member is connected with. The summary
+    /// the tracker delivers already names it, so the cell is filled before the
+    /// roster record arrives; the record wins because it carries the version too.
+    /// </summary>
+    public string SoftwareText => _detail?.SoftwareText is { Length: > 0 } software
+        ? software
+        : _pilot.SoftwareText is { Length: > 0 } summary ? summary : "—";
 
-    public string SimulatorText => _detail?.SimulatorText is { Length: > 0 } simulator ? simulator : "—";
+    public string SimulatorText => _detail?.SimulatorText is { Length: > 0 } simulator
+        ? simulator
+        : _pilot.SimulatorText is { Length: > 0 } summary ? summary : "—";
 
-    public string ServerText => _detail?.ServerText is { Length: > 0 } server ? server : "—";
+    public string ServerText => _detail?.ServerText is { Length: > 0 } server
+        ? server
+        : _pilot.ServerText is { Length: > 0 } summary ? summary : "—";
 
     /// <summary>
     /// Time online, counted from the connection timestamp rather than from the
     /// count that came with the record, so a cached answer keeps counting up.
+    /// The summary knows the connection as well, so the cell is filled before the
+    /// card has asked for the session.
     /// </summary>
-    public string OnlineText => _detail?.Online(DateTimeOffset.Now) is { } online
-        ? DurationText.Format(online)
-        : "—";
+    public string OnlineText =>
+        (_detail?.Online(DateTimeOffset.Now) ?? _pilot.Online(DateTimeOffset.Now)) is { } online
+            ? DurationText.Format(online)
+            : "—";
 
     public string ConnectedText => _detail?.CreatedAt is { } connectedAt
         ? connectedAt.ToLocalTime().ToString("HH:mm")
@@ -396,9 +468,11 @@ public sealed class PilotItem : ObservableObject
             Transponder,
             Remarks,
             _pilot.UserId.ToString(),
-            _detail?.User?.FullName,
+            MemberName,
             _detail?.User?.DivisionName,
-            _detail?.SoftwareText
+            _detail?.User?.StaffText,
+            _detail?.SoftwareText,
+            _pilot.SoftwareText
         }).ToLowerInvariant();
 
         OnPropertyChanged(string.Empty);

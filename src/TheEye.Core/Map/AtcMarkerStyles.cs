@@ -123,10 +123,11 @@ public static class AtcMarkerStyles
     public const double MaxZoomScale = 5.0;
 
     /// <summary>
-    /// Multiplier of the ring drawn around a selected badge, so it shows all
-    /// around the glyph instead of cutting into it.
+    /// Multiplier of a ring drawn around a badge: the selection ring, and the
+    /// supervisor ring the station layer draws. The ring is a little wider than
+    /// the glyph itself so it shows all around it instead of cutting into it.
     /// </summary>
-    public const double SelectionRingScale = 1.2;
+    public const double RingScale = 1.2;
 
     private const double ZoomQuantisation = 20;
     private const double BaseLabelFontSize = 9;
@@ -222,14 +223,16 @@ public static class AtcMarkerStyles
     public static Image ImageFor(AtcMarkerStyle marker) => ImageFor(marker.SvgSource);
 
     /// <summary>
-    /// Style of the ring drawn around a selected badge. The ring is a little
-    /// wider than the glyph itself and empty in the middle, so the airport and
-    /// the glyph stay visible while the accent ring shows which position of the
-    /// concentric stack a click picked.
+    /// Style of the ring drawn around a badge. Two callers share it: the ring
+    /// around the station a click selected, and the ring that marks the station
+    /// of a member with supervisor rights. The ring is a little wider than the
+    /// glyph itself and empty in the middle, so the airport and the glyph stay
+    /// visible while the ring shows which position of the concentric stack a
+    /// click picked, or that its member watches the network.
     /// </summary>
-    public static ImageStyle CreateSelectionRingStyle(AtcMarkerStyle marker, string accent)
+    public static ImageStyle CreateRingStyle(AtcMarkerStyle marker, string accent)
     {
-        var scale = Math.Round(marker.Scale * SelectionRingScale, 3);
+        var scale = Math.Round(marker.Scale * RingScale, 3);
         var source = CreateRingSvg(accent, scale);
         return new ImageStyle
         {

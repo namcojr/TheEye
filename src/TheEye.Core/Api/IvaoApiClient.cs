@@ -27,6 +27,14 @@ public sealed class IvaoApiClient : IDisposable
 
     public bool HasApiKey => !string.IsNullOrWhiteSpace(_options.ApiKey);
 
+    /// <summary>
+    /// True when the client carries a credential the identity feeds accept: a
+    /// consumer key, or a token source that may hand out a signed-in member's
+    /// token. Without one those feeds answer 401, so a caller that only needs
+    /// the public summaries can skip them entirely.
+    /// </summary>
+    public bool CanAuthenticate => HasApiKey || _options.AccessTokenSource is not null;
+
     public string BaseAddress => _options.BaseAddress;
 
     public Task<IReadOnlyList<IvaoPilotSummary>> GetPilotSummariesAsync(CancellationToken cancellationToken = default) =>
@@ -34,6 +42,32 @@ public sealed class IvaoApiClient : IDisposable
 
     public Task<IReadOnlyList<IvaoAtcSummary>> GetAtcSummariesAsync(CancellationToken cancellationToken = default) =>
         GetListAsync<IvaoAtcSummary>("v2/tracker/now/atc/summary", cancellationToken);
+
+    /// <summary>
+    /// The full pilot list (<c>/v2/tracker/now/pilots</c>): the same sessions as
+    /// the summary, with the member behind every callsign — name, division,
+    /// ratings — plus the software and simulator the pilot is connected with.
+    /// Authenticated, so a caller without a credential gets a 401.
+    /// </summary>
+    public Task<IReadOnlyList<IvaoPilot>> GetPilotsAsync(CancellationToken cancellationToken = default) =>
+        GetListAsync<IvaoPilot>("v2/tracker/now/pilots", cancellationToken);
+
+    /// <summary>
+    /// The full ATC list (<c>/v2/tracker/now/atc</c>): the summary sessions plus
+    /// the member behind every station. Authenticated, like the pilot feed.
+    /// </summary>
+    public Task<IReadOnlyList<IvaoAtc>> GetAtcsAsync(CancellationToken cancellationToken = default) =>
+        GetListAsync<IvaoAtc>("v2/tracker/now/atc", cancellationToken);
+
+    /// <summary>
+    /// The supervisors connected to the network
+    /// (<c>/v2/tracker/now/supervisors</c>): who is watching, on which callsign,
+    /// with the staff positions they hold. This feed is the only place a
+    /// supervisor appears, since they are neither flying nor controlling.
+    /// Authenticated, like the other identity feeds.
+    /// </summary>
+    public Task<IReadOnlyList<IvaoSupervisor>> GetSupervisorsAsync(CancellationToken cancellationToken = default) =>
+        GetListAsync<IvaoSupervisor>("v2/tracker/now/supervisors", cancellationToken);
 
     public Task<IvaoConnectionStats?> GetConnectionStatsAsync(CancellationToken cancellationToken = default) =>
         GetObjectAsync<IvaoConnectionStats>("v2/tracker/now/connections/stats", null, cancellationToken);

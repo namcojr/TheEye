@@ -21,6 +21,16 @@ public static class FacilityPalette
     public const string Information = "#9B59B6";
     public const string Default = "#95A5A6";
 
+    /// <summary>
+    /// The ring around the badge of a station whose member is connected with
+    /// supervisor rights. A supervisor is not a facility — the badge keeps the
+    /// glyph and colour of what they control — so this colour is drawn around
+    /// the glyph instead, which marks the member on the map without hiding the
+    /// position. Both shells mirror the value as <c>SupervisorBrush</c> so the
+    /// SUP list, the detail cards and the map agree on one colour.
+    /// </summary>
+    public const string Supervisor = "#E84393";
+
     public static string ForFacility(string? facility) => facility?.Trim().ToUpperInvariant() switch
     {
         "TWR" => Tower,

@@ -90,6 +90,36 @@ public sealed class TheEyeSettings
 
     public double MapResolution { get; set; } = WorldMap.MaxZoomOutResolution;
 
+    /// <summary>
+    /// The members the user follows, by IVAO id (VID). A friend is marked in the
+    /// traffic lists, collected on the FRIENDS tab, and keeps the name the app
+    /// knows even before IVAO names the connection.
+    /// </summary>
+    public List<long> FriendIds { get; set; } = [];
+
+    /// <summary>True when the member is one the user follows.</summary>
+    public bool IsFriend(long userId) => userId > 0 && FriendIds.Contains(userId);
+
+    /// <summary>Follows a member. Returns false when the id is unknown or already followed.</summary>
+    public bool AddFriend(long userId)
+    {
+        if (userId <= 0 || FriendIds.Contains(userId))
+        {
+            return false;
+        }
+
+        FriendIds.Add(userId);
+        FriendIds.Sort();
+        return true;
+    }
+
+    /// <summary>Stops following a member. Returns false when it was not followed.</summary>
+    public bool RemoveFriend(long userId) => userId > 0 && FriendIds.Remove(userId);
+
+    /// <summary>Follows a member that is not followed yet and stops following one that is.</summary>
+    public bool ToggleFriend(long userId) =>
+        IsFriend(userId) ? !RemoveFriend(userId) : AddFriend(userId);
+
     /// <summary>True when a sign-in token is stored, whatever its age.</summary>
     public bool HasOAuthTokens =>
         !string.IsNullOrWhiteSpace(OAuthAccessToken) || !string.IsNullOrWhiteSpace(OAuthRefreshToken);
@@ -134,7 +164,8 @@ public sealed class TheEyeSettings
         CenterOnMapClick = CenterOnMapClick,
         MapLatitude = MapLatitude,
         MapLongitude = MapLongitude,
-        MapResolution = MapResolution
+        MapResolution = MapResolution,
+        FriendIds = [.. FriendIds]
     };
 
     public void CopyFrom(TheEyeSettings other)
@@ -156,6 +187,7 @@ public sealed class TheEyeSettings
         MapLatitude = other.MapLatitude;
         MapLongitude = other.MapLongitude;
         MapResolution = other.MapResolution;
+        FriendIds = [.. other.FriendIds];
     }
 
     public void Normalize()
@@ -194,5 +226,12 @@ public sealed class TheEyeSettings
         {
             MapResolution = WorldMap.MaxZoomOutResolution;
         }
+
+        // A settings file edited by hand could repeat an id or hold a placeholder.
+        FriendIds = (FriendIds ?? [])
+            .Where(id => id > 0)
+            .Distinct()
+            .OrderBy(id => id)
+            .ToList();
     }
 }

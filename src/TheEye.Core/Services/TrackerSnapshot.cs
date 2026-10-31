@@ -5,6 +5,7 @@ namespace TheEye.Core.Services;
 public sealed record TrackerSnapshot(
     IReadOnlyList<IvaoPilot> Pilots,
     IReadOnlyList<IvaoAtc> Atc,
+    IReadOnlyList<IvaoSupervisor> Supervisors,
     IvaoConnectionStats Stats,
     DateTimeOffset UpdatedAt,
     IReadOnlyList<string> Warnings)
@@ -12,6 +13,8 @@ public sealed record TrackerSnapshot(
     public int PilotCount => Pilots.Count;
 
     public int AtcCount => Atc.Count;
+
+    public int SupervisorCount => Supervisors.Count;
 
     public bool IsPartial => Warnings.Count > 0;
 }

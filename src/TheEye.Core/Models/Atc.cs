@@ -26,6 +26,28 @@ public sealed class IvaoAtc
     [JsonPropertyName("subcenter")]
     public IvaoSubcenter? Subcenter { get; set; }
 
+    [JsonPropertyName("serverId")]
+    public string? ServerId { get; set; }
+
+    [JsonPropertyName("createdAt")]
+    public DateTimeOffset? CreatedAt { get; set; }
+
+    /// <summary>Seconds connected when the feed answered; the timestamp wins for display.</summary>
+    [JsonPropertyName("time")]
+    public long? Time { get; set; }
+
+    /// <summary>The client the controller works with ("Aurora/mac"), on the full feed only.</summary>
+    [JsonPropertyName("softwareType")]
+    public IvaoSoftwareSummary? SoftwareType { get; set; }
+
+    /// <summary>
+    /// The member behind the callsign. Only the authenticated feed
+    /// (<c>/v2/tracker/now/atcs</c>) carries it, so it is null on a summary and
+    /// is layered on by <see cref="ApplyMember"/> once that feed has answered.
+    /// </summary>
+    [JsonPropertyName("user")]
+    public IvaoSessionUser? User { get; set; }
+
     [JsonIgnore]
     public string Facility => AtcSession?.Position ?? AtcPosition?.Position ?? Subcenter?.Position ?? "ATC";
 
@@ -116,6 +138,53 @@ public sealed class IvaoAtc
 
     [JsonIgnore]
     public bool IsMilitary => AtcPosition?.Military == true || Subcenter?.Military == true;
+
+    [JsonIgnore]
+    public bool HasMember => User is { Id: > 0 };
+
+    /// <summary>"Ana Silva", or empty when IVAO sent no name for the member.</summary>
+    [JsonIgnore]
+    public string MemberName => User is { HasName: true } member ? member.FullName : string.Empty;
+
+    /// <summary>The client the controller works with ("IvAc", "Aurora"), empty when unknown.</summary>
+    [JsonIgnore]
+    public string SoftwareText => SoftwareType?.Name ?? string.Empty;
+
+    /// <summary>"WS1-EUW2", the server the station is connected to, empty when unknown.</summary>
+    [JsonIgnore]
+    public string ServerText => ServerId?.Trim() ?? string.Empty;
+
+    /// <summary>
+    /// Time connected, counted from the connection timestamp rather than from
+    /// the count that came with the record, so an answer that is already a few
+    /// seconds old keeps counting up.
+    /// </summary>
+    public TimeSpan? Online(DateTimeOffset now)
+    {
+        if (CreatedAt is { } connectedAt)
+        {
+            var elapsed = now - connectedAt;
+            return elapsed > TimeSpan.Zero ? elapsed : TimeSpan.Zero;
+        }
+
+        return Time is { } seconds && seconds > 0 ? TimeSpan.FromSeconds(seconds) : null;
+    }
+
+    /// <summary>
+    /// Copies the member details the identity feed knows onto this record. The
+    /// summary the tracker starts from carries no name, so the card and the
+    /// lists only show who is controlling after this has run.
+    /// </summary>
+    public void ApplyMember(IvaoAtc identity)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+
+        User ??= identity.User;
+        SoftwareType ??= identity.SoftwareType;
+        ServerId ??= identity.ServerId;
+        CreatedAt ??= identity.CreatedAt;
+        Time ??= identity.Time;
+    }
 }
 
 public sealed class IvaoAtcSession

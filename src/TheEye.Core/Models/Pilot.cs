@@ -81,6 +81,31 @@ public sealed class IvaoPilot
     [JsonPropertyName("flightPlan")]
     public IvaoFlightPlan? FlightPlan { get; set; }
 
+    [JsonPropertyName("serverId")]
+    public string? ServerId { get; set; }
+
+    [JsonPropertyName("createdAt")]
+    public DateTimeOffset? CreatedAt { get; set; }
+
+    /// <summary>Seconds connected when the feed answered; the timestamp wins for display.</summary>
+    [JsonPropertyName("time")]
+    public long? Time { get; set; }
+
+    [JsonPropertyName("pilotSession")]
+    public IvaoPilotSession? PilotSession { get; set; }
+
+    /// <summary>The client the pilot flies with ("Altitude/win"), on the full feed only.</summary>
+    [JsonPropertyName("softwareType")]
+    public IvaoSoftwareSummary? SoftwareType { get; set; }
+
+    /// <summary>
+    /// The member behind the callsign. Only the authenticated feed
+    /// (<c>/v2/tracker/now/pilots</c>) carries it, so it is null on a summary and
+    /// is layered on by <see cref="ApplyMember"/> once that feed has answered.
+    /// </summary>
+    [JsonPropertyName("user")]
+    public IvaoSessionUser? User { get; set; }
+
     [JsonIgnore]
     public string Aircraft => FlightPlan?.Aircraft?.IcaoCode ?? FlightPlan?.AircraftId ?? "—";
 
@@ -111,6 +136,58 @@ public sealed class IvaoPilot
 
     [JsonIgnore]
     public bool IsOnGround => LastTrack?.OnGround == true;
+
+    [JsonIgnore]
+    public bool HasMember => User is { Id: > 0 };
+
+    /// <summary>"Ana Silva", or the VID when IVAO sent no name for the member.</summary>
+    [JsonIgnore]
+    public string MemberName => User is { HasName: true } member ? member.FullName : string.Empty;
+
+    /// <summary>The client the pilot flies with ("Altitude", "X-Plane"), empty when unknown.</summary>
+    [JsonIgnore]
+    public string SoftwareText => SoftwareType?.Name ?? string.Empty;
+
+    /// <summary>The simulator the pilot is in ("MSFS", "X-Plane 12"), empty when unknown.</summary>
+    [JsonIgnore]
+    public string SimulatorText => PilotSession?.SimulatorId ?? string.Empty;
+
+    /// <summary>"WS1-EUW2", the server the pilot is connected to, empty when unknown.</summary>
+    [JsonIgnore]
+    public string ServerText => ServerId?.Trim() ?? string.Empty;
+
+    /// <summary>
+    /// Time connected, counted from the connection timestamp rather than from
+    /// the count that came with the record, so an answer that is already a few
+    /// seconds old keeps counting up.
+    /// </summary>
+    public TimeSpan? Online(DateTimeOffset now)
+    {
+        if (CreatedAt is { } connectedAt)
+        {
+            var elapsed = now - connectedAt;
+            return elapsed > TimeSpan.Zero ? elapsed : TimeSpan.Zero;
+        }
+
+        return Time is { } seconds && seconds > 0 ? TimeSpan.FromSeconds(seconds) : null;
+    }
+
+    /// <summary>
+    /// Copies the member details the identity feed knows onto this record. The
+    /// summary the tracker starts from carries no name, so the card and the
+    /// lists only show who is flying after this has run.
+    /// </summary>
+    public void ApplyMember(IvaoPilot identity)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+
+        User ??= identity.User;
+        SoftwareType ??= identity.SoftwareType;
+        PilotSession ??= identity.PilotSession;
+        ServerId ??= identity.ServerId;
+        CreatedAt ??= identity.CreatedAt;
+        Time ??= identity.Time;
+    }
 
     /// <summary>
     /// Estimated time of arrival from the remaining distance and the current

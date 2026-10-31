@@ -32,6 +32,15 @@ public sealed class TrackerService : IDisposable
 
     public TimeSpan RefreshInterval => _interval;
 
+    /// <summary>
+    /// True when the authenticated identity feeds should be fetched alongside
+    /// the public summaries: the member behind each callsign, the software they
+    /// are connected with and the connected supervisors. Those feeds answer 401
+    /// without a credential, so the shell only switches this on once the user
+    /// has signed in or configured a consumer key.
+    /// </summary>
+    public bool IncludeIdentity { get; set; }
+
     public TrackerSnapshot? LastSnapshot { get; private set; }
 
     public void Start()
@@ -142,11 +151,19 @@ public sealed class TrackerService : IDisposable
             "Statistics",
             cancellationToken);
 
+        var identityTask = IncludeIdentity
+            ? FetchIdentitiesAsync(warnings, cancellationToken)
+            : Task.FromResult(IdentityFeeds.None);
+
         await Task.WhenAll(pilotsTask, atcTask, statsTask);
 
         var pilots = pilotsTask.Result.Select(p => p.ToPilot()).ToList();
         var atc = atcTask.Result.Select(a => a.ToAtc()).ToList();
         var stats = statsTask.Result ?? CreateFallbackStats(pilots, atc);
+
+        var identity = identityTask.IsCompleted ? identityTask.Result : await identityTask;
+        MergeMembers(pilots, identity.Pilots);
+        MergeStations(atc, identity.Atc);
 
         if (pilots.Count == 0 && atc.Count == 0 && statsTask.Result is null)
         {
@@ -159,6 +176,7 @@ public sealed class TrackerService : IDisposable
         var snapshot = new TrackerSnapshot(
             pilots,
             atc,
+            identity.Supervisors,
             stats,
             DateTimeOffset.UtcNow,
             warnings);
@@ -218,6 +236,100 @@ public sealed class TrackerService : IDisposable
             warnings.Add($"{label}: {ex.Message}");
             return fallback;
         }
+    }
+
+    /// <summary>
+    /// The three authenticated feeds, fetched together. A failure leaves its
+    /// list empty and adds a warning: the names are a nicety, and the map is
+    /// still worth painting without them.
+    /// </summary>
+    private async Task<IdentityFeeds> FetchIdentitiesAsync(List<string> warnings, CancellationToken cancellationToken)
+    {
+        var pilotsTask = FetchAsync(
+            () => _api.GetPilotsAsync(cancellationToken),
+            (IReadOnlyList<IvaoPilot>)Array.Empty<IvaoPilot>(),
+            warnings,
+            "Member names",
+            cancellationToken);
+
+        var atcTask = FetchAsync(
+            () => _api.GetAtcsAsync(cancellationToken),
+            (IReadOnlyList<IvaoAtc>)Array.Empty<IvaoAtc>(),
+            warnings,
+            "Controller names",
+            cancellationToken);
+
+        var supervisorsTask = FetchAsync(
+            () => _api.GetSupervisorsAsync(cancellationToken),
+            (IReadOnlyList<IvaoSupervisor>)Array.Empty<IvaoSupervisor>(),
+            warnings,
+            "Supervisors",
+            cancellationToken);
+
+        await Task.WhenAll(pilotsTask, atcTask, supervisorsTask);
+
+        return new IdentityFeeds(pilotsTask.Result, atcTask.Result, supervisorsTask.Result);
+    }
+
+    /// <summary>
+    /// Copies the member details of the identity feed onto the summary records,
+    /// matched by session id (the summaries and the full feeds describe the
+    /// same connection).
+    /// </summary>
+    private static void MergeMembers(List<IvaoPilot> pilots, IReadOnlyList<IvaoPilot> identities)
+    {
+        if (pilots.Count == 0 || identities.Count == 0)
+        {
+            return;
+        }
+
+        var bySession = new Dictionary<long, IvaoPilot>(identities.Count);
+        foreach (var identity in identities)
+        {
+            bySession[identity.Id] = identity;
+        }
+
+        foreach (var pilot in pilots)
+        {
+            if (bySession.TryGetValue(pilot.Id, out var identity))
+            {
+                pilot.ApplyMember(identity);
+            }
+        }
+    }
+
+    /// <summary>Same as <see cref="MergeMembers"/>, for the ATC stations.</summary>
+    private static void MergeStations(List<IvaoAtc> atc, IReadOnlyList<IvaoAtc> identities)
+    {
+        if (atc.Count == 0 || identities.Count == 0)
+        {
+            return;
+        }
+
+        var bySession = new Dictionary<long, IvaoAtc>(identities.Count);
+        foreach (var identity in identities)
+        {
+            bySession[identity.Id] = identity;
+        }
+
+        foreach (var station in atc)
+        {
+            if (bySession.TryGetValue(station.Id, out var identity))
+            {
+                station.ApplyMember(identity);
+            }
+        }
+    }
+
+    private sealed record IdentityFeeds(
+        IReadOnlyList<IvaoPilot> Pilots,
+        IReadOnlyList<IvaoAtc> Atc,
+        IReadOnlyList<IvaoSupervisor> Supervisors)
+    {
+        public static IdentityFeeds None { get; } = new(
+            Array.Empty<IvaoPilot>(),
+            Array.Empty<IvaoAtc>(),
+            Array.Empty<IvaoSupervisor>());
     }
 }
 

@@ -18,6 +18,8 @@ public sealed class AtcItem : ObservableObject
     private object? _ratingBadge;
     private object? _flagImage;
     private bool _isSelected;
+    private bool _isFriend;
+    private bool _isSupervisor;
 
     public AtcItem(IvaoAtc atc, IImageCache images)
     {
@@ -74,6 +76,62 @@ public sealed class AtcItem : ObservableObject
 
     public bool HasSector => _atc.PolygonPoints.Count >= 3;
 
+    /// <summary>
+    /// The IVAO member id (VID) of the controller, known before the roster
+    /// record arrives. It is the key of everything that follows a member instead
+    /// of a session: the friend list and the supervisor ring on the map.
+    /// </summary>
+    public long UserId => _detail?.UserId is { } id && id > 0 ? id : _atc.UserId;
+
+    /// <summary>
+    /// The controller behind the station. The identity feed of the tracker names
+    /// every connected station, so the name is known before the card is opened;
+    /// the roster record of the selected session is preferred when it is there.
+    /// Empty means IVAO sent no name, which is what a signed-out run looks like.
+    /// </summary>
+    public string MemberName => _detail?.User?.FullName is { Length: > 0 } name
+        ? name
+        : _atc.MemberName;
+
+    public bool HasMemberName => MemberName.Length > 0;
+
+    /// <summary>The name for a cell that would look broken when left empty.</summary>
+    public string MemberText => HasMemberName ? MemberName : "—";
+
+    /// <summary>
+    /// True when the controller is on the friend list of the settings. The shell
+    /// sets it after every refresh, because the list can change without the
+    /// traffic changing.
+    /// </summary>
+    public bool IsFriend
+    {
+        get => _isFriend;
+        set
+        {
+            if (SetProperty(ref _isFriend, value))
+            {
+                OnPropertyChanged(nameof(CallsignLabel));
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when IVAO lists the controller with supervisor rights; the station
+    /// badge then carries the supervisor ring on the map.
+    /// </summary>
+    public bool IsSupervisor
+    {
+        get => _isSupervisor;
+        set => SetProperty(ref _isSupervisor, value);
+    }
+
+    /// <summary>
+    /// The callsign as the traffic list prints it. A star in front of the
+    /// callsign marks a friend, because a three-column list has no room for a
+    /// column of its own and the star survives a narrow panel.
+    /// </summary>
+    public string CallsignLabel => IsFriend ? $"★ {Callsign}" : Callsign;
+
     /// <summary>The IVAO member id (VID) of the controller.</summary>
     public string ControllerId
     {
@@ -125,18 +183,30 @@ public sealed class AtcItem : ObservableObject
     /// <summary>The rating spelled out ("Advanced ATC Trainee"), shown on hover.</summary>
     public string RatingName => _detail?.User?.Rating?.AtcRating?.Name is { Length: > 0 } name ? name : "—";
 
-    /// <summary>"Aurora/mac 1.0.38b", the client the controller is connected with.</summary>
-    public string SoftwareText => _detail?.SoftwareText is { Length: > 0 } software ? software : "—";
+    /// <summary>
+    /// "Aurora/mac 1.0.38b", the client the controller is connected with. The
+    /// summary the tracker delivers already names it, so the cell is filled
+    /// before the roster record arrives; the record wins because it carries the
+    /// version too.
+    /// </summary>
+    public string SoftwareText => _detail?.SoftwareText is { Length: > 0 } software
+        ? software
+        : _atc.SoftwareText is { Length: > 0 } summary ? summary : "—";
 
-    public string ServerText => _detail?.ServerText is { Length: > 0 } server ? server : "—";
+    public string ServerText => _detail?.ServerText is { Length: > 0 } server
+        ? server
+        : _atc.ServerText is { Length: > 0 } summary ? summary : "—";
 
     /// <summary>
     /// Time on position, counted from the connection timestamp rather than from
     /// the count that came with the record, so a cached answer keeps counting up.
+    /// The summary knows the connection as well, so the cell is filled before the
+    /// card has asked for the session.
     /// </summary>
-    public string OnlineText => _detail?.Online(DateTimeOffset.Now) is { } online
-        ? DurationText.Format(online)
-        : "—";
+    public string OnlineText =>
+        (_detail?.Online(DateTimeOffset.Now) ?? _atc.Online(DateTimeOffset.Now)) is { } online
+            ? DurationText.Format(online)
+            : "—";
 
     public string ConnectedText => _detail?.CreatedAt is { } connectedAt
         ? connectedAt.ToLocalTime().ToString("HH:mm")
@@ -256,9 +326,11 @@ public sealed class AtcItem : ObservableObject
             CountryName,
             Scope,
             ControllerId,
-            _detail?.User?.FullName,
+            MemberName,
             _detail?.User?.DivisionName,
-            _detail?.SoftwareText
+            _detail?.User?.StaffText,
+            _detail?.SoftwareText,
+            _atc.SoftwareText
         }).ToLowerInvariant();
 
         OnPropertyChanged(string.Empty);
