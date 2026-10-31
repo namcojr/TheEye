@@ -1,3 +1,4 @@
+using TheEye.Core.Maps;
 using TheEye.Core.Settings;
 
 namespace TheEye.Core.Tests;
@@ -16,8 +17,7 @@ public sealed class SettingsStoreTests
         Assert.Equal(TheEyeThemes.Dark, settings.Theme);
         Assert.Equal(30, settings.RefreshSeconds);
         Assert.True(settings.ShowPilots);
-        Assert.True(settings.ShowAtcRegions);
-        Assert.True(settings.ShowAtcStations);
+        Assert.True(settings.ShowAtc);
         Assert.Equal(45, settings.MapLatitude);
         Assert.Equal(10, settings.MapLongitude);
         Assert.Equal(25000, settings.MapResolution);
@@ -35,8 +35,7 @@ public sealed class SettingsStoreTests
             Theme = "forest",
             RefreshSeconds = 120,
             ShowPilots = false,
-            ShowAtcRegions = false,
-            ShowAtcStations = false,
+            ShowAtc = false,
             MapLatitude = 52.31,
             MapLongitude = 4.76,
             MapResolution = 5000
@@ -49,8 +48,7 @@ public sealed class SettingsStoreTests
         Assert.Equal(TheEyeThemes.Forest, loaded.Theme);
         Assert.Equal(120, loaded.RefreshSeconds);
         Assert.False(loaded.ShowPilots);
-        Assert.False(loaded.ShowAtcRegions);
-        Assert.False(loaded.ShowAtcStations);
+        Assert.False(loaded.ShowAtc);
         Assert.Equal(52.31, loaded.MapLatitude);
         Assert.Equal(4.76, loaded.MapLongitude);
         Assert.Equal(5000, loaded.MapResolution);
@@ -86,7 +84,7 @@ public sealed class SettingsStoreTests
               "refreshSeconds": 2,
               "mapLatitude": 99,
               "mapLongitude": -500,
-              "mapResolution": 10
+              "mapResolution": 0.5
             }
             """);
         var store = new SettingsStore(path);
@@ -99,6 +97,22 @@ public sealed class SettingsStoreTests
         Assert.Equal(45, settings.MapLatitude);
         Assert.Equal(10, settings.MapLongitude);
         Assert.Equal(25000, settings.MapResolution);
+    }
+
+    [Theory]
+    [InlineData(2.39)]
+    [InlineData(38.2)]
+    [InlineData(WorldMap.MinResolution)]
+    [InlineData(WorldMap.MaxResolution)]
+    public void Load_KeepsResolutionsInsideTheMapZoomRange(double resolution)
+    {
+        using var temporary = new TemporaryDirectory();
+        var store = new SettingsStore(temporary.FilePath("settings.json"));
+        store.Save(new TheEyeSettings { MapResolution = resolution });
+
+        var settings = store.Load();
+
+        Assert.Equal(resolution, settings.MapResolution);
     }
 
     [Fact]

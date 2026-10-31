@@ -136,7 +136,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         WorldMap.ApplyTheme(map, palette);
         ReplaceLayer(ref _atcRegionsLayer, IvaoMapLayers.CreateAtcRegions(Atc.Select(item => item.Atc), palette));
         ReplaceLayer(ref _atcLabelsLayer, IvaoMapLayers.CreateAtcLabels(Atc.Select(item => item.Atc), palette));
-        ReplaceLayer(ref _atcStationsLayer, IvaoMapLayers.CreateAtcStations(Atc.Select(item => item.Atc), palette));
+        ReplaceLayer(ref _atcStationsLayer, IvaoMapLayers.CreateAtcStations(Atc.Select(item => item.Atc), palette, _stationZoom));
         ReplaceLayer(ref _selectedAtcLayer, SelectedAtc is { } selected
             ? IvaoMapLayers.CreateSelectedAtc(selected.Atc, palette)
             : IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), palette));
@@ -144,8 +144,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             ? IvaoMapLayers.CreateRoute(pilot.Pilot, palette)
             : new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null });
 
-        SetLayerEnabled(_atcRegionsLayer, _showAtcRegions);
-        SetLayerEnabled(_atcStationsLayer, _showAtcStations);
+        SetLayerEnabled(_atcRegionsLayer, _showAtc);
+        SetLayerEnabled(_atcLabelsLayer, _showAtc);
+        SetLayerEnabled(_atcStationsLayer, _showAtc);
         map.Refresh();
     }
 
@@ -160,11 +161,13 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         SyncAtc(snapshot.Atc);
 
         var atc = snapshot.Atc;
+        _atc = atc;
         ReplaceLayer(ref _atcRegionsLayer, IvaoMapLayers.CreateAtcRegions(atc, _palette));
         ReplaceLayer(ref _atcLabelsLayer, IvaoMapLayers.CreateAtcLabels(atc, _palette));
-        ReplaceLayer(ref _atcStationsLayer, IvaoMapLayers.CreateAtcStations(atc, _palette));
-        SetLayerEnabled(_atcRegionsLayer, _showAtcRegions);
-        SetLayerEnabled(_atcStationsLayer, _showAtcStations);
+        ReplaceLayer(ref _atcStationsLayer, IvaoMapLayers.CreateAtcStations(atc, _palette, _stationZoom));
+        SetLayerEnabled(_atcRegionsLayer, _showAtc);
+        SetLayerEnabled(_atcLabelsLayer, _showAtc);
+        SetLayerEnabled(_atcStationsLayer, _showAtc);
 
         _regionIndex = AtcRegionIndex.Build(atc);
         UpdatePilotPositions();
@@ -444,7 +447,36 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnViewportChanged(object? sender, ViewportChangedEventArgs e) => UpdatePilotPositions();
+    private void OnViewportChanged(object? sender, ViewportChangedEventArgs e)
+    {
+        UpdatePilotPositions();
+        UpdateStationZoom();
+    }
+
+    /// <summary>
+    /// Rebuilds the station layer when the zoom multiplier changes so the badges
+    /// grow and shrink with the map instead of keeping one pixel size on every
+    /// zoom level. <see cref="AtcMarkerStyles.ZoomScale"/> quantises the
+    /// multiplier, so this only runs when the glyphs visibly change size.
+    /// </summary>
+    private void UpdateStationZoom()
+    {
+        if (Map is not { } map || _palette is null)
+        {
+            return;
+        }
+
+        var zoom = AtcMarkerStyles.ZoomScale(map.Navigator.Viewport.Resolution);
+        if (Math.Abs(zoom - _stationZoom) < 0.001)
+        {
+            return;
+        }
+
+        _stationZoom = zoom;
+        ReplaceLayer(ref _atcStationsLayer, IvaoMapLayers.CreateAtcStations(_atc, _palette, _stationZoom));
+        SetLayerEnabled(_atcStationsLayer, _showAtc);
+        map.Refresh();
+    }
 
     private void ReplaceLayer(ref ILayer? field, ILayer replacement)
     {
@@ -498,4 +530,5 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private static IvaoAtc EmptyAtc() => new() { Id = -1, Callsign = string.Empty };
 
     private static readonly MapPalette DefaultPalette = new(
-        "#0E2233", "#1B303F", "#2C45
+        "#0E2233", "#1B303F", "#2C4557", "#AEC4D4", "#4FB3FF", true);
+}

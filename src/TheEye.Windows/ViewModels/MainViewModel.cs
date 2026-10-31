@@ -143,34 +143,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool ShowAtcRegions
+    public bool ShowAtc
     {
-        get => Map.ShowAtcRegions;
+        get => Map.ShowAtc;
         set
         {
-            if (Map.ShowAtcRegions == value)
+            if (Map.ShowAtc == value)
             {
                 return;
             }
 
-            Map.ShowAtcRegions = value;
-            _settings.ShowAtcRegions = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public bool ShowAtcStations
-    {
-        get => Map.ShowAtcStations;
-        set
-        {
-            if (Map.ShowAtcStations == value)
-            {
-                return;
-            }
-
-            Map.ShowAtcStations = value;
-            _settings.ShowAtcStations = value;
+            Map.ShowAtc = value;
+            _settings.ShowAtc = value;
             OnPropertyChanged();
         }
     }
@@ -298,8 +282,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _settings.MapResolution);
 
         Map.ShowPilots = _settings.ShowPilots;
-        Map.ShowAtcRegions = _settings.ShowAtcRegions;
-        Map.ShowAtcStations = _settings.ShowAtcStations;
+        Map.ShowAtc = _settings.ShowAtc;
     }
 
     public async Task StartAsync()
@@ -362,11 +345,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         Map.ShowPilots = _settings.ShowPilots;
-        Map.ShowAtcRegions = _settings.ShowAtcRegions;
-        Map.ShowAtcStations = _settings.ShowAtcStations;
+        Map.ShowAtc = _settings.ShowAtc;
         OnPropertyChanged(nameof(ShowPilots));
-        OnPropertyChanged(nameof(ShowAtcRegions));
-        OnPropertyChanged(nameof(ShowAtcStations));
+        OnPropertyChanged(nameof(ShowAtc));
         OnPropertyChanged(nameof(HasApiKey));
         OnPropertyChanged(nameof(ConnectionDescription));
         OnPropertyChanged(nameof(RefreshDescription));
@@ -389,8 +370,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _settings.MapLongitude = center.Longitude;
         _settings.MapResolution = resolution;
         _settings.ShowPilots = Map.ShowPilots;
-        _settings.ShowAtcRegions = Map.ShowAtcRegions;
-        _settings.ShowAtcStations = Map.ShowAtcStations;
+        _settings.ShowAtc = Map.ShowAtc;
 
         try
         {

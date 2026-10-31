@@ -112,8 +112,7 @@
                     <TextBlock Text="MAP LAYERS" Style="{StaticResource SectionTitle}" Margin="0,18,0,0" />
                     <StackPanel Margin="0,9,0,0">
                         <CheckBox Content="Show pilots" IsChecked="{Binding Draft.ShowPilots}" Margin="0,0,0,9" />
-                        <CheckBox Content="Show ATC sectors and regions" IsChecked="{Binding Draft.ShowAtcRegions}" Margin="0,0,0,9" />
-                        <CheckBox Content="Show ATC station markers" IsChecked="{Binding Draft.ShowAtcStations}" Margin="0,0,0,9" />
+                        <CheckBox Content="Show ATC sectors, labels and stations" IsChecked="{Binding Draft.ShowAtc}" Margin="0,0,0,9" />
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

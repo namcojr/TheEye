@@ -269,6 +269,77 @@ public sealed class AtcMarkerStylesTests
         Assert.Single(layer.Features.Cast<PointFeature>().Select(feature => feature.Point).Distinct());
     }
 
+    [Fact]
+    public void For_ZoomedMarker_KeepsTheGlyphAndGrowsIt()
+    {
+        var marker = AtcMarkerStyles.For("TWR", "EDDB_TWR");
+        var zoomed = AtcMarkerStyles.For("TWR", "EDDB_TWR", 2);
+
+        Assert.Equal(marker.Shape, zoomed.Shape);
+        Assert.Equal(marker.Fill, zoomed.Fill);
+        Assert.Equal(Math.Round(marker.Scale * 2, 3), zoomed.Scale, 6);
+    }
+
+    [Theory]
+    [InlineData(WorldMap.MaxResolution, AtcMarkerStyles.MinZoomScale)]
+    [InlineData(AtcMarkerStyles.ReferenceResolution, 1d)]
+    [InlineData(WorldMap.MinResolution, AtcMarkerStyles.MaxZoomScale)]
+    public void ZoomScale_IsClampedToTheSupportedRange(double resolution, double expected)
+    {
+        Assert.Equal(expected, AtcMarkerStyles.ZoomScale(resolution), 6);
+    }
+
+    [Fact]
+    public void ZoomScale_GrowsWhenTheViewportZoomsIn()
+    {
+        var resolutions = new[] { 156543.034, 40000, 25000, 6000, 1500, 375, 94, WorldMap.MinResolution };
+
+        var scales = resolutions.Select(AtcMarkerStyles.ZoomScale).ToList();
+
+        Assert.Equal(scales.OrderBy(scale => scale), scales);
+        Assert.True(scales[0] < scales[^1]);
+    }
+
+    [Fact]
+    public void ZoomScale_FallsBackToTheBaseSizeForAnEmptyViewport()
+    {
+        Assert.Equal(1, AtcMarkerStyles.ZoomScale(0));
+        Assert.Equal(1, AtcMarkerStyles.ZoomScale(double.NaN));
+    }
+
+    [Fact]
+    public void LabelFontSize_GrowsWithTheZoomButStaysReadable()
+    {
+        Assert.Equal(9, AtcMarkerStyles.LabelFontSize(1));
+        Assert.True(AtcMarkerStyles.LabelFontSize(2) > 9);
+        Assert.Equal(14.4, AtcMarkerStyles.LabelFontSize(AtcMarkerStyles.MaxZoomScale), 6);
+    }
+
+    [Fact]
+    public void ClusterOffsets_WidenWithTheZoom()
+    {
+        var baseOffsets = AtcMarkerStyles.ClusterOffsets(4);
+        var zoomedOffsets = AtcMarkerStyles.ClusterOffsets(4, 2);
+
+        Assert.Equal(baseOffsets[1].X * 2, zoomedOffsets[1].X, 6);
+        Assert.Equal(baseOffsets[1].Y * 2, zoomedOffsets[1].Y, 6);
+    }
+
+    [Fact]
+    public void CreateAtcStations_ScalesTheGlyphsAndLabelsWithTheZoom()
+    {
+        var layer = IvaoMapLayers.CreateAtcStations(
+            [CreateAirportAtc("EDDB_TWR", "TWR")],
+            Palette,
+            zoom: 2);
+
+        var image = Assert.Single(layer.Features.SelectMany(feature => feature.Styles.OfType<ImageStyle>()));
+        var label = Assert.Single(layer.Features.SelectMany(feature => feature.Styles.OfType<LabelStyle>()));
+
+        Assert.Equal(AtcMarkerStyles.For("TWR", "EDDB_TWR", 2).Scale, image.SymbolScale, 6);
+        Assert.True(label.Font.Size > 9);
+    }
+
     private static IvaoAtc CreateAirportAtc(string callsign, string facility) =>
         new()
         {
