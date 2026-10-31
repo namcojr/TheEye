@@ -90,7 +90,7 @@ THINGS TO ADD / CORRECTIONS
 
 - When we click on an aircraft, make the route pass through the aircraft as well (so, departure point, aircraft, arrival point). In webeye, the route is actually traced from the pilot's aircraft data provided when we click on it: api.ivao.aero/v2/tracker/sessions/<sessionid>/tracks.
 
-
+- Make the aircraft + route centred on screen when we click on one.
 
 ## PUBLISH
 ==========
