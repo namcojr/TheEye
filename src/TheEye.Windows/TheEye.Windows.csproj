@@ -6,6 +6,7 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>TheEye.Windows</RootNamespace>
     <AssemblyName>TheEye</AssemblyName>
+    <ApplicationIcon>..\..\TheEye.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <PlatformTarget>x64</PlatformTarget>
     <Platforms>x64</Platforms>
@@ -16,6 +17,12 @@
   <ItemGroup>
     <ProjectReference Include="..\TheEye.Core\TheEye.Core.csproj" />
     <PackageReference Include="Mapsui.Wpf" Version="5.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The artwork lives in the repository root so the executable and the window
+         wear the same icon; linking it keeps that single source of truth. -->
+    <Resource Include="..\..\TheEye.ico" Link="Assets\TheEye.ico" />
   </ItemGroup>
 
 </Project>

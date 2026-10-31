@@ -22,13 +22,27 @@ public static class WorldMap
     public const double MaxResolution = 156543.034;
 
     /// <summary>
+    /// Shallowest zoom level the map allows. Level 4 shows about a third of the
+    /// world in a normal window; levels 0 to 3, which reach from a continent to the
+    /// whole world, are not offered by the navigator at all. Set this to 3 to allow
+    /// one more step out, or to 0 to allow the whole world again.
+    /// </summary>
+    public const int MinZoomLevel = 3;
+
+    /// <summary>
+    /// Resolution of <see cref="MinZoomLevel"/>: the most zoomed out the map can get,
+    /// i.e. the upper limit of the navigator's zoom bounds.
+    /// </summary>
+    public const double MaxZoomOutResolution = MaxResolution / (1 << MinZoomLevel);
+
+    /// <summary>
     /// Deepest zoom level. Level 17 puts one pixel at roughly 1.2 m, which is
     /// close enough to tell parked aircraft on an apron apart.
     /// </summary>
     public const int DeepestZoomLevel = 17;
 
     /// <summary>Resolution of <see cref="DeepestZoomLevel"/>.</summary>
-    public const double MinResolution = MaxResolution / 131072;
+    public const double MinResolution = MaxResolution / (1 << DeepestZoomLevel);
 
     private static readonly Lazy<(IFeature[] Borders, IFeature[] Labels)> Countries = new(LoadCountries);
 
@@ -37,12 +51,14 @@ public static class WorldMap
         var map = new Map { CRS = "EPSG:3857" };
         map.Widgets.Clear();
         map.Navigator.RotationLock = true;
-        map.Navigator.OverrideResolutions = Enumerable.Range(0, DeepestZoomLevel + 1)
+        map.Navigator.OverrideResolutions = Enumerable.Range(MinZoomLevel, DeepestZoomLevel - MinZoomLevel + 1)
             .Select(level => MaxResolution / Math.Pow(2, level))
             .ToArray();
-        map.Navigator.OverrideZoomBounds = new MMinMax(MinResolution, MaxResolution);
+        map.Navigator.OverrideZoomBounds = new MMinMax(MinResolution, MaxZoomOutResolution);
         map.Navigator.OverridePanBounds = new MRect(-20037508.34, -20037508.34, 20037508.34, 20037508.34);
-        map.Navigator.CenterOnAndZoomTo(Project(center), Math.Clamp(resolution, MinResolution, MaxResolution));
+        map.Navigator.CenterOnAndZoomTo(
+            Project(center),
+            Math.Clamp(resolution, MinResolution, MaxZoomOutResolution));
 
         map.Layers.Add(new MemoryLayer(CountriesLayerName)
         {

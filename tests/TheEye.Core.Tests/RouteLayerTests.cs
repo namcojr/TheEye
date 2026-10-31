@@ -153,38 +153,6 @@ public sealed class RouteLayerTests
         Assert.Empty(layer.Features);
     }
 
-    [Fact]
-    public void CreateAtcRoute_TracesTheSessionInTheFacilityColour()
-    {
-        var station = new IvaoAtc
-        {
-            Id = 9,
-            Callsign = "EDDB_CTR",
-            AtcSession = new IvaoAtcSession { Position = "CTR", Frequency = 132.6 }
-        };
-        var tracks = new[]
-        {
-            Track(52.0, 4.0, 0, onGround: false),
-            Track(52.1, 4.1, 0, onGround: false),
-            Track(52.2, 4.2, 0, onGround: false)
-        };
-
-        var lines = TrailLines(IvaoMapLayers.CreateAtcRoute(station, tracks));
-
-        var line = Assert.Single(lines);
-        Assert.Equal(3, line.Geometry!.NumPoints);
-        Assert.Equal(WorldMap.Parse(FacilityPalette.Control), PenColor(line));
-    }
-
-    [Fact]
-    public void CreateAtcRoute_ReturnsAnEmptyLayerWithoutTracks()
-    {
-        var station = new IvaoAtc { Id = 9, Callsign = "EDDB_TWR" };
-
-        Assert.Empty(IvaoMapLayers.CreateAtcRoute(station).Features);
-        Assert.Empty(IvaoMapLayers.CreateAtcRoute(station, [Track(52.0, 4.0, 0, onGround: false)]).Features);
-    }
-
     private static List<GeometryFeature> TrailLines(MemoryLayer layer) =>
         layer.Features
             .OfType<GeometryFeature>()

@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Data;
 using TheEye.Core.Api;
+using TheEye.Core.Maps;
 using TheEye.Core.Models;
 using TheEye.Core.Services;
 using TheEye.Core.Settings;
@@ -67,7 +68,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ClearSelectionCommand = new RelayCommand(() => Map.ClearSelection(), () => HasSelection);
         ZoomInCommand = new RelayCommand(() => Map.ZoomIn());
         ZoomOutCommand = new RelayCommand(() => Map.ZoomOut());
-        HomeCommand = new RelayCommand(() => Map.ResetView(new GeoCoordinate(45, 10), 25000));
+        HomeCommand = new RelayCommand(() => Map.ResetView(new GeoCoordinate(45, 10), WorldMap.MaxZoomOutResolution));
 
         Map.SelectionChanged += OnMapSelectionChanged;
         ThemeService.ThemeChanged += OnThemeChanged;
@@ -481,8 +482,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _tracker.RefreshFailed += OnRefreshFailed;
         _tracker.Start();
 
-        // The recorded track of the selected flight or station is fetched on
-        // demand, because only one of them is ever on screen.
+        // The recorded track of the selected flight is fetched on demand, because
+        // only one aircraft is ever on screen. A station is never traced.
         _tracks = new SessionTrackStore(_api);
 
         // So is the roster record behind the selected callsign; the summary the
@@ -651,12 +652,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Loads the recorded track of the selected flight or station so the map can
-    /// trace the path it has actually flown. Selecting a session marked its route
-    /// as pending, so no line is drawn until this answer arrives: the estimate of
-    /// the filed route is only used once the track is known to be unavailable, and
-    /// the trail therefore never jumps. A response for a selection the user has
-    /// already left is dropped.
+    /// Loads the recorded track of the selected flight so the map can trace the
+    /// path it has actually flown. Only aircraft are traced: selecting a station
+    /// never requests a track, because a controller session records no flown path
+    /// and drawing one would put an aircraft-like line across its sector. Selecting
+    /// a flight marked its route as pending, so no line is drawn until this answer
+    /// arrives: the estimate of the filed route is only used once the track is
+    /// known to be unavailable, and the trail therefore never jumps. A response for
+    /// a selection the user has already left is dropped.
     /// </summary>
     private async Task RefreshSelectionTracksAsync()
     {
@@ -668,9 +671,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var sessionId = Map.SelectedPilot?.Id ?? Map.SelectedAtc?.Id;
+        var sessionId = Map.SelectedPilot?.Id;
         if (sessionId is not { } id)
         {
+            // A station has no trail, and a previous flight's notice does not apply.
             TrackNotice = string.Empty;
             return;
         }
@@ -684,7 +688,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             // IVAO never answered — a timeout, for example — so the map must stop
             // waiting for a track instead of staying without any line at all.
-            if (Map.SelectedPilot?.Id == id || Map.SelectedAtc?.Id == id)
+            if (Map.SelectedPilot?.Id == id)
             {
                 Map.SetSelectionTracks(null);
             }
@@ -692,7 +696,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (Map.SelectedPilot?.Id != id && Map.SelectedAtc?.Id != id)
+        if (Map.SelectedPilot?.Id != id)
         {
             return;
         }

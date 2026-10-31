@@ -88,7 +88,7 @@ public sealed class TheEyeSettings
 
     public double MapLongitude { get; set; } = 10;
 
-    public double MapResolution { get; set; } = 25000;
+    public double MapResolution { get; set; } = WorldMap.MaxZoomOutResolution;
 
     /// <summary>True when a sign-in token is stored, whatever its age.</summary>
     public bool HasOAuthTokens =>
@@ -190,9 +190,9 @@ public sealed class TheEyeSettings
             MapLongitude = 10;
         }
 
-        if (double.IsNaN(MapResolution) || MapResolution is < WorldMap.MinResolution or > WorldMap.MaxResolution)
+        if (double.IsNaN(MapResolution) || MapResolution is < WorldMap.MinResolution or > WorldMap.MaxZoomOutResolution)
         {
-            MapResolution = 25000;
+            MapResolution = WorldMap.MaxZoomOutResolution;
         }
     }
 }

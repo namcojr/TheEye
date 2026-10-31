@@ -86,17 +86,7 @@ the public API.
 THINGS TO ADD / CORRECTIONS
 ===========================
 
-- Make these focused fixes to the fallback glyphs (I will test everything visually - Do not test, only implement):
-    a) Concerning the _DEL facility, rotate the shape 45% so it is distinguishable from the existing _GND facility.
-    b) These SVG glyphs must zoom-in with the map like other _CTR facilities already do, maintaining its centre on the airport they belong to.
-    c) The _TWR circle must be much wider, drawn in a similar fashion to the _CTR facilities. Red shade.
-    d) The _DEP, _APP circles must be in a blue shade and slightly wider than the _TWR circles.
-    e) The contour of _DEP _ARR _TWR and _GND facilities should be only 1px wide and 0% transparent using the same colour of the facility, in a similar fashion to the _CTR ones.
-    f) The _DEL, _GND, _TWR, _DEP and _ARR facilities must all be centred in the airport coordinates, overlapping. Clicking on them will cycle the selected facility. The _DEL and _GND facilities are the smallest items, then the _TWR a circle whose diameter covers the previous facilities and finally _DEP and _ARR have an even larger diameter to cover the _TWR facility a bit more. Use variables for these diameters and let me know where they are so i can adjust manually.
-    g) After these implementations i will look at the result and let you know if further fixes are required.
-
-    Do ask questions if you have any
-
+(none)
 
 ## IVAO SIGN-IN (implemented)
 ==========================
@@ -179,12 +169,83 @@ key), and any other failure prints the reason.
 ## RECORDED TRAIL
 ================
 
-Selecting a flight or a station fetches its recorded track
+Selecting a flight fetches its recorded track
 (`/v2/tracker/sessions/{id}/tracks`). The map draws no line until IVAO has answered,
 then paints the trail. The ghosted great-circle estimate of the filed route is only
 drawn once the answer came back without a usable track — drawing it first made the
 line jump across the map when the recorded trail replaced it. The airports of the
 flight plan come from the summary feed, so they stay on screen while the track loads.
+
+Only aircraft are traced. A control position has no flown path, so a station selection
+never requests a track and only highlights the sector polygon or the badge
+(`IvaoMapLayers.CreateSelectedAtc`). IVAO answers the tracks endpoint for ATC sessions
+as well, which is what used to draw an aircraft-like line across a controller's
+airport: `MainViewModel.RefreshSelectionTracksAsync` now asks for a track only while
+`MapViewModel.SelectedPilot` is set, and `MapViewModel.RebuildRouteLayer` paints an
+empty route layer for a station.
+
+
+## APPLICATION ICON (implemented)
+=================================
+
+`TheEye.ico` in the repository root is the one source of the artwork. The project
+takes it twice: `<ApplicationIcon>` in `src/TheEye.Windows/TheEye.Windows.csproj`
+embeds it in the executable, so Explorer, the taskbar shortcut and the file properties
+show it, and a linked `<Resource Link="Assets\TheEye.ico" />` packs it into the
+assembly for `MainWindow.Icon`, which is what the window, the taskbar button and
+Alt+Tab use. Replacing the icon therefore means replacing that single file; the drawn
+eye glyph in the title bar is part of the `WindowChrome` header and is unaffected.
+
+
+## ATC BADGES (implemented)
+==========================
+
+A control position that publishes no sector polygon is drawn as a badge on its
+airport coordinate. All positions of one airport sit on that same coordinate and
+overlap, so the smallest facility ends up in the middle and every wider facility
+wraps the one before it:
+
+- Shapes: `_DEL` and `_GND` are four point stars — `_DEL` is rotated 45° so the
+  two read differently — `_TWR` is the red disc around them, `_DEP`/`_APP` the
+  wider blue disc around the tower, and `_CTR`/`_FSS`/unknown keep their own
+  smaller discs. The contours are one pixel wide at the full facility colour;
+  only the fill is see-through.
+- Sizes: `DeliveryDiameter`, `GroundDiameter`, `TowerDiameter`,
+  `ApproachDiameter`, `ControlDiameter`, `InformationDiameter`,
+  `DefaultDiameter`, `OutlineWidth` and `CircleFillAlpha` are the tuning
+  variables at the top of `src/TheEye.Core/Map/AtcMarkerStyles.cs`.
+- Zoom limits: `WorldMap.MinZoomLevel` (default 4) is the most zoomed out level
+  the navigator offers. `WorldMap.Create` builds `OverrideResolutions` from that
+  level down to `DeepestZoomLevel` and sets `OverrideZoomBounds` to
+  `MinResolution … MaxZoomOutResolution`, so no gesture, button or restored
+  setting can reach levels 0–3 any more. `MaxZoomOutResolution` is derived from
+  the level (`MaxResolution / 2^MinZoomLevel`), so changing the level is enough.
+  The home view and the default `MapResolution` of the settings use that same
+  resolution.
+- Badge zoom: `AtcMarkerStyles.ZoomScale(resolution)` is driven by the **zoom
+  level** of the map, not by the raw resolution. `MinZoomLevel` is
+  `WorldMap.MinZoomLevel`, the widest view the user can reach, and there the
+  badges use `MinZoomScale` (default 1, the tuned size); `MaxZoomLevel`
+  (`WorldMap.DeepestZoomLevel`, 17) uses `MaxZoomScale` (default 2), and the
+  multiplier rises evenly on the levels in between. `MaxZoomScale` is therefore
+  the single number that controls how much the glyphs enlarge while the map is
+  zoomed in; with the current diameters and `1 → 2` the tower ring goes from
+  45 px to 90 px and the ground star from 27 px to 54 px. `AtcMarkerStyles.For`
+  draws each badge as one SVG and scales the whole artwork with it, so circles,
+  stars, the selection ring and the hit radius grow together. The callsign font
+  is capped at `MaxLabelZoom` (1.6, i.e. 9 → 14.4 px) so the labels stay in
+  proportion instead of printing across the map. An empty viewport (resolution 0
+  or NaN) falls back to `MinZoomScale`. The result is quantised, and
+  `MapViewModel.UpdateStationZoom` rebuilds the station layer only when the
+  quantised multiplier changes.
+- Clicks: `AtcStationHitTest` picks the smallest ring the pointer is inside, so
+  the star wins in the middle and the approach ring at the rim. Clicking the same
+  airport again walks outwards through the stack, and
+  `IvaoMapLayers.CreateSelectedAtc` draws an accent ring around the badge that is
+  selected — `SelectionRingScale` sizes it.
+- Labels: the callsigns cannot fan out sideways any more, so they are stacked
+  below the widest badge of the airport, one line per facility, smallest first
+  (`AtcMarkerStyles.StackedLabelOffset`).
 
 
 dotnet publish src\TheEye.Windows\TheEye.Windows.csproj `

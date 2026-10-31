@@ -4,6 +4,7 @@
         xmlns:mapsui="clr-namespace:Mapsui.UI.Wpf;assembly=Mapsui.UI.Wpf"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="The Eye of IVAO"
+        Icon="pack://application:,,,/Assets/TheEye.ico"
         Width="1440" Height="900"
         MinWidth="1120" MinHeight="680"
         WindowStyle="None"

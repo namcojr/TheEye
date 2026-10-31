@@ -248,26 +248,6 @@ public sealed class FlightTrailTests
         Assert.Empty(FlightTrail.BuildPilotTrail(withoutPosition, null));
     }
 
-    [Fact]
-    public void BuildLines_TracesTheRecordedTrackOfAStation()
-    {
-        var tracks = new[]
-        {
-            Track(52.0, 4.0, 0, At(0)),
-            Track(52.1, 4.1, 0, At(1)),
-            Track(52.2, 4.2, 0, At(2))
-        };
-
-        var lines = FlightTrail.BuildLines(tracks);
-
-        Assert.Single(lines);
-        Assert.Equal(3, lines[0].Count);
-        Assert.Equal(new GeoCoordinate(52.2, 4.2), lines[0][^1]);
-    }
-
-    [Fact]
-    public void BuildLines_ReturnsEmptyForNoTracks() => Assert.Empty(FlightTrail.BuildLines(null));
-
     private static DateTimeOffset At(int second) => new(2026, 10, 31, 10, 0, second, TimeSpan.Zero);
 
     private static IvaoPilotTrack Track(double latitude, double longitude, double altitude, DateTimeOffset timestamp) =>

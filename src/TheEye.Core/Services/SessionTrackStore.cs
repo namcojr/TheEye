@@ -6,8 +6,8 @@ namespace TheEye.Core.Services;
 /// <summary>
 /// Fetches the recorded track of a single session on demand. The tracker is
 /// polled for summaries every refresh, but a full track is only useful for the
-/// flight or station the user has selected, so results are cached briefly and
-/// reused by the next refresh instead of being requested again.
+/// flight the user has selected, so results are cached briefly and reused by the
+/// next refresh instead of being requested again.
 /// </summary>
 public sealed class SessionTrackStore
 {

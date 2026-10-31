@@ -170,8 +170,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         ReplaceLayer(ref _atcLabelsLayer, IvaoMapLayers.CreateAtcLabels(Atc.Select(item => item.Atc), palette));
         ReplaceLayer(ref _atcStationsLayer, CreateStationLayer(Atc.Select(item => item.Atc)));
         ReplaceLayer(ref _selectedAtcLayer, SelectedAtc is { } selected
-            ? IvaoMapLayers.CreateSelectedAtc(selected.Atc, palette)
-            : IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), palette));
+            ? IvaoMapLayers.CreateSelectedAtc(selected.Atc, palette, _stationZoom)
+            : IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), palette, _stationZoom));
 
         // Repaints the route with the new palette colours; the recorded track of
         // the selection is kept, so a theme switch does not drop the trail.
@@ -288,13 +288,12 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         SelectedAtc = atc;
         _selectionTracks = [];
 
-        // A station always needs its recorded track, so the map waits for the
-        // answer instead of drawing anything of its own.
-        _selectionTracksPending = atc is not null;
+        // Only aircraft are traced, so a station never waits for a track.
+        _selectionTracksPending = false;
         if (atc is not null)
         {
             atc.IsSelected = true;
-            ReplaceLayer(ref _selectedAtcLayer, IvaoMapLayers.CreateSelectedAtc(atc.Atc, _palette ?? DefaultPalette));
+            ReplaceLayer(ref _selectedAtcLayer, IvaoMapLayers.CreateSelectedAtc(atc.Atc, _palette ?? DefaultPalette, _stationZoom));
 
             // Selecting a station in the ATC list centres it too; a click on the
             // map only centres while the option is enabled.
@@ -322,19 +321,19 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Hands the recorded track of the current selection to the map. The route
-    /// layer is redrawn straight away and again on every snapshot or theme
-    /// change. While <paramref name="pending"/> is true the request is still
-    /// running, so no line is drawn at all: the estimate of the filed route would
-    /// be replaced by the recorded trail a moment later, and the line would
-    /// visibly jump. Once IVAO has answered — with a track or without one — the
-    /// map draws what it knows.
+    /// Hands the recorded track of the selected flight to the map. The route layer
+    /// is redrawn straight away and again on every snapshot or theme change. While
+    /// <paramref name="pending"/> is true the request is still running, so no line
+    /// is drawn at all: the estimate of the filed route would be replaced by the
+    /// recorded trail a moment later, and the line would visibly jump. Once IVAO
+    /// has answered — with a track or without one — the map draws what it knows.
+    /// A station has no trail, so nothing is drawn for one.
     /// </summary>
     public void SetSelectionTracks(IReadOnlyList<IvaoPilotTrack>? tracks, bool pending = false)
     {
         _selectionTracks = tracks ?? [];
         _selectionTracksPending = pending;
-        if (SelectedPilot is null && SelectedAtc is null)
+        if (SelectedPilot is null)
         {
             return;
         }
@@ -406,11 +405,15 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         return best;
     }
 
-    /// <summary>Returns the station badge drawn under a screen position, if any.</summary>
+    /// <summary>
+    /// Returns the station badge drawn under a screen position, if any. A second
+    /// click on the same airport steps on to the next stacked position, so the
+    /// rings drawn on top of each other can all be reached.
+    /// </summary>
     public AtcItem? HitTestStation(ScreenPosition position)
     {
         if (!_showAtc
-            || AtcStationHitTest.Find(_stationTargets, position.X, position.Y) is not { } station)
+            || AtcStationHitTest.Find(_stationTargets, position.X, position.Y, SelectedAtc?.Id) is not { } station)
         {
             return null;
         }
@@ -495,7 +498,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     {
         if (Map is not { } map || map.Navigator.Viewport.Width <= 0)
         {
-            return (new GeoCoordinate(45, 10), 25000);
+            return (new GeoCoordinate(45, 10), WorldMap.MaxZoomOutResolution);
         }
 
         var viewport = map.Navigator.Viewport;
@@ -638,7 +641,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Projects every badge onto the current viewport so a click can find it
-    /// where it is drawn, including the cluster fan-out offsets.
+    /// where it is drawn. The badges of one airport share the airport
+    /// coordinate, so they are all tested at the same screen point.
     /// </summary>
     private void UpdateStationTargets()
     {
@@ -659,8 +663,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             var screen = viewport.WorldToScreen(placement.Point);
             _stationTargets.Add(new AtcStationHitTarget(
                 placement.Station,
-                screen.X + placement.OffsetX,
-                screen.Y + placement.OffsetY,
+                screen.X,
+                screen.Y,
                 AtcMarkerStyles.HitRadius(placement.Marker),
                 AtcMarkerStyles.SortOrder(placement.Station.Facility, placement.Station.Callsign)));
         }
@@ -688,6 +692,14 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         _stationZoom = zoom;
         ReplaceLayer(ref _atcStationsLayer, CreateStationLayer(_atc));
         SetLayerEnabled(_atcStationsLayer, _showAtc);
+
+        // The ring around the selected badge is drawn at the size of the glyph,
+        // so it has to follow the new zoom as well.
+        if (SelectedAtc is { } selected)
+        {
+            ReplaceLayer(ref _selectedAtcLayer, IvaoMapLayers.CreateSelectedAtc(selected.Atc, _palette, zoom));
+        }
+
         map.Refresh();
     }
 
@@ -768,11 +780,12 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Paints the route of whatever is selected: the flown trail of an aircraft,
-    /// the recorded track of a station, or an empty layer when nothing is
-    /// selected. The estimated route is only drawn once the recorded track is
-    /// known to be unavailable, so the line never jumps from a guess to the
-    /// recorded trail.
+    /// Paints the trail of the selected aircraft, or an empty layer when nothing
+    /// is selected. A station has no trail: the recorded track of a session is the
+    /// path an aircraft flew, so selecting a controller only highlights its sector
+    /// or badge. The estimated route is only drawn once the recorded track is known
+    /// to be unavailable, so the line never jumps from a guess to the recorded
+    /// trail.
     /// </summary>
     private void RebuildRouteLayer()
     {
@@ -782,9 +795,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
                 _palette ?? DefaultPalette,
                 _selectionTracks,
                 estimateWhenMissing: !_selectionTracksPending)
-            : SelectedAtc is { } atc
-                ? IvaoMapLayers.CreateAtcRoute(atc.Atc, _selectionTracks)
-                : new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };
+            : new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };
 
         ReplaceLayer(ref _routeLayer, layer);
     }

@@ -157,50 +157,28 @@ public sealed class AtcMarkerStylesTests
     }
 
     [Fact]
-    public void ClusterOffsets_SingleStationKeepsTheAirportCentre()
-    {
-        var offsets = AtcMarkerStyles.ClusterOffsets(1);
-
-        Assert.Equal(new[] { (0d, 0d) }, offsets);
-    }
-
-    [Fact]
-    public void ClusterOffsets_SpreadBadgesAroundTheAirport()
-    {
-        var offsets = AtcMarkerStyles.ClusterOffsets(4);
-
-        Assert.Equal(4, offsets.Count);
-        Assert.Equal(0, offsets[0].X, 6);
-        Assert.True(offsets[0].Y < 0);
-        Assert.True(offsets[1].X > 0);
-        Assert.Equal(-offsets[0].Y, offsets[2].Y, 6);
-        Assert.True(offsets[3].X < 0);
-        Assert.All(
-            offsets,
-            offset => Assert.True(Math.Sqrt((offset.X * offset.X) + (offset.Y * offset.Y)) > 10));
-    }
-
-    [Fact]
-    public void LabelOffset_PushesTheCallsignPastTheBadgeAlongTheClusterDirection()
+    public void StackedLabelOffset_StartsBelowTheWidestBadge()
     {
         var marker = AtcMarkerStyles.For("APP", "EDDB_APP");
 
-        var (x, y) = AtcMarkerStyles.LabelOffset(marker, (0, -16));
+        var (x, y) = AtcMarkerStyles.StackedLabelOffset(marker.Scale, 0);
 
         Assert.Equal(0, x, 6);
         // Label offsets are rounded to one decimal to keep the styles stable.
-        Assert.Equal(Math.Round(-16d - ((16 * marker.Scale) + 4), 1), y, 6);
+        Assert.Equal(Math.Round((16 * marker.Scale) + 4, 1), y, 6);
     }
 
     [Fact]
-    public void LabelOffset_SingleStationSitsBelowTheBadge()
+    public void StackedLabelOffset_PutsEveryCallsignOnItsOwnLine()
     {
-        var marker = AtcMarkerStyles.For("TWR", "EDDB_TWR");
+        var marker = AtcMarkerStyles.For("APP", "EDDB_APP");
 
-        var (x, y) = AtcMarkerStyles.LabelOffset(marker, default);
+        var first = AtcMarkerStyles.StackedLabelOffset(marker.Scale, 0).Y;
+        var second = AtcMarkerStyles.StackedLabelOffset(marker.Scale, 1).Y;
+        var third = AtcMarkerStyles.StackedLabelOffset(marker.Scale, 2).Y;
 
-        Assert.Equal(0, x, 6);
-        Assert.Equal((16 * marker.Scale) + 4, y, 6);
+        Assert.True(first < second);
+        Assert.Equal(second - first, third - second, 6);
     }
 
     [Theory]
@@ -234,7 +212,7 @@ public sealed class AtcMarkerStylesTests
     }
 
     [Fact]
-    public void CreateAtcStations_FansOutPositionsThatShareAnAirport()
+    public void CreateAtcStations_StacksTheLabelsOfOneAirport()
     {
         var layer = IvaoMapLayers.CreateAtcStations(
             [
@@ -245,13 +223,14 @@ public sealed class AtcMarkerStylesTests
             Palette);
 
         Assert.Equal(3, layer.Features.Count());
-        Assert.Equal(
-            3,
-            layer.Features
-                .Select(feature => feature.Styles.OfType<ImageStyle>().Single().Offset)
-                .Select(offset => (offset.X, offset.Y))
-                .Distinct()
-                .Count());
+
+        // The badges are concentric rings around the airport, so they share the
+        // point and the image offset; only the callsigns move to their own line.
+        Assert.Single(layer.Features.Cast<PointFeature>().Select(feature => feature.Point).Distinct());
+        Assert.Single(layer.Features
+            .Select(feature => feature.Styles.OfType<ImageStyle>().Single().Offset)
+            .Select(offset => (offset.X, offset.Y))
+            .Distinct());
         Assert.Equal(
             3,
             layer.Features
@@ -259,14 +238,9 @@ public sealed class AtcMarkerStylesTests
                 .Select(offset => (offset.X, offset.Y))
                 .Distinct()
                 .Count());
-        Assert.Equal(
-            3,
-            layer.Features
-                .Select(feature => feature.Styles.OfType<LabelStyle>().Single())
-                .Select(style => (style.HorizontalAlignment, style.VerticalAlignment))
-                .Distinct()
-                .Count());
-        Assert.Single(layer.Features.Cast<PointFeature>().Select(feature => feature.Point).Distinct());
+        Assert.All(
+            layer.Features.Select(feature => feature.Styles.OfType<LabelStyle>().Single()),
+            style => Assert.Equal(LabelStyle.VerticalAlignmentEnum.Top, style.VerticalAlignment));
     }
 
     [Fact]
@@ -282,7 +256,7 @@ public sealed class AtcMarkerStylesTests
 
     [Theory]
     [InlineData(WorldMap.MaxResolution, AtcMarkerStyles.MinZoomScale)]
-    [InlineData(AtcMarkerStyles.ReferenceResolution, 1d)]
+    [InlineData(25000, AtcMarkerStyles.MinZoomScale)]
     [InlineData(WorldMap.MinResolution, AtcMarkerStyles.MaxZoomScale)]
     public void ZoomScale_IsClampedToTheSupportedRange(double resolution, double expected)
     {
@@ -301,10 +275,10 @@ public sealed class AtcMarkerStylesTests
     }
 
     [Fact]
-    public void ZoomScale_FallsBackToTheBaseSizeForAnEmptyViewport()
+    public void ZoomScale_FallsBackToTheSmallestSizeForAnEmptyViewport()
     {
-        Assert.Equal(1, AtcMarkerStyles.ZoomScale(0));
-        Assert.Equal(1, AtcMarkerStyles.ZoomScale(double.NaN));
+        Assert.Equal(AtcMarkerStyles.MinZoomScale, AtcMarkerStyles.ZoomScale(0));
+        Assert.Equal(AtcMarkerStyles.MinZoomScale, AtcMarkerStyles.ZoomScale(double.NaN));
     }
 
     [Fact]
@@ -316,13 +290,14 @@ public sealed class AtcMarkerStylesTests
     }
 
     [Fact]
-    public void ClusterOffsets_WidenWithTheZoom()
+    public void StackedLabelOffset_SpacesTheLinesWithTheLabelSize()
     {
-        var baseOffsets = AtcMarkerStyles.ClusterOffsets(4);
-        var zoomedOffsets = AtcMarkerStyles.ClusterOffsets(4, 2);
+        var first = AtcMarkerStyles.StackedLabelOffset(1.2, 0);
+        var second = AtcMarkerStyles.StackedLabelOffset(1.2, 1);
+        var zoomed = AtcMarkerStyles.StackedLabelOffset(1.2, 1, 2);
 
-        Assert.Equal(baseOffsets[1].X * 2, zoomedOffsets[1].X, 6);
-        Assert.Equal(baseOffsets[1].Y * 2, zoomedOffsets[1].Y, 6);
+        Assert.Equal(AtcMarkerStyles.LabelFontSize(1) + 3, second.Y - first.Y, 6);
+        Assert.True(zoomed.Y > second.Y);
     }
 
     [Fact]
@@ -365,7 +340,7 @@ public sealed class AtcMarkerStylesTests
         var placements = IvaoMapLayers.CreateAtcStationPlacements(stations, zoom: 2);
 
         Assert.Equal(3, placements.Count);
-        Assert.Equal(3, placements.Select(placement => (placement.OffsetX, placement.OffsetY)).Distinct().Count());
+        Assert.Equal(3, placements.Select(placement => placement.LabelOffsetY).Distinct().Count());
         Assert.All(
             placements,
             placement => Assert.Equal(
@@ -397,8 +372,14 @@ public sealed class AtcMarkerStylesTests
 
         var placement = Assert.Single(placements);
         Assert.Equal("EDDB_TWR", placement.Station.Callsign);
-        Assert.Equal(0, placement.OffsetX, 6);
-        Assert.Equal(0, placement.OffsetY, 6);
+
+        // A lone station sits on the airport coordinate; only its callsign is
+        // pushed below the badge.
+        Assert.Equal(
+            AtcMarkerStyles.StackedLabelOffset(placement.Marker.Scale, 0).Y,
+            placement.LabelOffsetY,
+            6);
+        Assert.True(placement.LabelOffsetY > 0);
     }
 
     private static IvaoAtc CreateAirportAtc(string callsign, string facility) =>

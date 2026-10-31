@@ -32,14 +32,16 @@ public static class IvaoMapLayers
     public static bool ShowsRunways(double resolution) => resolution <= RunwayResolution;
 
     /// <summary>
-    /// One station badge and where it is drawn: the projected coordinate, the
-    /// cluster fan-out in screen pixels and the glyph itself.
+    /// One station badge and where it is drawn: the projected airport
+    /// coordinate, the offset of the callsign below the badge stack and the
+    /// glyph itself. Every position of an airport shares the coordinate, so the
+    /// badges are drawn as concentric rings around the airport and only the
+    /// labels are stacked underneath.
     /// </summary>
     public sealed record AtcStationPlacement(
         IvaoAtc Station,
         MPoint Point,
-        double OffsetX,
-        double OffsetY,
+        double LabelOffsetY,
         AtcMarkerStyle Marker);
 
     public static MemoryLayer CreateAtcRegions(IEnumerable<IvaoAtc> atc, MapPalette palette)
@@ -122,14 +124,15 @@ public static class IvaoMapLayers
         var features = new List<IFeature>();
         foreach (var placement in placements)
         {
-            var offset = (placement.OffsetX, placement.OffsetY);
-            var labelOffset = AtcMarkerStyles.LabelOffset(placement.Marker, offset);
-            var labelAlignment = AtcMarkerStyles.LabelAlignment(labelOffset);
+            // The badges are concentric, so the labels only move down; the
+            // stacked line of the station decides how far.
+            var labelOffsetY = placement.LabelOffsetY;
+            var labelAlignment = AtcMarkerStyles.LabelAlignment((0d, labelOffsetY));
 
             var feature = new PointFeature(placement.Point);
             feature["Callsign"] = placement.Station.Callsign;
             feature["Frequency"] = placement.Station.FrequencyText;
-            feature.Styles.Add(AtcMarkerStyles.CreateImageStyle(placement.Marker, offset));
+            feature.Styles.Add(AtcMarkerStyles.CreateImageStyle(placement.Marker));
             feature.Styles.Add(new LabelStyle
             {
                 LabelColumn = "Callsign",
@@ -142,7 +145,7 @@ public static class IvaoMapLayers
                 ForeColor = WorldMap.Parse(FacilityPalette.ForFacility(placement.Station.Facility)),
                 BackColor = null,
                 Halo = new Pen(WorldMap.Parse(palette.Land), 2.5),
-                Offset = new Offset(labelOffset.X, labelOffset.Y),
+                Offset = new Offset(0, labelOffsetY),
                 HorizontalAlignment = labelAlignment.Horizontal,
                 VerticalAlignment = labelAlignment.Vertical,
                 CollisionDetection = true,
@@ -159,10 +162,10 @@ public static class IvaoMapLayers
     }
 
     /// <summary>
-    /// Works out where every station badge is drawn: the projected coordinate
-    /// plus the screen pixel offset that fans clustered positions apart. The
-    /// station layer and the click handler share these numbers, so a badge is
-    /// always hit exactly where it is rendered.
+    /// Works out where every station badge is drawn: the projected airport
+    /// coordinate plus the callsign line that keeps the labels of one airport
+    /// apart. The station layer and the click handler share these numbers, so a
+    /// badge is always hit exactly where it is rendered.
     /// </summary>
     public static IReadOnlyList<AtcStationPlacement> CreateAtcStationPlacements(
         IEnumerable<IvaoAtc> atc,
@@ -176,24 +179,35 @@ public static class IvaoMapLayers
             .ToList();
 
         var placements = new List<AtcStationPlacement>(stations.Count);
-        foreach (var cluster in stations.GroupBy(
+        foreach (var stack in stations.GroupBy(
             station => (X: Math.Round(station.Point.X), Y: Math.Round(station.Point.Y))))
         {
-            var members = cluster
+            // Smallest facility first: the ground star is drawn inside the tower
+            // ring, so it has to be laid out — and clicked — before the wider
+            // facilities around it.
+            var members = stack
+                .Select(member => new
+                {
+                    member.Station,
+                    member.Point,
+                    Marker = AtcMarkerStyles.For(member.Station.Facility, member.Station.Callsign, zoom)
+                })
                 .OrderBy(member => AtcMarkerStyles.SortOrder(member.Station.Facility, member.Station.Callsign))
                 .ThenBy(member => member.Station.Callsign, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            var offsets = AtcMarkerStyles.ClusterOffsets(members.Count, zoom);
+
+            // The widest glyph of the stack decides where the labels start, so
+            // none of them lands on a ring of the airport.
+            var widestScale = members.Max(member => member.Marker.Scale);
 
             for (var index = 0; index < members.Count; index++)
             {
-                var station = members[index].Station;
+                var member = members[index];
                 placements.Add(new AtcStationPlacement(
-                    station,
-                    members[index].Point,
-                    offsets[index].X,
-                    offsets[index].Y,
-                    AtcMarkerStyles.For(station.Facility, station.Callsign, zoom)));
+                    member.Station,
+                    member.Point,
+                    AtcMarkerStyles.StackedLabelOffset(widestScale, index, zoom).Y,
+                    member.Marker));
             }
         }
 
@@ -247,33 +261,6 @@ public static class IvaoMapLayers
         if (flightPlan?.Arrival?.Position is { } arrival)
         {
             features.Add(CreateAirportFeature(arrival, flightPlan.ArrivalIcao, color, palette));
-        }
-
-        return new MemoryLayer(RouteLayerName)
-        {
-            Features = features,
-            Style = null
-        };
-    }
-
-    /// <summary>
-    /// Traces the recorded track of a station, in the colour of its facility.
-    /// A controller session has no altitude, so the whole line shares one colour.
-    /// </summary>
-    public static MemoryLayer CreateAtcRoute(IvaoAtc atc, IReadOnlyList<IvaoPilotTrack>? tracks = null)
-    {
-        var features = new List<IFeature>();
-        var color = WorldMap.Parse(FacilityPalette.ForFacility(atc.Facility));
-
-        foreach (var line in FlightTrail.BuildLines(tracks))
-        {
-            var coordinates = line.Select(ToCoordinate).ToList();
-            if (coordinates.Count < 2)
-            {
-                continue;
-            }
-
-            features.Add(CreateTrailFeature(coordinates, color));
         }
 
         return new MemoryLayer(RouteLayerName)
@@ -382,18 +369,32 @@ public static class IvaoMapLayers
         ]));
     }
 
-    public static MemoryLayer CreateSelectedAtc(IvaoAtc atc, MapPalette palette)
+    /// <summary>
+    /// Highlights the selected position: the sector outline for a control
+    /// position that reports a polygon, or an accent ring around the badge of a
+    /// station that is drawn as a glyph. The ring is what tells the user which
+    /// position of a stack of concentric badges a click picked.
+    /// </summary>
+    public static MemoryLayer CreateSelectedAtc(IvaoAtc atc, MapPalette palette, double zoom = 1)
     {
+        var accent = WorldMap.Parse(palette.Accent);
         var features = new List<IFeature>();
         if (CreatePolygon(atc) is { } geometry)
         {
-            var accent = WorldMap.Parse(palette.Accent);
             var feature = new GeometryFeature { Geometry = geometry };
             feature.Styles.Add(new VectorStyle
             {
                 Fill = new Brush(new Color(0, 0, 0, 0)),
                 Outline = new Pen(accent, 3.2)
             });
+            features.Add(feature);
+        }
+        else if (atc.Position is { } position && position.IsValid)
+        {
+            var feature = new PointFeature(WorldMap.Project(position));
+            feature.Styles.Add(AtcMarkerStyles.CreateSelectionRingStyle(
+                AtcMarkerStyles.For(atc.Facility, atc.Callsign, zoom),
+                palette.Accent));
             features.Add(feature);
         }
 

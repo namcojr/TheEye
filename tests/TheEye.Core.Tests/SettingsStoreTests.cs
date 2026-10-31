@@ -21,7 +21,7 @@ public sealed class SettingsStoreTests
         Assert.True(settings.CenterOnMapClick);
         Assert.Equal(45, settings.MapLatitude);
         Assert.Equal(10, settings.MapLongitude);
-        Assert.Equal(25000, settings.MapResolution);
+        Assert.Equal(WorldMap.MaxZoomOutResolution, settings.MapResolution);
         Assert.False(File.Exists(store.FilePath));
     }
 
@@ -140,14 +140,14 @@ public sealed class SettingsStoreTests
         Assert.Equal(30, settings.RefreshSeconds);
         Assert.Equal(45, settings.MapLatitude);
         Assert.Equal(10, settings.MapLongitude);
-        Assert.Equal(25000, settings.MapResolution);
+        Assert.Equal(WorldMap.MaxZoomOutResolution, settings.MapResolution);
     }
 
     [Theory]
     [InlineData(2.39)]
     [InlineData(38.2)]
     [InlineData(WorldMap.MinResolution)]
-    [InlineData(WorldMap.MaxResolution)]
+    [InlineData(WorldMap.MaxZoomOutResolution)]
     public void Load_KeepsResolutionsInsideTheMapZoomRange(double resolution)
     {
         using var temporary = new TemporaryDirectory();
@@ -181,7 +181,7 @@ public sealed class SettingsStoreTests
         Assert.Equal(30, settings.RefreshSeconds);
         Assert.Equal(45, settings.MapLatitude);
         Assert.Equal(10, settings.MapLongitude);
-        Assert.Equal(25000, settings.MapResolution);
+        Assert.Equal(WorldMap.MaxZoomOutResolution, settings.MapResolution);
     }
 
     [Fact]

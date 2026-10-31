@@ -13,12 +13,12 @@ public readonly record struct TrailPoint(GeoCoordinate Position, double? Altitud
 public readonly record struct TrailSegment(GeoCoordinate Start, GeoCoordinate End, AltitudeBand Band);
 
 /// <summary>
-/// Turns the recorded tracks of a session into the path an aircraft has
-/// actually flown. The IVAO web map traces exactly this: the history of the
-/// flight from the departure airport up to the aircraft's current position,
-/// coloured by altitude. When the track feed is not available the trail falls
-/// back to the great circle between the airports, trimmed at the fraction of
-/// the route the aircraft has already covered.
+/// Turns the recorded tracks of a flight into the path an aircraft has actually
+/// flown. The IVAO web map traces exactly this: the history of the flight from
+/// the departure airport up to the aircraft's current position, coloured by
+/// altitude. When the track feed is not available the trail falls back to the
+/// great circle between the airports, trimmed at the fraction of the route the
+/// aircraft has already covered.
 /// </summary>
 public static class FlightTrail
 {
@@ -89,18 +89,6 @@ public static class FlightTrail
         }
 
         return BuildSegments(AppendLivePoint(points, pilot.LastTrack));
-    }
-
-    /// <summary>
-    /// Builds the plain lines of a session that is not flown, i.e. an ATC
-    /// position, split at the antimeridian.
-    /// </summary>
-    public static IReadOnlyList<IReadOnlyList<GeoCoordinate>> BuildLines(IReadOnlyList<IvaoPilotTrack>? tracks)
-    {
-        var points = FromTracks(tracks);
-        return points.Count < 2
-            ? []
-            : RouteBuilder.SplitAtAntimeridian(points.Select(point => point.Position).ToList());
     }
 
     /// <summary>
