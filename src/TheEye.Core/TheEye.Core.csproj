@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TheEye.Core</RootNamespace>
+    <AssemblyName>TheEye.Core</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mapsui.Nts" Version="5.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Maps\countries.geojson" LogicalName="TheEye.Core.Resources.Maps.countries.geojson" />
+    <EmbeddedResource Include="Resources\Aircraft\*.png" LogicalName="TheEye.Core.Resources.Aircraft.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

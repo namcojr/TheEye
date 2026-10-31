@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TheEye.Core/TheEye.Core.csproj" />
+    <Project Path="src/TheEye.Windows/TheEye.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TheEye.Core.Tests/TheEye.Core.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,177 @@
+using Mapsui;
+using Mapsui.Layers;
+using Mapsui.Nts;
+using Mapsui.Projections;
+using Mapsui.Styles;
+using NetTopologySuite.Geometries;
+using System.Text.Json;
+using TheEye.Core.Models;
+
+namespace TheEye.Core.Maps;
+
+/// <summary>
+/// Builds the fully offline world map from the Natural Earth country data that
+/// ships as an embedded resource. No tile server is contacted at runtime.
+/// </summary>
+public static class WorldMap
+{
+    public const string CountriesLayerName = "Countries";
+    public const string CountryLabelsLayerName = "Country labels";
+
+    /// <summary>Resolution of the most zoomed out level, i.e. the whole world in one tile.</summary>
+    public const double MaxResolution = 156543.034;
+
+    /// <summary>
+    /// Deepest zoom level. Level 17 puts one pixel at roughly 1.2 m, which is
+    /// close enough to tell parked aircraft on an apron apart.
+    /// </summary>
+    public const int DeepestZoomLevel = 17;
+
+    /// <summary>Resolution of <see cref="DeepestZoomLevel"/>.</summary>
+    public const double MinResolution = MaxResolution / 131072;
+
+    private static readonly Lazy<(IFeature[] Borders, IFeature[] Labels)> Countries = new(LoadCountries);
+
+    public static Map Create(MapPalette palette, GeoCoordinate center, double resolution)
+    {
+        var map = new Map { CRS = "EPSG:3857" };
+        map.Widgets.Clear();
+        map.Navigator.RotationLock = true;
+        map.Navigator.OverrideResolutions = Enumerable.Range(0, DeepestZoomLevel + 1)
+            .Select(level => MaxResolution / Math.Pow(2, level))
+            .ToArray();
+        map.Navigator.OverrideZoomBounds = new MMinMax(MinResolution, MaxResolution);
+        map.Navigator.OverridePanBounds = new MRect(-20037508.34, -20037508.34, 20037508.34, 20037508.34);
+        map.Navigator.CenterOnAndZoomTo(Project(center), Math.Clamp(resolution, MinResolution, MaxResolution));
+
+        map.Layers.Add(new MemoryLayer(CountriesLayerName)
+        {
+            Features = Countries.Value.Borders
+        });
+
+        map.Layers.Add(new MemoryLayer(CountryLabelsLayerName)
+        {
+            Features = Countries.Value.Labels.Select(feature => new PointFeature((PointFeature)feature)).ToArray(),
+            SortFeatures = features => features.OrderBy(feature => feature["LabelRank"] is int rank ? rank : 6)
+        });
+
+        ApplyTheme(map, palette);
+        return map;
+    }
+
+    public static void ApplyTheme(Map map, MapPalette palette)
+    {
+        var water = Parse(palette.Water);
+        var land = Parse(palette.Land);
+        var border = Parse(palette.Border);
+        var label = Parse(palette.Label);
+
+        map.BackColor = water;
+
+        if (map.Layers.FirstOrDefault(layer => layer.Name == CountriesLayerName) is MemoryLayer borderLayer)
+        {
+            borderLayer.Style = new VectorStyle
+            {
+                Fill = new Brush(land),
+                Outline = new Pen(border, 0.8)
+            };
+        }
+
+        if (map.Layers.FirstOrDefault(layer => layer.Name == CountryLabelsLayerName) is MemoryLayer labelLayer)
+        {
+            labelLayer.Style = null;
+            foreach (var feature in labelLayer.Features)
+            {
+                var rank = feature["LabelRank"] is int labelRank ? labelRank : 6;
+                feature.Styles.Clear();
+                feature.Styles.Add(new LabelStyle
+                {
+                    LabelColumn = "Name",
+                    Font = new Font { FontFamily = "Segoe UI", Size = 11 },
+                    ForeColor = label,
+                    BackColor = null,
+                    Halo = new Pen(land, 2),
+                    CollisionDetection = true,
+                    MaxVisible = rank <= 2 ? 80000 : rank == 3 ? 24000 : rank == 4 ? 12000 : rank == 5 ? 6000 : 2500
+                });
+            }
+        }
+
+        map.Refresh();
+    }
+
+    public static MPoint Project(GeoCoordinate coordinate) =>
+        Project(coordinate.Latitude, coordinate.Longitude);
+
+    public static MPoint Project(double latitude, double longitude)
+    {
+        var point = SphericalMercator.FromLonLat(longitude, Math.Clamp(latitude, -85.05112878, 85.05112878));
+        return new MPoint(point.x, point.y);
+    }
+
+    public static GeoCoordinate Unproject(double x, double y)
+    {
+        var lonLat = SphericalMercator.ToLonLat(x, y);
+        return new GeoCoordinate(lonLat.lat, lonLat.lon);
+    }
+
+    public static Color Parse(string? hex, string fallback = "#808080")
+    {
+        try
+        {
+            return Color.FromString(string.IsNullOrWhiteSpace(hex) ? fallback : hex);
+        }
+        catch
+        {
+            return Color.FromString(fallback);
+        }
+    }
+
+    public static Color WithAlpha(Color color, int alpha) =>
+        new(color.R, color.G, color.B, Math.Clamp(alpha, 0, 255));
+
+    private static (IFeature[] Borders, IFeature[] Labels) LoadCountries()
+    {
+        using var stream = typeof(WorldMap).Assembly.GetManifestResourceStream("TheEye.Core.Resources.Maps.countries.geojson")
+            ?? throw new InvalidOperationException("The bundled country map is missing.");
+        using var document = JsonDocument.Parse(stream);
+
+        var borders = new List<IFeature>();
+        var labels = new List<IFeature>();
+
+        foreach (var country in document.RootElement.GetProperty("features").EnumerateArray())
+        {
+            var geometry = country.GetProperty("geometry");
+            var coordinates = geometry.GetProperty("coordinates");
+            Geometry shape = geometry.GetProperty("type").GetString() switch
+            {
+                "Polygon" => ReadPolygon(coordinates),
+                "MultiPolygon" => new MultiPolygon(coordinates.EnumerateArray().Select(ReadPolygon).ToArray()),
+                _ => throw new InvalidOperationException("Unsupported country geometry.")
+            };
+
+            borders.Add(new GeometryFeature { Geometry = shape });
+
+            var properties = country.GetProperty("properties");
+            var label = new PointFeature(Project(
+                properties.GetProperty("LABEL_Y").GetDouble(),
+                properties.GetProperty("LABEL_X").GetDouble()));
+            label["Name"] = properties.GetProperty("NAME_EN").GetString();
+            label["LabelRank"] = properties.GetProperty("LABELRANK").GetInt32();
+            labels.Add(label);
+        }
+
+        return (borders.ToArray(), labels.ToArray());
+    }
+
+    private static Polygon ReadPolygon(JsonElement coordinates)
+    {
+        var rings = coordinates.EnumerateArray().Select(ring => new LinearRing(ring.EnumerateArray().Select(coordinate =>
+        {
+            var point = Project(coordinate[1].GetDouble(), coordinate[0].GetDouble());
+            return new Coordinate(point.X, point.Y);
+        }).ToArray())).ToArray();
+
+        return new Polygon(rings[0], rings.Skip(1).ToArray());
+    }
+}

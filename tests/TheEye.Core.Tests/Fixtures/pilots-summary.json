@@ -1,0 +1,41 @@
+[
+  {
+    "id": 101,
+    "userId": 201,
+    "callsign": "TEST123",
+    "connectionType": "PILOT",
+    "isMilitary": false,
+    "isWorldTour": false,
+    "lastTrack": {
+      "altitude": 35000,
+      "groundSpeed": 450,
+      "heading": 90,
+      "latitude": 50.1234,
+      "longitude": 4.5678,
+      "onGround": false,
+      "state": "Cruise"
+    },
+    "flightPlan": {
+      "id": 9001,
+      "aircraftId": "B738",
+      "departureId": "EHAM",
+      "arrivalId": "LIRF",
+      "route": "EHAM NORKU LIRF"
+    }
+  },
+  {
+    "id": 102,
+    "userId": 202,
+    "callsign": "TEST456",
+    "connectionType": "PILOT",
+    "lastTrack": {
+      "altitude": 15,
+      "groundSpeed": 12,
+      "heading": 270,
+      "latitude": 52.308,
+      "longitude": 4.764,
+      "onGround": true,
+      "state": "Taxi"
+    }
+  }
+]

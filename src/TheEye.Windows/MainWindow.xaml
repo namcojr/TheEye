@@ -1,0 +1,599 @@
+<Window x:Class="TheEye.Windows.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mapsui="clr-namespace:Mapsui.UI.Wpf;assembly=Mapsui.UI.Wpf"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="The Eye of IVAO"
+        Width="1440" Height="900"
+        MinWidth="1120" MinHeight="680"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource TextBrush}"
+        FontFamily="{DynamicResource AppFontFamily}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="46"
+                            ResizeBorderThickness="6"
+                            CornerRadius="0"
+                            GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <Style x:Key="MetricTile" TargetType="{x:Type Border}" BasedOn="{StaticResource FlatCard}">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+        </Style>
+        <Style x:Key="MapOverlay" TargetType="{x:Type Border}">
+            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="9,6" />
+        </Style>
+        <DataTemplate x:Key="PilotDetailTemplate">
+            <StackPanel>
+                <DockPanel>
+                    <Border DockPanel.Dock="Right" Style="{StaticResource AccentPill}" VerticalAlignment="Top">
+                        <TextBlock Text="{Binding State}" FontSize="9" FontWeight="Bold" />
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="{Binding Callsign}" FontSize="22" FontWeight="Bold"
+                                   FontFamily="{DynamicResource MonoFontFamily}" />
+                        <TextBlock Text="{Binding Aircraft}" Style="{StaticResource MutedText}" Margin="0,2,0,0" />
+                    </StackPanel>
+                </DockPanel>
+
+                <Border Style="{StaticResource Divider}" Margin="0,12,0,12" />
+
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel>
+                        <TextBlock Text="FROM" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding Departure}" FontSize="15" FontWeight="Bold"
+                                   FontFamily="{DynamicResource MonoFontFamily}" Margin="0,2,0,0" />
+                    </StackPanel>
+                    <TextBlock Text="&#xE72A;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                               Foreground="{DynamicResource AccentBrush}"
+                               VerticalAlignment="Center" Margin="16,12,16,0" />
+                    <StackPanel>
+                        <TextBlock Text="TO" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding Arrival}" FontSize="15" FontWeight="Bold"
+                                   FontFamily="{DynamicResource MonoFontFamily}" Margin="0,2,0,0" />
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock Text="{Binding DepartureName}" Style="{StaticResource MutedText}"
+                           Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding ArrivalName}" Style="{StaticResource MutedText}"
+                           TextTrimming="CharacterEllipsis" />
+
+                <Border Style="{StaticResource Divider}" Margin="0,12,0,12" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="ALTITUDE" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding Altitude}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="GROUND SPEED" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding Speed}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="HEADING" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding Heading}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="TRANSPONDER" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding Transponder}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="FLIGHT RULES" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding FlightRules}" Style="{StaticResource DetailValue}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="FLIGHT TYPE" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding FlightType}" Style="{StaticResource DetailValue}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock Text="CRUISE LEVEL" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding CruisingLevel}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="3" Grid.Column="1">
+                        <TextBlock Text="CRUISE SPEED" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding CruisingSpeed}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Style="{StaticResource Divider}" Margin="0,12,0,12" />
+
+                <TextBlock Text="ROUTE" Style="{StaticResource DetailLabel}" />
+                <TextBlock Text="{Binding RouteText}" Style="{StaticResource DetailValueMono}" Margin="0,3,0,0"
+                           TextWrapping="Wrap" MaxHeight="88" />
+
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="POSITION" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding PositionText}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="LAST SEEN" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding LastSeenText}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Margin="0,12,0,0"
+                            Visibility="{Binding Remarks, Converter={StaticResource EmptyStringToVisibility}}">
+                    <TextBlock Text="REMARKS" Style="{StaticResource DetailLabel}" />
+                    <TextBlock Text="{Binding Remarks}" Style="{StaticResource MutedText}" Margin="0,3,0,0"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </DataTemplate>
+        <DataTemplate x:Key="AtcDetailTemplate">
+            <StackPanel>
+                <DockPanel>
+                    <Border DockPanel.Dock="Right" Background="{Binding AccentSoftBrush}"
+                            BorderBrush="{Binding AccentBrush}" BorderThickness="1"
+                            CornerRadius="8" Padding="7,3" VerticalAlignment="Top">
+                        <TextBlock Text="{Binding Facility}" FontSize="9" FontWeight="Bold"
+                                   Foreground="{Binding AccentBrush}" />
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="{Binding Callsign}" FontSize="22" FontWeight="Bold"
+                                   FontFamily="{DynamicResource MonoFontFamily}" />
+                        <TextBlock Text="{Binding FacilityName}" Style="{StaticResource MutedText}"
+                                   Margin="0,2,0,0" />
+                    </StackPanel>
+                </DockPanel>
+
+                <Border Style="{StaticResource Divider}" Margin="0,12,0,12" />
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="FREQUENCY" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding Frequency}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="SCOPE" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding Scope}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="AIRPORT" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding AirportIcao}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="SECTOR POINTS" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding SectorPoints}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock Text="CITY" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding City}" Style="{StaticResource DetailValue}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="1">
+                        <TextBlock Text="COUNTRY" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding Country}" Style="{StaticResource DetailValue}" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Style="{StaticResource Divider}" Margin="0,12,0,12" />
+
+                <TextBlock Text="STATION POSITION" Style="{StaticResource DetailLabel}" />
+                <TextBlock Text="{Binding PositionText}" Style="{StaticResource DetailValueMono}" Margin="0,3,0,0" />
+                <TextBlock Text="{Binding AirportName}" Style="{StaticResource MutedText}" Margin="0,8,0,0"
+                           TextWrapping="Wrap" />
+                <TextBlock Text="{Binding ConnectionType}" Style="{StaticResource MutedText}" Margin="0,2,0,0" />
+            </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="46" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="28" />
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Background="{DynamicResource HeaderBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+                <Grid>
+                    <StackPanel Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
+                        <Border Width="27" Height="27" CornerRadius="7"
+                                Background="{DynamicResource SelectionBrush}"
+                                BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1">
+                            <Path HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Fill="{DynamicResource AccentBrush}"
+                                  Data="M 1,8 C 4,2 14,2 17,8 C 14,14 4,14 1,8 Z M 9,5 A 3,3 0 1 1 9,11 A 3,3 0 1 1 9,5 Z" />
+                        </Border>
+                        <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="THE EYE OF IVAO" FontSize="11" FontWeight="Bold" />
+                            <TextBlock Text="LIVE NETWORK OVERVIEW" FontSize="8" FontWeight="Bold"
+                                       Foreground="{DynamicResource MutedTextBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Ellipse Width="7" Height="7" Margin="0,0,7,0">
+                            <Ellipse.Style>
+                                <Style TargetType="{x:Type Ellipse}">
+                                    <Setter Property="Fill" Value="{DynamicResource SuccessBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasError}" Value="True">
+                                            <Setter Property="Fill" Value="{DynamicResource ErrorBrush}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding HasWarnings}" Value="True">
+                                            <Setter Property="Fill" Value="{DynamicResource WarningBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Ellipse.Style>
+                        </Ellipse>
+                        <TextBlock Text="{Binding StatusText}" FontSize="10.5" FontWeight="SemiBold" />
+                        <Border Width="1" Height="12" Margin="12,0" Background="{DynamicResource BorderBrush}" />
+                        <TextBlock Text="{Binding LastUpdatedText}" Style="{StaticResource MutedText}" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Style="{StaticResource WindowButton}" ToolTip="Settings"
+                                AutomationProperties.Name="Settings"
+                                shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                                Click="OnSettingsClick">
+                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="11" />
+                        </Button>
+                        <Button Style="{StaticResource WindowButton}" ToolTip="Minimize"
+                                AutomationProperties.Name="Minimize"
+                                shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                                Click="OnMinimizeClick">
+                            <TextBlock Text="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="11" />
+                        </Button>
+                        <Button x:Name="MaximizeButton" Style="{StaticResource WindowButton}" ToolTip="Maximize"
+                                AutomationProperties.Name="Maximize"
+                                shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                                Click="OnMaximizeClick">
+                            <TextBlock Text="&#xE922;" FontFamily="Segoe MDL2 Assets" FontSize="11" />
+                        </Button>
+                        <Button Style="{StaticResource CloseWindowButton}" ToolTip="Close"
+                                AutomationProperties.Name="Close"
+                                shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                                Click="OnCloseClick">
+                            <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="11" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="322" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="348" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Traffic browser -->
+                <Border Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Margin="14,14,14,10">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}"
+                                        ToolTip="Refresh now" AutomationProperties.Name="Refresh now"
+                                        Command="{Binding RefreshCommand}">
+                                    <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="13" />
+                                </Button>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="LIVE TRAFFIC" Style="{StaticResource SectionTitle}" />
+                                    <TextBlock Text="{Binding LastUpdatedText}" Style="{StaticResource MutedText}"
+                                               Margin="0,2,0,0" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <Grid Margin="0,11,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource MetricTile}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding PilotCount}" Style="{StaticResource MetricValue}" />
+                                        <TextBlock Text="PILOTS" Style="{StaticResource MetricLabel}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Style="{StaticResource MetricTile}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding AtcCount}" Style="{StaticResource MetricValue}" />
+                                        <TextBlock Text="CONTROLLERS" Style="{StaticResource MetricLabel}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Style="{StaticResource MetricTile}" Margin="0">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding TotalCount}" Style="{StaticResource MetricValue}" />
+                                        <TextBlock Text="CONNECTIONS" Style="{StaticResource MetricLabel}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <Grid Margin="0,7,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                    <TextBlock Text="{Binding ObserverCount}" Style="{StaticResource MonoText}"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Text=" obs" Style="{StaticResource MutedText}" Margin="2,0,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <TextBlock Text="{Binding SupervisorCount}" Style="{StaticResource MonoText}"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Text=" sup" Style="{StaticResource MutedText}" Margin="2,0,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                    <TextBlock Text="{Binding UniqueUsers24h}" Style="{StaticResource MonoText}"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Text=" /24h" Style="{StaticResource MutedText}" Margin="2,0,0,0" />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,12,0,0" ToolTip="Filter by callsign, route, airport, facility or country"
+                                     AutomationProperties.Name="Filter traffic" />
+                        </StackPanel>
+
+                        <TabControl Grid.Row="1" SelectedIndex="0">
+                            <TabItem AutomationProperties.Name="Pilots">
+                                <TabItem.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="PILOTS" />
+                                        <TextBlock Text="{Binding PilotCount, StringFormat='  {0}'}"
+                                                   Foreground="{DynamicResource AccentBrush}" />
+                                    </StackPanel>
+                                </TabItem.Header>
+                                <DataGrid ItemsSource="{Binding PilotsView}"
+                                          SelectedItem="{Binding SelectedPilot, Mode=TwoWay}"
+                                          AutomationProperties.Name="Pilot list"
+                                          MouseDoubleClick="OnTrafficDoubleClick">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="CALLSIGN" Width="96"
+                                                            Binding="{Binding Callsign}" />
+                                        <DataGridTextColumn Header="ROUTE" Width="*">
+                                            <DataGridTextColumn.Binding>
+                                                <MultiBinding StringFormat="{}{0} → {1}">
+                                                    <Binding Path="Departure" />
+                                                    <Binding Path="Arrival" />
+                                                </MultiBinding>
+                                            </DataGridTextColumn.Binding>
+                                        </DataGridTextColumn>
+                                        <DataGridTextColumn Header="ALT" Width="76"
+                                                            Binding="{Binding Altitude}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+                            <TabItem AutomationProperties.Name="ATC">
+                                <TabItem.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="ATC" />
+                                        <TextBlock Text="{Binding AtcCount, StringFormat='  {0}'}"
+                                                   Foreground="{DynamicResource AccentBrush}" />
+                                    </StackPanel>
+                                </TabItem.Header>
+                                <DataGrid ItemsSource="{Binding AtcView}"
+                                          SelectedItem="{Binding SelectedAtc, Mode=TwoWay}"
+                                          AutomationProperties.Name="ATC list"
+                                          MouseDoubleClick="OnTrafficDoubleClick">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="CALLSIGN" Width="96"
+                                                            Binding="{Binding Callsign}" />
+                                        <DataGridTextColumn Header="FACILITY" Width="*"
+                                                            Binding="{Binding FacilityName}" />
+                                        <DataGridTextColumn Header="FREQ" Width="76"
+                                                            Binding="{Binding Frequency}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+                        </TabControl>
+                    </Grid>
+                </Border>
+
+                <!-- Offline world map with the WPF pilot marker overlay -->
+                <Grid Grid.Column="1" Background="{DynamicResource MapWaterBrush}" ClipToBounds="True">
+                    <mapsui:MapControl x:Name="MapControl" Map="{Binding Map.Map}" MapTapped="OnMapTapped" />
+
+                    <ItemsControl ItemsSource="{Binding Map.Pilots}"
+                                  Visibility="{Binding Map.PilotsVisibility}"
+                                  Panel.ZIndex="2">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas IsItemsHost="True" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemContainerStyle>
+                            <Style TargetType="{x:Type ContentPresenter}">
+                                <Setter Property="Canvas.Left" Value="{Binding X}" />
+                                <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                                <Setter Property="Visibility"
+                                        Value="{Binding IsVisible, Converter={StaticResource BoolToVisibility}}" />
+                            </Style>
+                        </ItemsControl.ItemContainerStyle>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource PilotMarkerButton}"
+                                        Click="OnPilotMarkerClick" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                Margin="14">
+                        <ToggleButton Content="PILOTS" IsChecked="{Binding ShowPilots}"
+                                      Margin="0,0,6,0" ToolTip="Show or hide aircraft" />
+                        <ToggleButton Content="ATC" IsChecked="{Binding ShowAtc}"
+                                      ToolTip="Show or hide controllers, sectors and stations" />
+                    </StackPanel>
+
+                    <Border Style="{StaticResource MapOverlay}" HorizontalAlignment="Right"
+                            VerticalAlignment="Top" Margin="14">
+                        <StackPanel>
+                            <TextBlock Text="{Binding ConnectionDescription}" Style="{StaticResource MutedText}"
+                                       FontSize="10" />
+                            <TextBlock Text="{Binding RefreshDescription}" Style="{StaticResource MutedText}"
+                                       FontSize="10" Margin="0,1,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,14">
+                        <Border Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource ErrorBrush}" BorderThickness="1"
+                                CornerRadius="6" Padding="12,7" Margin="0,0,0,6"
+                                Visibility="{Binding HasError, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource ErrorBrush}"
+                                       FontSize="11" TextWrapping="Wrap" MaxWidth="520" />
+                        </Border>
+                        <Border Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource WarningBrush}" BorderThickness="1"
+                                CornerRadius="6" Padding="12,7"
+                                Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding WarningText}" Foreground="{DynamicResource WarningBrush}"
+                                       FontSize="11" TextWrapping="Wrap" MaxWidth="520" />
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="14">
+                        <Button Style="{StaticResource SquareButton}"
+                                ToolTip="Zoom in" AutomationProperties.Name="Zoom in"
+                                Command="{Binding ZoomInCommand}" Margin="0,0,0,5">
+                            <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
+                        </Button>
+                        <Button Style="{StaticResource SquareButton}"
+                                ToolTip="Zoom out" AutomationProperties.Name="Zoom out"
+                                Command="{Binding ZoomOutCommand}" Margin="0,0,0,5">
+                            <TextBlock Text="&#xE738;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
+                        </Button>
+                        <Button Style="{StaticResource SquareButton}"
+                                ToolTip="Reset the world view" AutomationProperties.Name="Reset view"
+                                Command="{Binding HomeCommand}">
+                            <TextBlock Text="&#xE80F;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
+                        </Button>
+                    </StackPanel>
+
+                    <Border Style="{StaticResource MapOverlay}" HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom" Margin="14">
+                        <TextBlock Style="{StaticResource MutedText}" FontSize="9.5"
+                                   Text="DRAG TO PAN  ·  SCROLL TO ZOOM  ·  CLICK TO SELECT" />
+                    </Border>
+                </Grid>
+
+                <!-- Selection detail pane -->
+                <Border Grid.Column="2" Background="{DynamicResource PanelBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Border Background="{DynamicResource HeaderBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                                Padding="14,11">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}"
+                                        ToolTip="Clear selection" AutomationProperties.Name="Clear selection"
+                                        Command="{Binding ClearSelectionCommand}"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="13" />
+                                </Button>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="SELECTION" Style="{StaticResource SectionTitle}" />
+                                    <TextBlock Text="Click a marker, sector or list row" Style="{StaticResource MutedText}"
+                                               Margin="0,2,0,0" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                      Padding="16,14,16,18">
+                            <Grid>
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                            Margin="0,60,0,0"
+                                            Visibility="{Binding HasSelection, Converter={StaticResource InverseBoolToVisibility}}">
+                                    <TextBlock Text="&#xE81E;" FontFamily="Segoe MDL2 Assets" FontSize="34"
+                                               HorizontalAlignment="Center"
+                                               Foreground="{DynamicResource MutedTextBrush}" />
+                                    <TextBlock Text="Nothing selected" FontSize="13" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" Margin="0,12,0,0" />
+                                    <TextBlock Style="{StaticResource MutedText}" TextAlignment="Center"
+                                               TextWrapping="Wrap" MaxWidth="230" Margin="0,5,0,0"
+                                               Text="Pick an aircraft or controller to inspect the live flight plan, telemetry and radio details." />
+                                </StackPanel>
+
+                                <ContentControl Content="{Binding SelectedPilot}"
+                                                ContentTemplate="{StaticResource PilotDetailTemplate}"
+                                                Visibility="{Binding SelectedPilot, Converter={StaticResource NullToVisibility}}" />
+                                <ContentControl Content="{Binding SelectedAtc}"
+                                                ContentTemplate="{StaticResource AtcDetailTemplate}"
+                                                Visibility="{Binding SelectedAtc, Converter={StaticResource NullToVisibility}}" />
+                            </Grid>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="2" Background="{DynamicResource HeaderBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
+                <DockPanel Margin="14,0" VerticalAlignment="Center">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding RefreshDescription}" Style="{StaticResource MutedText}"
+                                   VerticalAlignment="Center" />
+                        <Border Width="1" Height="11" Margin="10,0" Background="{DynamicResource BorderBrush}" />
+                        <TextBlock Text="{Binding ThemeDescription}" Style="{StaticResource MutedText}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <Button Style="{StaticResource GhostButton}" Content="SETTINGS" Height="20"
+                                Padding="8,0" FontSize="9" Click="OnSettingsClick" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentBrush}" Margin="0,0,7,0" />
+                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource MonoText}"
+                                   FontSize="10" VerticalAlignment="Center" />
+                        <Border Width="1" Height="11" Margin="10,0" Background="{DynamicResource BorderBrush}" />
+                        <TextBlock Text="{Binding ConnectionDescription}" Style="{StaticResource MutedText}"
+                                   VerticalAlignment="Center" />
+                        <Border Width="1" Height="11" Margin="10,0" Background="{DynamicResource BorderBrush}" />
+                        <TextBlock Text="{Binding Map.Pilots.Count, StringFormat={}{0} aircraft tracked}"
+                                   Style="{StaticResource MutedText}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
+

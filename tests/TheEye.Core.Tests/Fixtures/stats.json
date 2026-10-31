@@ -1,0 +1,22 @@
+{
+  "now": {
+    "total": 3,
+    "supervisors": 1,
+    "atc": 1,
+    "observers": 0,
+    "pilots": 2,
+    "worldTours": 1,
+    "followMes": 0,
+    "uniqueUsers24h": 1234
+  },
+  "max": {
+    "total": 500,
+    "supervisors": 20,
+    "atc": 100,
+    "observers": 10,
+    "pilots": 400,
+    "worldTours": 50,
+    "followMes": 25,
+    "uniqueUsers24h": 5000
+  }
+}
