@@ -57,13 +57,25 @@ public static class FlightTrail
     }
 
     /// <summary>
+    /// True when <paramref name="tracks"/> holds enough recorded positions to
+    /// trace the flight. Without them the trail is the flown part of the filed
+    /// route, which carries no altitude history and therefore no colours.
+    /// </summary>
+    public static bool HasRecordedTrack(IReadOnlyList<IvaoPilotTrack>? tracks) =>
+        FromTracks(tracks).Count >= 2;
+
+    /// <summary>
     /// Builds the coloured trail of a flight. The recorded track wins; without
     /// one the flown part of the great-circle route is drawn instead so the
-    /// aircraft still shows where it came from.
+    /// aircraft still shows where it came from. Pass
+    /// <paramref name="estimateWhenMissing"/> = false while the track request is
+    /// still running: an estimate that is about to be replaced by the real trail
+    /// would make the line jump across the map.
     /// </summary>
     public static IReadOnlyList<TrailSegment> BuildPilotTrail(
         IvaoPilot? pilot,
-        IReadOnlyList<IvaoPilotTrack>? tracks)
+        IReadOnlyList<IvaoPilotTrack>? tracks,
+        bool estimateWhenMissing = true)
     {
         if (pilot is null)
         {
@@ -73,7 +85,7 @@ public static class FlightTrail
         var points = FromTracks(tracks);
         if (points.Count < 2)
         {
-            return BuildFallback(pilot);
+            return estimateWhenMissing ? BuildFallback(pilot) : [];
         }
 
         return BuildSegments(AppendLivePoint(points, pilot.LastTrack));

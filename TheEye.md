@@ -86,17 +86,16 @@ the public API.
 THINGS TO ADD / CORRECTIONS
 ===========================
 
-- Regarding authentication, please check Examples/A330 Speed.PNG in order to know what i'd like to see on the pilot's card. Flags and logos are a long long shot (can this be done?) but the time online, software, simulator in use, speed, altitude, callsign, DEP and ARR airports as well as pilotID and HOME, etc would be interesting. api.ivao.aero/v2/tracker/sessions/<sessionid> shows all required data for this. This is why i mentioned authentication as i THINK this endpoint requires it in order to return data.
+- Please check Examples/A330 Speed.PNG in order to know what i'd like to see on the pilot's card. Flags and logos are a long long shot (can this be done?) but the time online, software, simulator in use, speed, altitude, callsign, DEP and ARR airports as well as pilotID and HOME, etc would be interesting. api.ivao.aero/v2/tracker/sessions/<sessionid> returns all required data for this.
 
-- When we click on an aircraft, the route starts on the aircraft and only shows to as far as the aircraft has travelled. In webeye which i am trying to replicate here (webeye.ivao.aero), the route is traced from the pilot's aircraft data provided when we click on it: api.ivao.aero/v2/tracker/sessions/<sessionid>/tracks. Make the route line coloured depending on current aircraft altitude: red (ground), orange (<3000), yellow (<5000), green (<7000), cyan (<15000), blue(<30000), dark blue (< 40000), purple (40000+), thin 1px wide.
+- In settings, disable IVAO SIGN IN when signed in.
 
-- Zoom speed is too strong (or has acceleration). We need to tone it down a bit.
-
-- Add more map detail (at least airport runways), so that when we zoom-in, at least the airport can be seen.
+- MAP specific corrections:
+a) Add more map detail (at least airport runways), so that when we zoom-in, at least the airport detail can be seen.
 
 - Make these focused fixes to the fallback glyphs (I will test everything visually - Do not test, only implement):
-    a) Add _DEL to the list of facilities that show as a "star", but rotate the shape 45% so it is distinguishable from the existing _GND facility.
-    b) These glyphs must zoom-in with the map like other _CTR facilities already do.
+    a) Concerning the _DEL facility, rotate the shape 45% so it is distinguishable from the existing _GND facility.
+    b) These SVG glyphs must zoom-in with the map like other _CTR facilities already do, maintaining its centre on the airport they belong to.
     c) The _TWR circle must be much wider, drawn in a similar fashion to the _CTR facilities. Red shade.
     d) The _DEP, _APP circles must be in a blue shade and slightly wider than the _TWR circles.
     e) The contour of _DEP _ARR _TWR and _GND facilities should be only 1px wide and 0% transparent using the same colour of the facility, in a similar fashion to the _CTR ones.
@@ -106,8 +105,45 @@ THINGS TO ADD / CORRECTIONS
     Do ask questions if you have any
 
 
-## PUBLISH
-==========
+## IVAO SIGN-IN (implemented)
+==========================
+
+Settings > IVAO sign-in authorises the app as the member, which is what unlocks the
+authenticated feeds (recorded tracks, per-session detail) without a consumer key.
+It also works for accounts that have no API key at all.
+
+- Credentials: request an application on https://developers.ivao.aero (or by mail to
+  web@ivao.aero). You get a client id and secret, and IVAO keeps a list of the
+  redirect URLs the application may use.
+- Redirect: the app itself listens on http://localhost:48620/callback (loopback,
+  nothing exposed to the network). Register that exact URL on the IVAO application,
+  or type another registered URL in Settings.
+- Scopes: `openid profile tracker`. IVAO approves scopes per application: without
+  `tracker` the sign-in still works but the recorded tracks stay refused, and the
+  trail notice says exactly that. The scope string is editable in Settings.
+- Flow: authorisation code + PKCE (S256) to https://sso.ivao.aero/authorize, the code
+  is exchanged at https://api.ivao.aero/v2/oauth/token, and the access token is
+  renewed with the refresh token. Both tokens are stored in settings.json next to the
+  consumer key (same trust boundary as the key always had).
+- Requests: a signed-in token is sent as `Authorization: Bearer` (what WebEye does);
+  the consumer key is the fallback, and it is also retried if IVAO refuses the token.
+- Verification: IVAO publishes a public test client in its OAuth samples repo
+  (github.com/ivaoaero/OAuth-samples). Its redirect list includes
+  http://localhost:8000/auth/callback, so the flow can be exercised locally; those
+  credentials only authorise /v2/users/me, proving the sign-in (account label appears)
+  but not the trail.
+
+
+## RECORDED TRAIL
+================
+
+Selecting a flight or a station fetches its recorded track
+(`/v2/tracker/sessions/{id}/tracks`). The map draws no line until IVAO has answered,
+then paints the trail. The ghosted great-circle estimate of the filed route is only
+drawn once the answer came back without a usable track — drawing it first made the
+line jump across the map when the recorded trail replaced it. The airports of the
+flight plan come from the summary feed, so they stay on screen while the track loads.
+
 
 dotnet publish src\TheEye.Windows\TheEye.Windows.csproj `
   -c Release `

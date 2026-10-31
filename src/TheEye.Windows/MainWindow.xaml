@@ -487,6 +487,13 @@
                             <TextBlock Text="{Binding WarningText}" Foreground="{DynamicResource WarningBrush}"
                                        FontSize="11" TextWrapping="Wrap" MaxWidth="520" />
                         </Border>
+                        <Border Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource WarningBrush}" BorderThickness="1"
+                                CornerRadius="6" Padding="12,7" Margin="0,6,0,0"
+                                Visibility="{Binding HasTrackNotice, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding TrackNotice}" Foreground="{DynamicResource WarningBrush}"
+                                       FontSize="11" TextWrapping="Wrap" MaxWidth="520" />
+                        </Border>
                     </StackPanel>
 
                     <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="14">

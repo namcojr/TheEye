@@ -184,6 +184,59 @@ public sealed class SettingsStoreTests
         Assert.Equal(25000, settings.MapResolution);
     }
 
+    [Fact]
+    public void SaveAndLoad_RoundTripsTheSignIn()
+    {
+        using var temporary = new TemporaryDirectory();
+        var store = new SettingsStore(temporary.FilePath("settings.json"));
+        var settings = new TheEyeSettings
+        {
+            OAuthClientId = "  client-id  ",
+            OAuthClientSecret = " secret ",
+            OAuthRedirectUri = "",
+            OAuthScopes = " ",
+            OAuthAccessToken = " access ",
+            OAuthRefreshToken = "refresh",
+            OAuthAccount = "123456 (Jane Doe)"
+        };
+        settings.SetOAuthExpiry(new DateTimeOffset(2026, 11, 1, 9, 30, 0, TimeSpan.Zero));
+
+        store.Save(settings);
+        var loaded = store.Load();
+
+        Assert.Equal("client-id", loaded.OAuthClientId);
+        Assert.Equal("secret", loaded.OAuthClientSecret);
+        Assert.Equal(TheEye.Core.Api.IvaoOAuthOptions.DefaultRedirectUri, loaded.OAuthRedirectUri);
+        Assert.Equal(TheEye.Core.Api.IvaoOAuthOptions.DefaultScopes, loaded.OAuthScopes);
+        Assert.Equal("access", loaded.OAuthAccessToken);
+        Assert.Equal("refresh", loaded.OAuthRefreshToken);
+        Assert.Equal(new DateTimeOffset(2026, 11, 1, 9, 30, 0, TimeSpan.Zero), loaded.GetOAuthExpiry());
+        Assert.Equal("123456 (Jane Doe)", loaded.OAuthAccount);
+        Assert.True(loaded.HasOAuthTokens);
+    }
+
+    [Fact]
+    public void ClearOAuthTokens_DropsTheSignInOnly()
+    {
+        var settings = new TheEyeSettings
+        {
+            ApiKey = "test-key",
+            OAuthClientId = "client-id",
+            OAuthAccessToken = "access",
+            OAuthRefreshToken = "refresh",
+            OAuthAccount = "123456 (Jane Doe)"
+        };
+        settings.SetOAuthExpiry(DateTimeOffset.UtcNow.AddHours(1));
+
+        settings.ClearOAuthTokens();
+
+        Assert.False(settings.HasOAuthTokens);
+        Assert.Null(settings.GetOAuthExpiry());
+        Assert.Equal(string.Empty, settings.OAuthAccount);
+        Assert.Equal("client-id", settings.OAuthClientId);
+        Assert.Equal("test-key", settings.ApiKey);
+    }
+
     [Theory]
     [InlineData(null, TheEyeThemes.Dark)]
     [InlineData("", TheEyeThemes.Dark)]

@@ -82,4 +82,90 @@ public sealed class RouteBuilderTests
         Assert.Equal(0, RouteBuilder.DistanceNm(new GeoCoordinate(double.NaN, 0), Kennedy));
         Assert.Equal(0, RouteBuilder.DistanceNm(Heathrow, Heathrow), 6);
     }
+
+    [Fact]
+    public void TrimToFraction_KeepsWholePointsAndInterpolatesTheLastOne()
+    {
+        var route = new[]
+        {
+            new GeoCoordinate(0, 0),
+            new GeoCoordinate(0, 1),
+            new GeoCoordinate(0, 2)
+        };
+
+        var half = RouteBuilder.TrimToFraction(route, 0.5);
+        Assert.Equal([new GeoCoordinate(0, 0), new GeoCoordinate(0, 1)], half);
+
+        var quarter = RouteBuilder.TrimToFraction(route, 0.25);
+        Assert.Equal(2, quarter.Count);
+        Assert.Equal(0.5, quarter[^1].Longitude, 6);
+    }
+
+    [Fact]
+    public void TrimToFraction_ClampsToTheEndsOfTheRoute()
+    {
+        var route = new[] { Heathrow, Kennedy };
+
+        Assert.Same(route, RouteBuilder.TrimToFraction(route, 1));
+        Assert.Same(route, RouteBuilder.TrimToFraction(route, 2));
+        Assert.Equal([Heathrow], RouteBuilder.TrimToFraction(route, 0));
+        Assert.Equal([Heathrow], RouteBuilder.TrimToFraction(route, -1));
+
+        // An unknown fraction keeps the whole route: it is the safe assumption
+        // when the feed reports no progress at all.
+        Assert.Same(route, RouteBuilder.TrimToFraction(route, double.NaN));
+    }
+
+    [Fact]
+    public void TrimToFraction_InterpolatesAcrossTheAntimeridian()
+    {
+        var route = new[]
+        {
+            new GeoCoordinate(0, 179),
+            new GeoCoordinate(0, -179)
+        };
+
+        var trimmed = RouteBuilder.TrimToFraction(route, 0.5);
+
+        Assert.Equal(2, trimmed.Count);
+        Assert.Equal(180, Math.Abs(trimmed[^1].Longitude), 6);
+    }
+
+    [Fact]
+    public void SplitAtAntimeridian_ClosesBothHalvesAgainstTheMeridian()
+    {
+        var lines = RouteBuilder.SplitAtAntimeridian(
+        [
+            new GeoCoordinate(0, 179.5),
+            new GeoCoordinate(0, -179.5),
+            new GeoCoordinate(1, -178)
+        ]);
+
+        Assert.Equal(2, lines.Count);
+        Assert.Equal(180, lines[0][^1].Longitude, 6);
+        Assert.Equal(-180, lines[1][0].Longitude, 6);
+        Assert.Equal(3, lines[1].Count);
+    }
+
+    [Fact]
+    public void SplitAtAntimeridian_SplitsWestboundRoutesToo()
+    {
+        var lines = RouteBuilder.SplitAtAntimeridian(
+        [
+            new GeoCoordinate(10, -179.5),
+            new GeoCoordinate(10, 179.5)
+        ]);
+
+        Assert.Equal(2, lines.Count);
+        Assert.Equal(-180, lines[0][^1].Longitude, 6);
+        Assert.Equal(180, lines[1][0].Longitude, 6);
+    }
+
+    [Fact]
+    public void SplitAtAntimeridian_ReturnsEmptyForAPointOrLess()
+    {
+        Assert.Empty(RouteBuilder.SplitAtAntimeridian([Heathrow]));
+        Assert.Empty(RouteBuilder.SplitAtAntimeridian([]));
+    }
 }
+

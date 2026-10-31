@@ -27,13 +27,14 @@ public sealed class SessionTrackStore
     public TimeSpan CacheDuration => _cacheDuration;
 
     /// <summary>
-    /// Returns the recorded track of <paramref name="sessionId"/>, or null when
-    /// the API does not expose it. The tracks endpoint needs a consumer key and
-    /// answers 401 without one, so a failure is cached for the same short window
-    /// as a success: a flight without track data must not trigger a request on
-    /// every refresh.
+    /// Returns the recorded track of <paramref name="sessionId"/>. The tracks
+    /// feed is an authenticated endpoint: IVAO answers 401 unless the request
+    /// carries an IVAO session (the token WebEye gets from its login) or a
+    /// personal consumer key, so the refusal is reported instead of hidden.
+    /// A failure is cached for the same short window as a success: a session
+    /// without track data must not trigger a request on every refresh.
     /// </summary>
-    public Task<IReadOnlyList<IvaoPilotTrack>?> GetTracksAsync(
+    public Task<SessionTrackResult> GetTracksAsync(
         long sessionId,
         CancellationToken cancellationToken = default)
     {
@@ -60,23 +61,45 @@ public sealed class SessionTrackStore
         }
     }
 
-    private async Task<IReadOnlyList<IvaoPilotTrack>?> FetchAsync(long sessionId, CancellationToken cancellationToken)
+    private async Task<SessionTrackResult> FetchAsync(long sessionId, CancellationToken cancellationToken)
     {
         try
         {
-            return await _api.GetSessionTracksAsync(sessionId, cancellationToken);
+            var tracks = await _api.GetSessionTracksAsync(sessionId, cancellationToken);
+            return new SessionTrackResult(tracks, null);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
+        catch (IvaoApiException ex)
+        {
+            // 401 means the request itself was not authenticated, which is a
+            // different problem from a session that simply has no track: the
+            // caller needs the status to tell the user which one it hit.
+            return new SessionTrackResult(null, ex.StatusCode);
+        }
         catch
         {
-            // Without a consumer key, or for a session the tracker has already
-            // dropped, there is simply nothing to trace.
-            return null;
+            // A dropped connection or a malformed payload: nothing to trace.
+            return new SessionTrackResult(null, null);
         }
     }
 
-    private sealed record CacheEntry(Task<IReadOnlyList<IvaoPilotTrack>?> Track, DateTimeOffset RequestedAt);
+    private sealed record CacheEntry(Task<SessionTrackResult> Track, DateTimeOffset RequestedAt);
+}
+
+/// <summary>
+/// Outcome of a recorded-track request. <see cref="Tracks"/> is null when IVAO
+/// did not return a track; <see cref="StatusCode"/> then holds the HTTP status
+/// of the refusal, so the map can explain the missing trail instead of silently
+/// drawing the filed route.
+/// </summary>
+public sealed record SessionTrackResult(IReadOnlyList<IvaoPilotTrack>? Tracks, int? StatusCode)
+{
+    /// <summary>
+    /// True when the payload holds enough positions to trace a trail. A single
+    /// point is not a trail, so it counts as missing.
+    /// </summary>
+    public bool HasTrack => Tracks is { Count: >= 2 };
 }

@@ -50,7 +50,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        var dialog = new SettingsWindow(new SettingsViewModel(viewModel.CreateSettingsSnapshot()))
+        var dialog = new SettingsWindow(
+            new SettingsViewModel(viewModel.CreateSettingsSnapshot()),
+            IvaoSignInService.SignInAsync)
         {
             Owner = this
         };

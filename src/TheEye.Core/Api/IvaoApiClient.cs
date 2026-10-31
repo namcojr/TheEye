@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using TheEye.Core.Models;
@@ -46,9 +48,12 @@ public sealed class IvaoApiClient : IDisposable
         GetObjectAsync<IvaoFlightPlan>($"v2/tracker/now/flight-plans/{id}", "flightPlan", cancellationToken);
 
     /// <summary>
-    /// Every recorded position of a pilot or ATC session. This is the feed the
-    /// IVAO web map uses to trace the path an aircraft has flown; it requires a
-    /// consumer key, so callers must cope with an unauthorised response.
+    /// Every recorded position of a pilot or ATC session, keyed by the session
+    /// id carried by the tracker summaries (<c>id</c>, not <c>userId</c>). The
+    /// feed is authenticated: IVAO answers 401 <c>not_authenticated</c> unless
+    /// the request carries an IVAO login token, which is what WebEye sends after
+    /// its OAuth sign-in, or a personal consumer key. Callers must cope with an
+    /// unauthorised response.
     /// </summary>
     public Task<IReadOnlyList<IvaoPilotTrack>> GetSessionTracksAsync(
         long sessionId,
@@ -78,6 +83,20 @@ public sealed class IvaoApiClient : IDisposable
             data.ValueKind == JsonValueKind.Array)
         {
             return data.Deserialize<List<T>>(IvaoJson.Options) ?? [];
+        }
+
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            // Some endpoints wrap their list in a named property, e.g.
+            // "tracks" for the recorded positions of a session. Any single
+            // array is a payload, so the client does not have to know the name.
+            foreach (var property in root.EnumerateObject())
+            {
+                if (property.Value.ValueKind == JsonValueKind.Array)
+                {
+                    return property.Value.Deserialize<List<T>>(IvaoJson.Options) ?? [];
+                }
+            }
         }
 
         throw new IvaoApiException(200, root.GetRawText(), $"Unexpected response shape for {path}.");
@@ -110,29 +129,72 @@ public sealed class IvaoApiClient : IDisposable
 
     private async Task<JsonDocument> GetDocumentAsync(string path, CancellationToken cancellationToken)
     {
-        var uri = BuildUri(path);
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        var token = await ResolveAccessTokenAsync(false, cancellationToken);
+        var response = await SendAsync(path, token, cancellationToken);
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized &&
+            token is not null &&
+            _options.AccessTokenSource is not null)
+        {
+            // A token IVAO no longer accepts (revoked, or expired early) is
+            // renewed once before the refusal is reported.
+            response.Dispose();
+            token = await ResolveAccessTokenAsync(true, cancellationToken);
+            response = await SendAsync(path, token, cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized && HasApiKey)
+            {
+                // The sign-in may simply not carry the scope this feed needs,
+                // while the consumer key does: try the other credential once.
+                response.Dispose();
+                token = null;
+                response = await SendAsync(path, null, cancellationToken);
+            }
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                throw new IvaoApiException(
+                    (int)response.StatusCode,
+                    Truncate(body, 2000),
+                    $"IVAO API returned {(int)response.StatusCode} {response.ReasonPhrase} for {path}.");
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        }
+    }
+
+    private async Task<string?> ResolveAccessTokenAsync(bool forceRefresh, CancellationToken cancellationToken) =>
+        _options.AccessTokenSource is { } source
+            ? await source.GetAccessTokenAsync(forceRefresh, cancellationToken)
+            : null;
+
+    private async Task<HttpResponseMessage> SendAsync(
+        string path,
+        string? accessToken,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, BuildUri(path));
         request.Headers.TryAddWithoutValidation("Accept", "application/json");
         request.Headers.TryAddWithoutValidation("Origin", _options.Origin);
 
-        if (HasApiKey)
+        if (!string.IsNullOrWhiteSpace(accessToken))
+        {
+            // The signed-in member's token is what WebEye sends, and the only
+            // credential the recorded-tracks feed accepts besides a consumer key.
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        }
+        else if (HasApiKey)
         {
             // The IVAO API expects the consumer key in the lowercase apiKey header.
             request.Headers.TryAddWithoutValidation("apiKey", _options.ApiKey);
         }
 
-        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new IvaoApiException(
-                (int)response.StatusCode,
-                Truncate(body, 2000),
-                $"IVAO API returned {(int)response.StatusCode} {response.ReasonPhrase} for {path}.");
-        }
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        return await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
     }
 
     private Uri BuildUri(string path)

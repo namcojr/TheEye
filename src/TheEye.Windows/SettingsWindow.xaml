@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Settings — The Eye of IVAO"
-        Width="560" Height="700"
+        Width="560" Height="780"
         WindowStyle="None"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
@@ -49,15 +49,6 @@
 
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="22,20,22,10">
                 <StackPanel>
-                    <TextBlock Text="CONNECTION" Style="{StaticResource SectionTitle}" />
-                    <TextBlock Text="IVAO API KEY" Style="{StaticResource DetailLabel}" Margin="0,12,0,5" />
-                    <TextBox Text="{Binding Draft.ApiKey, UpdateSourceTrigger=PropertyChanged}"
-                             AutomationProperties.Name="IVAO API key"
-                             FontFamily="{DynamicResource MonoFontFamily}" />
-                    <TextBlock Style="{StaticResource MutedText}" Margin="0,6,0,0" TextWrapping="Wrap"
-                               Text="Optional. Without a key the app reads the public tracker summary. Generate a personal key in your IVAO account to receive authenticated traffic data." />
-                    <Border Style="{StaticResource Divider}" Margin="0,18,0,0" />
-
                     <TextBlock Text="REFRESH INTERVAL" Style="{StaticResource SectionTitle}" Margin="0,18,0,0" />
                     <TextBlock Style="{StaticResource MutedText}" Margin="0,5,0,9" TextWrapping="Wrap"
                                Text="How often the tracker polls IVAO. Shorter intervals update faster and use more requests." />
@@ -124,7 +115,59 @@
                                   AutomationProperties.Name="Centre the map on map clicks" />
                     </StackPanel>
                     <TextBlock Style="{StaticResource MutedText}" Margin="0,7,0,0" TextWrapping="Wrap"
-                               Text="Only affects clicks on the map itself. Picking a row in the traffic list always centres that aircraft or controller, whatever this is set to." />
+                               Text="Only affects clicks on the map." />
+
+                    <Border Style="{StaticResource Divider}" Margin="0,18,0,18" />
+
+                    <TextBlock Text="CONNECTION" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="IVAO API KEY" Style="{StaticResource DetailLabel}" Margin="0,12,0,5" />
+                    <TextBox Text="{Binding Draft.ApiKey, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="IVAO API key"
+                             FontFamily="{DynamicResource MonoFontFamily}" />
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="Optional. Without a key the app reads the public tracker summary only. The recorded tracks behind the altitude-coloured trail are an authenticated endpoint: request your own consumer key on api.ivao.aero and paste it here to trace the selected flight or station." />
+                    <Border Style="{StaticResource Divider}" Margin="0,18,0,0" />
+
+                    <TextBlock Text="IVAO SIGN-IN" Style="{StaticResource SectionTitle}" Margin="0,18,0,0" />
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,5,0,9" TextWrapping="Wrap"
+                               Text="Signing in authorises the app as you, which is how the recorded tracks and the per-session details become readable without a consumer key. Create an application on developers.ivao.aero, add the redirect URL below to its allowed URLs, then paste the client id and secret it gives you." />
+
+                    <TextBlock Text="CLIENT ID" Style="{StaticResource DetailLabel}" Margin="0,0,0,5" />
+                    <TextBox Text="{Binding Draft.OAuthClientId, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="IVAO application client id"
+                             FontFamily="{DynamicResource MonoFontFamily}" />
+
+                    <TextBlock Text="CLIENT SECRET" Style="{StaticResource DetailLabel}" Margin="0,10,0,5" />
+                    <PasswordBox x:Name="ClientSecretBox"
+                                 AutomationProperties.Name="IVAO application client secret"
+                                 PasswordChanged="OnClientSecretChanged" />
+
+                    <TextBlock Text="REDIRECT URL" Style="{StaticResource DetailLabel}" Margin="0,10,0,5" />
+                    <TextBox Text="{Binding Draft.OAuthRedirectUri, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="IVAO sign-in redirect URL"
+                             LostFocus="OnRedirectUriLostFocus"
+                             FontFamily="{DynamicResource MonoFontFamily}" />
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="{Binding RedirectUriHint}" />
+
+                    <TextBlock Text="SCOPES" Style="{StaticResource DetailLabel}" Margin="0,10,0,5" />
+                    <TextBox Text="{Binding Draft.OAuthScopes, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="IVAO sign-in scopes"
+                             FontFamily="{DynamicResource MonoFontFamily}" />
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="IVAO approves scopes per application. The tracker scope covers recorded sessions; an application approved without it still reads the public traffic." />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button x:Name="SignInButton" Style="{StaticResource PrimaryButton}" MinWidth="136"
+                                Content="Sign in with IVAO" AutomationProperties.Name="Sign in with IVAO"
+                                Click="OnSignInClick" />
+                        <Button x:Name="SignOutButton" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
+                                Content="Sign out" AutomationProperties.Name="Sign out of IVAO"
+                                Click="OnSignOutClick" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding SignInSummary}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding SignInStatus}" Style="{StaticResource MutedText}" Margin="0,4,0,0"
+                               TextWrapping="Wrap" />
                 </StackPanel>
             </ScrollViewer>
 

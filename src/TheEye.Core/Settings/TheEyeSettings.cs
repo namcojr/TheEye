@@ -1,5 +1,7 @@
 namespace TheEye.Core.Settings;
 
+using System.Globalization;
+using TheEye.Core.Api;
 using TheEye.Core.Maps;
 
 public static class TheEyeThemes
@@ -36,6 +38,36 @@ public sealed class TheEyeSettings
 {
     public string ApiKey { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Client id of the IVAO application that signs the member in. Empty when
+    /// the user works with a consumer key only.
+    /// </summary>
+    public string OAuthClientId { get; set; } = string.Empty;
+
+    /// <summary>Secret of the same IVAO application: optional, PKCE guards the exchange anyway.</summary>
+    public string OAuthClientSecret { get; set; } = string.Empty;
+
+    /// <summary>Loopback URL the browser returns to. It must be allowed by the IVAO application.</summary>
+    public string OAuthRedirectUri { get; set; } = IvaoOAuthOptions.DefaultRedirectUri;
+
+    /// <summary>Scopes requested at sign-in; IVAO grants them per application.</summary>
+    public string OAuthScopes { get; set; } = IvaoOAuthOptions.DefaultScopes;
+
+    /// <summary>
+    /// The sign-in itself. Tokens sit in the same file as the consumer key:
+    /// both are readable by the Windows account that runs the app, which is the
+    /// same trust boundary the API key has always had.
+    /// </summary>
+    public string OAuthAccessToken { get; set; } = string.Empty;
+
+    public string OAuthRefreshToken { get; set; } = string.Empty;
+
+    /// <summary>ISO-8601 expiry of <see cref="OAuthAccessToken"/>; empty when unknown.</summary>
+    public string OAuthExpiresAt { get; set; } = string.Empty;
+
+    /// <summary>Who signed in, e.g. "123456 (Jane Doe)": a label for the UI, not a credential.</summary>
+    public string OAuthAccount { get; set; } = string.Empty;
+
     public string Theme { get; set; } = TheEyeThemes.Dark;
 
     public int RefreshSeconds { get; set; } = 30;
@@ -58,9 +90,43 @@ public sealed class TheEyeSettings
 
     public double MapResolution { get; set; } = 25000;
 
+    /// <summary>True when a sign-in token is stored, whatever its age.</summary>
+    public bool HasOAuthTokens =>
+        !string.IsNullOrWhiteSpace(OAuthAccessToken) || !string.IsNullOrWhiteSpace(OAuthRefreshToken);
+
+    public DateTimeOffset? GetOAuthExpiry() =>
+        DateTimeOffset.TryParse(
+            OAuthExpiresAt,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind,
+            out var expiresAt)
+            ? expiresAt
+            : null;
+
+    public void SetOAuthExpiry(DateTimeOffset? expiresAt) =>
+        OAuthExpiresAt = expiresAt?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)
+            ?? string.Empty;
+
+    /// <summary>Drops the sign-in, e.g. when IVAO revoked the grant.</summary>
+    public void ClearOAuthTokens()
+    {
+        OAuthAccessToken = string.Empty;
+        OAuthRefreshToken = string.Empty;
+        OAuthExpiresAt = string.Empty;
+        OAuthAccount = string.Empty;
+    }
+
     public TheEyeSettings Clone() => new()
     {
         ApiKey = ApiKey,
+        OAuthClientId = OAuthClientId,
+        OAuthClientSecret = OAuthClientSecret,
+        OAuthRedirectUri = OAuthRedirectUri,
+        OAuthScopes = OAuthScopes,
+        OAuthAccessToken = OAuthAccessToken,
+        OAuthRefreshToken = OAuthRefreshToken,
+        OAuthExpiresAt = OAuthExpiresAt,
+        OAuthAccount = OAuthAccount,
         Theme = Theme,
         RefreshSeconds = RefreshSeconds,
         ShowPilots = ShowPilots,
@@ -74,6 +140,14 @@ public sealed class TheEyeSettings
     public void CopyFrom(TheEyeSettings other)
     {
         ApiKey = other.ApiKey;
+        OAuthClientId = other.OAuthClientId;
+        OAuthClientSecret = other.OAuthClientSecret;
+        OAuthRedirectUri = other.OAuthRedirectUri;
+        OAuthScopes = other.OAuthScopes;
+        OAuthAccessToken = other.OAuthAccessToken;
+        OAuthRefreshToken = other.OAuthRefreshToken;
+        OAuthExpiresAt = other.OAuthExpiresAt;
+        OAuthAccount = other.OAuthAccount;
         Theme = other.Theme;
         RefreshSeconds = other.RefreshSeconds;
         ShowPilots = other.ShowPilots;
@@ -87,6 +161,18 @@ public sealed class TheEyeSettings
     public void Normalize()
     {
         ApiKey = ApiKey?.Trim() ?? string.Empty;
+        OAuthClientId = OAuthClientId?.Trim() ?? string.Empty;
+        OAuthClientSecret = OAuthClientSecret?.Trim() ?? string.Empty;
+        OAuthRedirectUri = string.IsNullOrWhiteSpace(OAuthRedirectUri)
+            ? IvaoOAuthOptions.DefaultRedirectUri
+            : OAuthRedirectUri.Trim();
+        OAuthScopes = string.IsNullOrWhiteSpace(OAuthScopes)
+            ? IvaoOAuthOptions.DefaultScopes
+            : OAuthScopes.Trim();
+        OAuthAccessToken = OAuthAccessToken?.Trim() ?? string.Empty;
+        OAuthRefreshToken = OAuthRefreshToken?.Trim() ?? string.Empty;
+        OAuthExpiresAt = OAuthExpiresAt?.Trim() ?? string.Empty;
+        OAuthAccount = OAuthAccount?.Trim() ?? string.Empty;
         Theme = TheEyeThemes.Normalize(Theme);
 
         if (RefreshSeconds is < 10 or > 600)

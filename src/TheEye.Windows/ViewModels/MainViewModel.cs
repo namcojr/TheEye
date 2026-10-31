@@ -23,6 +23,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _refreshCommand;
 
     private IvaoApiClient? _api;
+    private IvaoSession? _session;
     private TrackerService? _tracker;
     private SessionTrackStore? _tracks;
     private IvaoConnectionCounts _stats = new();
@@ -35,9 +36,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _lastUpdatedText = "Waiting for the first update";
     private string _errorMessage = string.Empty;
     private string _warningText = string.Empty;
+    private string _trackNotice = string.Empty;
     private bool _isRefreshing;
     private bool _hasError;
     private bool _hasWarnings;
+    private bool _hasTrackNotice;
     private int _pilotCount;
     private int _atcCount;
     private int _totalCount;
@@ -232,6 +235,29 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _hasWarnings, value);
     }
 
+    /// <summary>
+    /// Explains why the selected flight or station is not traced from its
+    /// recorded track, e.g. because no API key is configured. The map keeps
+    /// drawing the flown part of the filed route in the meantime.
+    /// </summary>
+    public string TrackNotice
+    {
+        get => _trackNotice;
+        private set
+        {
+            if (SetProperty(ref _trackNotice, value))
+            {
+                HasTrackNotice = !string.IsNullOrWhiteSpace(value);
+            }
+        }
+    }
+
+    public bool HasTrackNotice
+    {
+        get => _hasTrackNotice;
+        private set => SetProperty(ref _hasTrackNotice, value);
+    }
+
     public int PilotCount
     {
         get => _pilotCount;
@@ -276,9 +302,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public bool HasApiKey => !string.IsNullOrWhiteSpace(_settings.ApiKey);
 
-    public string ConnectionDescription => HasApiKey
-        ? "Authenticated with a personal IVAO API key"
-        : "Public tracker summary (no API key configured)";
+    /// <summary>True while an IVAO sign-in is in place, which is what the trail feed needs.</summary>
+    public bool IsSignedIn => _session?.IsSignedIn ?? _settings.HasOAuthTokens;
+
+    public string ConnectionDescription => IsSignedIn
+        ? string.IsNullOrWhiteSpace(_settings.OAuthAccount)
+            ? "Signed in to IVAO"
+            : $"Signed in to IVAO as {_settings.OAuthAccount}"
+        : HasApiKey
+            ? "Authenticated with a personal IVAO API key"
+            : "Public tracker summary (no sign-in, no flight trails)";
 
     public string RefreshDescription => $"Every {_settings.RefreshSeconds} seconds";
 
@@ -343,7 +376,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public async Task ApplySettingsAsync(TheEyeSettings updated)
     {
         updated.Normalize();
-        var apiChanged = !string.Equals(_settings.ApiKey, updated.ApiKey, StringComparison.Ordinal);
+        var authChanged =
+            !string.Equals(_settings.ApiKey, updated.ApiKey, StringComparison.Ordinal) ||
+            !string.Equals(_settings.OAuthClientId, updated.OAuthClientId, StringComparison.Ordinal) ||
+            !string.Equals(_settings.OAuthClientSecret, updated.OAuthClientSecret, StringComparison.Ordinal) ||
+            !string.Equals(_settings.OAuthRedirectUri, updated.OAuthRedirectUri, StringComparison.Ordinal) ||
+            !string.Equals(_settings.OAuthScopes, updated.OAuthScopes, StringComparison.Ordinal) ||
+            !string.Equals(_settings.OAuthAccessToken, updated.OAuthAccessToken, StringComparison.Ordinal) ||
+            !string.Equals(_settings.OAuthRefreshToken, updated.OAuthRefreshToken, StringComparison.Ordinal) ||
+            !string.Equals(_settings.OAuthAccount, updated.OAuthAccount, StringComparison.Ordinal);
         var intervalChanged = _settings.RefreshSeconds != updated.RefreshSeconds;
         var themeChanged = !string.Equals(
             TheEyeThemes.Normalize(_settings.Theme),
@@ -363,13 +404,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ShowPilots));
         OnPropertyChanged(nameof(ShowAtc));
         OnPropertyChanged(nameof(HasApiKey));
+        OnPropertyChanged(nameof(IsSignedIn));
         OnPropertyChanged(nameof(ConnectionDescription));
         OnPropertyChanged(nameof(RefreshDescription));
         OnPropertyChanged(nameof(ThemeDescription));
 
         SaveSettings();
 
-        if (apiChanged || intervalChanged)
+        if (authChanged || intervalChanged)
         {
             ConfigureTracker();
             await RefreshAsync();
@@ -408,6 +450,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ThemeService.ThemeChanged -= OnThemeChanged;
         Map.SelectionChanged -= OnMapSelectionChanged;
         _tracker?.Dispose();
+        _session?.Dispose();
         _api?.Dispose();
         Map.Dispose();
     }
@@ -416,10 +459,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _tracker?.Dispose();
         _api?.Dispose();
+        _session?.Dispose();
+
+        // The sign-in lives across restarts: tokens come from the settings file
+        // and every renewal writes them back, so the member signs in once.
+        _session = new IvaoSession(
+            new IvaoOAuthClient(CreateOAuthOptions()),
+            CreateStoredTokens(),
+            PersistTokensAsync);
 
         _api = new IvaoApiClient(new IvaoApiOptions
         {
-            ApiKey = string.IsNullOrWhiteSpace(_settings.ApiKey) ? null : _settings.ApiKey
+            ApiKey = string.IsNullOrWhiteSpace(_settings.ApiKey) ? null : _settings.ApiKey,
+            AccessTokenSource = _session
         });
 
         _tracker = new TrackerService(_api, TimeSpan.FromSeconds(_settings.RefreshSeconds));
@@ -431,6 +483,73 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // demand, because only one of them is ever on screen.
         _tracks = new SessionTrackStore(_api);
         _refreshCommand.RaiseCanExecuteChanged();
+
+        OnPropertyChanged(nameof(IsSignedIn));
+        OnPropertyChanged(nameof(ConnectionDescription));
+    }
+
+    /// <summary>The IVAO application credentials the sign-in uses, as configured.</summary>
+    private IvaoOAuthOptions CreateOAuthOptions() => new()
+    {
+        ClientId = _settings.OAuthClientId,
+        ClientSecret = _settings.OAuthClientSecret,
+        RedirectUri = _settings.OAuthRedirectUri,
+        Scopes = _settings.OAuthScopes
+    };
+
+    private IvaoOAuthTokens? CreateStoredTokens() =>
+        _settings.HasOAuthTokens
+            ? new IvaoOAuthTokens(
+                _settings.OAuthAccessToken,
+                string.IsNullOrWhiteSpace(_settings.OAuthRefreshToken) ? null : _settings.OAuthRefreshToken,
+                _settings.GetOAuthExpiry())
+            : null;
+
+    /// <summary>
+    /// Writes a renewed (or dropped) token back to the settings file. The token
+    /// layer calls this from whichever thread needed the token, so the store is
+    /// written off the UI thread and the notification is marshalled back.
+    /// </summary>
+    private Task PersistTokensAsync(IvaoOAuthTokens? tokens)
+    {
+        if (tokens is null)
+        {
+            _settings.ClearOAuthTokens();
+        }
+        else
+        {
+            _settings.OAuthAccessToken = tokens.AccessToken;
+            _settings.OAuthRefreshToken = tokens.RefreshToken ?? string.Empty;
+            _settings.SetOAuthExpiry(tokens.ExpiresAt);
+        }
+
+        try
+        {
+            _store.Save(_settings);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The token stays in memory for this run; the next save retries.
+        }
+
+        RaiseOnDispatcher(() =>
+        {
+            OnPropertyChanged(nameof(IsSignedIn));
+            OnPropertyChanged(nameof(ConnectionDescription));
+        });
+
+        return Task.CompletedTask;
+    }
+
+    private static void RaiseOnDispatcher(Action action)
+    {
+        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(action);
+            return;
+        }
+
+        action();
     }
 
     private void OnSnapshotUpdated(object? sender, TrackerSnapshot snapshot)
@@ -506,37 +625,82 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _syncingSelection = false;
         }
 
+        // The reason the previous selection had no trail says nothing about this
+        // one, and the answer for it is not in yet.
+        TrackNotice = string.Empty;
         _ = RefreshSelectionTracksAsync();
     }
 
     /// <summary>
     /// Loads the recorded track of the selected flight or station so the map can
-    /// trace the path it has actually flown. The map keeps showing the flown part
-    /// of the route until the track arrives, and a response for a selection the
-    /// user has already left is dropped.
+    /// trace the path it has actually flown. Selecting a session marked its route
+    /// as pending, so no line is drawn until this answer arrives: the estimate of
+    /// the filed route is only used once the track is known to be unavailable, and
+    /// the trail therefore never jumps. A response for a selection the user has
+    /// already left is dropped.
     /// </summary>
     private async Task RefreshSelectionTracksAsync()
     {
         if (_tracks is not { } tracks)
         {
+            // Nothing can fetch a track, so the map must stop waiting for one and
+            // fall back to the flown part of the route.
+            Map.SetSelectionTracks(null);
             return;
         }
 
         var sessionId = Map.SelectedPilot?.Id ?? Map.SelectedAtc?.Id;
         if (sessionId is not { } id)
         {
+            TrackNotice = string.Empty;
             return;
         }
 
-        var track = await tracks.GetTracksAsync(id);
+        SessionTrackResult result;
+        try
+        {
+            result = await tracks.GetTracksAsync(id);
+        }
+        catch
+        {
+            // IVAO never answered — a timeout, for example — so the map must stop
+            // waiting for a track instead of staying without any line at all.
+            if (Map.SelectedPilot?.Id == id || Map.SelectedAtc?.Id == id)
+            {
+                Map.SetSelectionTracks(null);
+            }
+
+            return;
+        }
 
         if (Map.SelectedPilot?.Id != id && Map.SelectedAtc?.Id != id)
         {
             return;
         }
 
-        Map.SetSelectionTracks(track);
+        Map.SetSelectionTracks(result.Tracks);
+        TrackNotice = result.HasTrack ? string.Empty : DescribeMissingTrack(result);
     }
+
+    /// <summary>
+    /// Why the map is drawing the filed route instead of a recorded trail. The
+    /// tracks feed is authenticated: IVAO answers 401 unless the request carries
+    /// an IVAO sign-in token (what WebEye sends) or a personal consumer key. An
+    /// unauthorised answer is named as such, because it is the one cause the
+    /// user can fix; a session without a track is reported apart.
+    /// </summary>
+    private string DescribeMissingTrack(SessionTrackResult result) => result.StatusCode switch
+    {
+        401 or 403 when IsSignedIn =>
+            "IVAO refused the recorded track of this session (401) even though you are signed in — the IVAO application was not approved for the tracker scope, so it cannot read recorded sessions.",
+        401 or 403 when HasApiKey =>
+            "IVAO refused the recorded track of this session (401) even with an API key configured — the tracks feed needs a sign-in or a valid consumer key.",
+        401 or 403 =>
+            "IVAO refused the recorded track request (401 not authenticated). Sign in with IVAO in Settings, or paste a personal IVAO API key: the map traces the part of the route already flown.",
+        { } status =>
+            $"IVAO answered {status} for the recorded track of this session, so the map traces the part of the route already flown.",
+        null => "No recorded track for this session — the map shows the part of the route already flown."
+    };
 
     private void RaiseSelectionDependentChanges()
     {

@@ -49,6 +49,27 @@ public sealed class FlightTrailTests
     }
 
     [Fact]
+    public void HasRecordedTrack_NeedsTwoUsablePositions()
+    {
+        var tracks = new[]
+        {
+            Track(52.3105, 4.7683, 20, At(0)),
+            new IvaoPilotTrack { Latitude = 52.4, Altitude = 12000 },
+            Track(52.4, 4.9, 12000, At(30))
+        };
+
+        Assert.True(FlightTrail.HasRecordedTrack(tracks));
+        Assert.False(FlightTrail.HasRecordedTrack(null));
+        Assert.False(FlightTrail.HasRecordedTrack([]));
+        Assert.False(FlightTrail.HasRecordedTrack([Track(52.3105, 4.7683, 20, At(0))]));
+        Assert.False(FlightTrail.HasRecordedTrack(
+        [
+            Track(52.3105, 4.7683, 20, At(0)),
+            Track(52.3105, 4.7683, 20, At(30))
+        ]));
+    }
+
+    [Fact]
     public void BuildSegments_ColoursEverySegmentByThePointItEndsOn()
     {
         var points = new[]
@@ -131,9 +152,10 @@ public sealed class FlightTrailTests
 
         var segments = FlightTrail.BuildPilotTrail(pilot, tracks);
 
-        // A recorded track that wanders away from the filed route still wins.
+        // A recorded track that wanders away from the filed route still wins:
+        // one segment per recorded leg, ending on the live position.
         Assert.Equal(new GeoCoordinate(52.2, 4.6), segments[0].Start);
-        Assert.Equal(3, segments.Count);
+        Assert.Equal(2, segments.Count);
         Assert.DoesNotContain(segments, segment => segment.Start == Schiphol || segment.End == Heathrow);
     }
 
@@ -164,6 +186,42 @@ public sealed class FlightTrailTests
             .Select(segment => RouteBuilder.DistanceNm(Schiphol, segment.End))
             .Max();
         Assert.InRange(covered, total / 6, total / 2);
+    }
+
+    [Fact]
+    public void BuildPilotTrail_WithholdsTheEstimateUntilTheTrackIsKnown()
+    {
+        var aircraft = new GeoCoordinate(52.03, 3.03);
+        var pilot = Pilot(
+            Schiphol,
+            Heathrow,
+            aircraft,
+            departureDistance: 70,
+            arrivalDistance: 140);
+
+        // The track request has not been answered yet: the map must not guess
+        // where the aircraft has been, or the line would jump when it arrives.
+        Assert.Empty(FlightTrail.BuildPilotTrail(pilot, tracks: null, estimateWhenMissing: false));
+
+        // IVAO answered without a track, so the flown part of the route is drawn.
+        Assert.NotEmpty(FlightTrail.BuildPilotTrail(pilot, tracks: null));
+    }
+
+    [Fact]
+    public void BuildPilotTrail_KeepsTheRecordedTrackWhenTheEstimateIsOff()
+    {
+        var pilot = Pilot(Schiphol, Heathrow, new GeoCoordinate(52.4, 4.9));
+        var tracks = new[]
+        {
+            Track(52.2, 4.6, 20000, At(0)),
+            Track(52.3, 4.7, 20000, At(1))
+        };
+
+        var segments = FlightTrail.BuildPilotTrail(pilot, tracks, estimateWhenMissing: false);
+
+        Assert.Equal(2, segments.Count);
+        Assert.Equal(new GeoCoordinate(52.2, 4.6), segments[0].Start);
+        Assert.Equal(pilot.LastTrack!.Position, segments[^1].End);
     }
 
     [Fact]

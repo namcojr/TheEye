@@ -1,6 +1,4 @@
-using System.Collections.Concurrent;
 using System.Net;
-using System.Text;
 using TheEye.Core.Api;
 using TheEye.Core.Services;
 
@@ -36,13 +34,14 @@ public sealed class SessionTrackStoreTests
     {
         var handler = new StubHttpMessageHandler(request =>
             request.RequestUri!.AbsolutePath == TracksPath
-                ? Json(Payload)
+                ? StubHttpMessageHandler.Json(Payload)
                 : new HttpResponseMessage(HttpStatusCode.NotFound));
         using var httpClient = new HttpClient(handler);
         using var api = CreateApi(httpClient);
         var store = new SessionTrackStore(api);
 
-        var tracks = await store.GetTracksAsync(4242);
+        var result = await store.GetTracksAsync(4242);
+        var tracks = result.Tracks;
 
         Assert.NotNull(tracks);
         Assert.Equal(2, tracks.Count);
@@ -51,13 +50,15 @@ public sealed class SessionTrackStoreTests
         Assert.Equal(52.4, tracks[1].Latitude);
         Assert.Equal(10450.75, tracks[1].Altitude);
         Assert.False(tracks[1].OnGround);
+        Assert.True(result.HasTrack);
+        Assert.Null(result.StatusCode);
         Assert.Equal(TracksPath, Assert.Single(handler.Requests));
     }
 
     [Fact]
     public async Task GetTracksAsync_ReusesTheTrackWithinTheCacheWindow()
     {
-        var handler = new StubHttpMessageHandler(_ => Json(Payload));
+        var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json(Payload));
         using var httpClient = new HttpClient(handler);
         using var api = CreateApi(httpClient);
         var store = new SessionTrackStore(api);
@@ -72,7 +73,7 @@ public sealed class SessionTrackStoreTests
     [Fact]
     public async Task GetTracksAsync_FetchesAgainAfterTheCacheWindow()
     {
-        var handler = new StubHttpMessageHandler(_ => Json(Payload));
+        var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json(Payload));
         using var httpClient = new HttpClient(handler);
         using var api = CreateApi(httpClient);
         var store = new SessionTrackStore(api, TimeSpan.FromMilliseconds(50));
@@ -85,7 +86,7 @@ public sealed class SessionTrackStoreTests
     }
 
     [Fact]
-    public async Task GetTracksAsync_ReturnsNullWhenTheApiRejectsTheRequest()
+    public async Task GetTracksAsync_ReportsTheStatusWhenTheApiRejectsTheRequest()
     {
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)
         {
@@ -95,13 +96,35 @@ public sealed class SessionTrackStoreTests
         using var api = CreateApi(httpClient);
         var store = new SessionTrackStore(api);
 
-        Assert.Null(await store.GetTracksAsync(4242));
+        var result = await store.GetTracksAsync(4242);
+
+        Assert.Null(result.Tracks);
+        Assert.False(result.HasTrack);
+        Assert.Equal(401, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetTracksAsync_TreatsASinglePositionAsNoTrack()
+    {
+        const string single = """
+            [{ "latitude": 52.3105, "longitude": 4.7683, "altitude": 12.5, "onGround": true }]
+            """;
+        var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json(single));
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+        var store = new SessionTrackStore(api);
+
+        var result = await store.GetTracksAsync(4242);
+
+        Assert.Equal(1, result.Tracks?.Count);
+        Assert.False(result.HasTrack);
+        Assert.Null(result.StatusCode);
     }
 
     [Fact]
     public async Task Clear_ForgetsEveryCachedTrack()
     {
-        var handler = new StubHttpMessageHandler(_ => Json(Payload));
+        var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json(Payload));
         using var httpClient = new HttpClient(handler);
         using var api = CreateApi(httpClient);
         var store = new SessionTrackStore(api);
@@ -116,7 +139,7 @@ public sealed class SessionTrackStoreTests
     [Fact]
     public void Constructor_ClampsTheCacheDurationToTheDefault()
     {
-        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ => Json("[]")));
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json("[]")));
         using var api = CreateApi(httpClient);
 
         Assert.Equal(TimeSpan.FromSeconds(20), new SessionTrackStore(api).CacheDuration);
@@ -133,31 +156,4 @@ public sealed class SessionTrackStoreTests
                 ApiKey = "secret"
             },
             httpClient);
-
-    private static HttpResponseMessage Json(string json) =>
-        new(HttpStatusCode.OK)
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
-        };
-
-    private sealed class StubHttpMessageHandler : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage> _responseFactory;
-
-        public StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory)
-        {
-            _responseFactory = responseFactory;
-        }
-
-        public ConcurrentQueue<string> Requests { get; } = new();
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            Requests.Enqueue(request.RequestUri!.AbsolutePath);
-            return Task.FromResult(_responseFactory(request));
-        }
-    }
 }

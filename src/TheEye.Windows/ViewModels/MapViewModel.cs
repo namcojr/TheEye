@@ -46,6 +46,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private bool _showAtc = true;
     private IReadOnlyList<IvaoAtc> _atc = [];
     private IReadOnlyList<IvaoPilotTrack> _selectionTracks = [];
+    private bool _selectionTracksPending;
     private IReadOnlyList<IvaoMapLayers.AtcStationPlacement> _stationPlacements = [];
     private readonly List<AtcStationHitTarget> _stationTargets = [];
     private double _stationZoom = 1;
@@ -161,10 +162,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         ReplaceLayer(ref _selectedAtcLayer, SelectedAtc is { } selected
             ? IvaoMapLayers.CreateSelectedAtc(selected.Atc, palette)
             : IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), palette));
-        ReplaceLayer(ref _routeLayer, SelectedPilot is { } pilot
-            ? IvaoMapLayers.CreateRoute(pilot.Pilot, palette, _selectionTracks)
-            : new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null });
 
+        // Repaints the route with the new palette colours; the recorded track of
+        // the selection is kept, so a theme switch does not drop the trail.
         RebuildRouteLayer();
 
         SetLayerEnabled(_atcRegionsLayer, _showAtc);
@@ -226,6 +226,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
         SelectedPilot = pilot;
         _selectionTracks = [];
+        _selectionTracksPending = pilot is not null;
         if (pilot is not null)
         {
             pilot.IsSelected = true;
@@ -262,7 +263,6 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         {
             previousPilot.IsSelected = false;
             SelectedPilot = null;
-            _selectionTracks = [];
         }
 
         if (SelectedAtc is { } previous)
@@ -271,6 +271,11 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         SelectedAtc = atc;
+        _selectionTracks = [];
+
+        // A station always needs its recorded track, so the map waits for the
+        // answer instead of drawing anything of its own.
+        _selectionTracksPending = atc is not null;
         if (atc is not null)
         {
             atc.IsSelected = true;
@@ -304,12 +309,16 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Hands the recorded track of the current selection to the map. The route
     /// layer is redrawn straight away and again on every snapshot or theme
-    /// change, so a slow request never leaves the map without a route: until the
-    /// track arrives the flight shows the part of its route it has already flown.
+    /// change. While <paramref name="pending"/> is true the request is still
+    /// running, so no line is drawn at all: the estimate of the filed route would
+    /// be replaced by the recorded trail a moment later, and the line would
+    /// visibly jump. Once IVAO has answered — with a track or without one — the
+    /// map draws what it knows.
     /// </summary>
-    public void SetSelectionTracks(IReadOnlyList<IvaoPilotTrack>? tracks)
+    public void SetSelectionTracks(IReadOnlyList<IvaoPilotTrack>? tracks, bool pending = false)
     {
         _selectionTracks = tracks ?? [];
+        _selectionTracksPending = pending;
         if (SelectedPilot is null && SelectedAtc is null)
         {
             return;
@@ -668,12 +677,18 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Paints the route of whatever is selected: the flown trail of an aircraft,
     /// the recorded track of a station, or an empty layer when nothing is
-    /// selected.
+    /// selected. The estimated route is only drawn once the recorded track is
+    /// known to be unavailable, so the line never jumps from a guess to the
+    /// recorded trail.
     /// </summary>
     private void RebuildRouteLayer()
     {
         ILayer layer = SelectedPilot is { } pilot
-            ? IvaoMapLayers.CreateRoute(pilot.Pilot, _palette ?? DefaultPalette, _selectionTracks)
+            ? IvaoMapLayers.CreateRoute(
+                pilot.Pilot,
+                _palette ?? DefaultPalette,
+                _selectionTracks,
+                estimateWhenMissing: !_selectionTracksPending)
             : SelectedAtc is { } atc
                 ? IvaoMapLayers.CreateAtcRoute(atc.Atc, _selectionTracks)
                 : new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };

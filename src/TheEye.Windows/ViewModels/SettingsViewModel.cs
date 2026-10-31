@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using TheEye.Core.Api;
 using TheEye.Core.Settings;
 
 namespace TheEye.Windows.ViewModels;
@@ -9,6 +10,8 @@ namespace TheEye.Windows.ViewModels;
 /// </summary>
 public sealed class SettingsViewModel : ObservableObject
 {
+    private string _signInStatus = string.Empty;
+
     public SettingsViewModel(TheEyeSettings draft)
     {
         Draft = draft;
@@ -72,7 +75,72 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string SettingsPath => string.Empty;
 
+    /// <summary>The loopback address the sign-in comes back to, ready to paste on IVAO.</summary>
+    public string RedirectUri => string.IsNullOrWhiteSpace(Draft.OAuthRedirectUri)
+        ? IvaoOAuthOptions.DefaultRedirectUri
+        : Draft.OAuthRedirectUri.Trim();
+
+    public string RedirectUriHint =>
+        $"Add {RedirectUri} to the redirect URLs of your IVAO application, otherwise IVAO refuses to send the browser back.";
+
+    public bool IsSignedIn => Draft.HasOAuthTokens;
+
+    /// <summary>Who is signed in, shown under the sign-in buttons.</summary>
+    public string SignInSummary => IsSignedIn
+        ? string.IsNullOrWhiteSpace(Draft.OAuthAccount)
+            ? "Signed in to IVAO."
+            : $"Signed in as {Draft.OAuthAccount}."
+        : "Not signed in.";
+
+    public string SignInStatus
+    {
+        get => _signInStatus;
+        private set => SetProperty(ref _signInStatus, value);
+    }
+
     public TheEyeSettings CreateSettings() => Draft.Clone();
+
+    /// <summary>
+    /// The credentials the sign-in must use, taken from the draft so a client id
+    /// typed a moment ago is honoured without saving first.
+    /// </summary>
+    public IvaoOAuthOptions CreateOAuthOptions() => new()
+    {
+        ClientId = Draft.OAuthClientId,
+        ClientSecret = Draft.OAuthClientSecret,
+        RedirectUri = RedirectUri,
+        Scopes = Draft.OAuthScopes
+    };
+
+    /// <summary>Adopts a completed sign-in into the draft; saving persists it.</summary>
+    public void ApplySignIn(IvaoOAuthTokens tokens, IvaoOAuthAccount? account)
+    {
+        Draft.OAuthAccessToken = tokens.AccessToken;
+        Draft.OAuthRefreshToken = tokens.RefreshToken ?? Draft.OAuthRefreshToken;
+        Draft.SetOAuthExpiry(tokens.ExpiresAt);
+        Draft.OAuthAccount = account?.DisplayName ?? Draft.OAuthAccount;
+        RaiseSignInChanges();
+    }
+
+    public void ClearSignIn()
+    {
+        Draft.ClearOAuthTokens();
+        RaiseSignInChanges();
+    }
+
+    public void ReportSignInStatus(string status) => SignInStatus = status;
+
+    /// <summary>Refreshes the redirect hint after the URL itself was edited.</summary>
+    public void RefreshRedirectHint() => RaiseSignInChanges();
+
+    private void RaiseSignInChanges()
+    {
+        OnPropertyChanged(nameof(IsSignedIn));
+        OnPropertyChanged(nameof(SignInSummary));
+        OnPropertyChanged(nameof(RedirectUri));
+        OnPropertyChanged(nameof(RedirectUriHint));
+        OnPropertyChanged(nameof(Draft));
+    }
 
     private ThemeOption CreateThemeOption(string name, string label, string background, string accent) =>
         new(name, label, Brush(background), Brush(accent));

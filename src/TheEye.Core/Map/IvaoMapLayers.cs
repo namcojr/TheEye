@@ -185,23 +185,41 @@ public static class IvaoMapLayers
     }
 
     /// <summary>
-    /// Width of the flown trail, in device independent pixels.
+    /// Width of the trail, in device independent pixels. One pixel keeps a long
+    /// recorded track readable while the altitude bands stay distinct.
     /// </summary>
     public const double TrailWidth = 1.0;
+
+    /// <summary>
+    /// Alpha of the estimated trail, i.e. the flown part of the filed route that
+    /// is drawn while no recorded track is available. The ghosted line reads as
+    /// "not recorded", which distinguishes it from the altitude-coloured trail of
+    /// a session whose tracks the API returned.
+    /// </summary>
+    public const int EstimatedTrailAlpha = 140;
 
     /// <summary>
     /// Draws the path the aircraft has flown, coloured by the altitude of every
     /// point, and marks the airports of the flight plan. The trail comes from the
     /// recorded tracks of the session when <paramref name="tracks"/> is given and
-    /// from the flown part of the filed route otherwise.
+    /// from the flown part of the filed route otherwise — unless
+    /// <paramref name="estimateWhenMissing"/> is false, which is what the map uses
+    /// while the recorded track is still being fetched: nothing is drawn until
+    /// the answer is known, so the line cannot jump from the estimate to the
+    /// recorded trail. The airports come from the flight plan, so they are always
+    /// drawn.
     /// </summary>
     public static MemoryLayer CreateRoute(
         IvaoPilot pilot,
         MapPalette palette,
-        IReadOnlyList<IvaoPilotTrack>? tracks = null)
+        IReadOnlyList<IvaoPilotTrack>? tracks = null,
+        bool estimateWhenMissing = true)
     {
         var features = new List<IFeature>();
-        AddTrail(features, FlightTrail.BuildPilotTrail(pilot, tracks));
+        AddTrail(
+            features,
+            FlightTrail.BuildPilotTrail(pilot, tracks, estimateWhenMissing),
+            FlightTrail.HasRecordedTrack(tracks));
 
         var flightPlan = pilot.FlightPlan;
         var color = WorldMap.Parse(palette.Accent);
@@ -305,7 +323,10 @@ public static class IvaoMapLayers
     /// segments share their endpoints, so a run becomes a single line instead of
     /// one feature per recorded point.
     /// </summary>
-    private static void AddTrail(List<IFeature> features, IReadOnlyList<TrailSegment> segments)
+    private static void AddTrail(
+        List<IFeature> features,
+        IReadOnlyList<TrailSegment> segments,
+        bool recorded)
     {
         if (segments.Count == 0)
         {
@@ -328,12 +349,23 @@ public static class IvaoMapLayers
                 continue;
             }
 
-            features.Add(CreateTrailFeature(coordinates, WorldMap.Parse(AltitudePalette.For(band))));
+            features.Add(CreateTrailFeature(coordinates, TrailColor(band, recorded)));
             coordinates = [ToCoordinate(segment.Start), ToCoordinate(segment.End)];
             band = segment.Band;
         }
 
-        features.Add(CreateTrailFeature(coordinates, WorldMap.Parse(AltitudePalette.For(band))));
+        features.Add(CreateTrailFeature(coordinates, TrailColor(band, recorded)));
+    }
+
+    /// <summary>
+    /// Altitude colour of a band. The estimated trail keeps the band colour of
+    /// the current altitude but is drawn translucent, because there is no
+    /// recorded altitude history behind it.
+    /// </summary>
+    private static Color TrailColor(AltitudeBand band, bool recorded)
+    {
+        var color = WorldMap.Parse(AltitudePalette.For(band));
+        return recorded ? color : WorldMap.WithAlpha(color, EstimatedTrailAlpha);
     }
 
     private static IFeature CreateTrailFeature(IReadOnlyList<Coordinate> coordinates, Color color)

@@ -15,6 +15,13 @@ public sealed class IvaoApiOptions
     /// </summary>
     public string? ApiKey { get; set; }
 
+    /// <summary>
+    /// The IVAO sign-in of the member. When it yields a token the client sends
+    /// it as <c>Authorization: Bearer</c> (the credential WebEye uses for the
+    /// recorded tracks) and leaves the consumer key alone.
+    /// </summary>
+    public IIvaoAccessTokenSource? AccessTokenSource { get; set; }
+
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
 
     public IvaoApiOptions Clone() => new()
@@ -22,6 +29,7 @@ public sealed class IvaoApiOptions
         BaseAddress = BaseAddress,
         Origin = Origin,
         ApiKey = ApiKey,
+        AccessTokenSource = AccessTokenSource,
         Timeout = Timeout
     };
 }
