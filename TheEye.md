@@ -88,9 +88,23 @@ THINGS TO ADD / CORRECTIONS
 
 - Regarding authentication, please check Examples/A330 Speed.PNG in order to know what i'd like to see on the pilot's card. Flags and logos are a long long shot (can this be done?) but the time online, software, simulator in use, speed, altitude, callsign, DEP and ARR airports as well as pilotID and HOME, etc would be interesting. api.ivao.aero/v2/tracker/sessions/<sessionid> shows all required data for this. This is why i mentioned authentication as i THINK this endpoint requires it in order to return data.
 
-- When we click on an aircraft, make the route pass through the aircraft as well (so, departure point, aircraft, arrival point). In webeye, the route is actually traced from the pilot's aircraft data provided when we click on it: api.ivao.aero/v2/tracker/sessions/<sessionid>/tracks.
+- When we click on an aircraft, the route starts on the aircraft and only shows to as far as the aircraft has travelled. In webeye which i am trying to replicate here (webeye.ivao.aero), the route is traced from the pilot's aircraft data provided when we click on it: api.ivao.aero/v2/tracker/sessions/<sessionid>/tracks. Make the route line coloured depending on current aircraft altitude: red (ground), orange (<3000), yellow (<5000), green (<7000), cyan (<15000), blue(<30000), dark blue (< 40000), purple (40000+), thin 1px wide.
 
-- Make the aircraft + route centred on screen when we click on one.
+- Zoom speed is too strong (or has acceleration). We need to tone it down a bit.
+
+- Add more map detail (at least airport runways), so that when we zoom-in, at least the airport can be seen.
+
+- Make these focused fixes to the fallback glyphs (I will test everything visually - Do not test, only implement):
+    a) Add _DEL to the list of facilities that show as a "star", but rotate the shape 45% so it is distinguishable from the existing _GND facility.
+    b) These glyphs must zoom-in with the map like other _CTR facilities already do.
+    c) The _TWR circle must be much wider, drawn in a similar fashion to the _CTR facilities. Red shade.
+    d) The _DEP, _APP circles must be in a blue shade and slightly wider than the _TWR circles.
+    e) The contour of _DEP _ARR _TWR and _GND facilities should be only 1px wide and 0% transparent using the same colour of the facility, in a similar fashion to the _CTR ones.
+    f) The _DEL, _GND, _TWR, _DEP and _ARR facilities must all be centred in the airport coordinates, overlapping. Clicking on them will cycle the selected facility. The _DEL and _GND facilities are the smallest items, then the _TWR a circle whose diameter covers the previous facilities and finally _DEP and _ARR have an even larger diameter to cover the _TWR facility a bit more. Use variables for these diameters and let me know where they are so i can adjust manually.
+    g) After these implementations i will look at the result and let you know if further fixes are required.
+
+    Do ask questions if you have any
+
 
 ## PUBLISH
 ==========

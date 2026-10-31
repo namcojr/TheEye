@@ -114,6 +114,17 @@
                         <CheckBox Content="Show pilots" IsChecked="{Binding Draft.ShowPilots}" Margin="0,0,0,9" />
                         <CheckBox Content="Show ATC sectors, labels and stations" IsChecked="{Binding Draft.ShowAtc}" Margin="0,0,0,9" />
                     </StackPanel>
+
+                    <Border Style="{StaticResource Divider}" Margin="0,10,0,0" />
+
+                    <TextBlock Text="MAP BEHAVIOUR" Style="{StaticResource SectionTitle}" Margin="0,18,0,0" />
+                    <StackPanel Margin="0,9,0,0">
+                        <CheckBox IsChecked="{Binding Draft.CenterOnMapClick}"
+                                  Content="Centre the map when I click an aircraft or station on it"
+                                  AutomationProperties.Name="Centre the map on map clicks" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,7,0,0" TextWrapping="Wrap"
+                               Text="Only affects clicks on the map itself. Picking a row in the traffic list always centres that aircraft or controller, whatever this is set to." />
                 </StackPanel>
             </ScrollViewer>
 

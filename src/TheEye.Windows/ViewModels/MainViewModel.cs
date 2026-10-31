@@ -24,6 +24,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private IvaoApiClient? _api;
     private TrackerService? _tracker;
+    private SessionTrackStore? _tracks;
     private IvaoConnectionCounts _stats = new();
     private bool _syncingSelection;
     private bool _started;
@@ -126,6 +127,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public bool HasSelection => SelectedPilot is not null || SelectedAtc is not null;
+
+    /// <summary>
+    /// Selection that came from a click on an aircraft marker. The centring
+    /// follows the user's "centre the map when I click an aircraft or station"
+    /// option, while <see cref="SelectedPilot"/> / <see cref="SelectedAtc"/> — the
+    /// two the traffic lists bind to — always frame their selection, so an
+    /// aircraft or a controller can be found from the list whatever the option
+    /// says. Station badges and sectors are picked by the map itself, which
+    /// honours the same option in <see cref="MapViewModel.SelectAt"/>.
+    /// </summary>
+    public void SelectPilotFromMap(PilotItem pilot) => Map.SelectPilot(pilot, Map.CenterOnMapClick);
 
     public bool ShowPilots
     {
@@ -283,6 +295,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         Map.ShowPilots = _settings.ShowPilots;
         Map.ShowAtc = _settings.ShowAtc;
+        Map.CenterOnMapClick = _settings.CenterOnMapClick;
     }
 
     public async Task StartAsync()
@@ -346,6 +359,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         Map.ShowPilots = _settings.ShowPilots;
         Map.ShowAtc = _settings.ShowAtc;
+        Map.CenterOnMapClick = _settings.CenterOnMapClick;
         OnPropertyChanged(nameof(ShowPilots));
         OnPropertyChanged(nameof(ShowAtc));
         OnPropertyChanged(nameof(HasApiKey));
@@ -412,6 +426,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _tracker.SnapshotUpdated += OnSnapshotUpdated;
         _tracker.RefreshFailed += OnRefreshFailed;
         _tracker.Start();
+
+        // The recorded track of the selected flight or station is fetched on
+        // demand, because only one of them is ever on screen.
+        _tracks = new SessionTrackStore(_api);
         _refreshCommand.RaiseCanExecuteChanged();
     }
 
@@ -429,6 +447,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         Map.UpdateTraffic(snapshot);
+
+        // The trail ends on the live position, so it follows every refresh.
+        _ = RefreshSelectionTracksAsync();
 
         _stats = snapshot.Stats.Now ?? new IvaoConnectionCounts();
         PilotCount = snapshot.PilotCount;
@@ -484,6 +505,37 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             _syncingSelection = false;
         }
+
+        _ = RefreshSelectionTracksAsync();
+    }
+
+    /// <summary>
+    /// Loads the recorded track of the selected flight or station so the map can
+    /// trace the path it has actually flown. The map keeps showing the flown part
+    /// of the route until the track arrives, and a response for a selection the
+    /// user has already left is dropped.
+    /// </summary>
+    private async Task RefreshSelectionTracksAsync()
+    {
+        if (_tracks is not { } tracks)
+        {
+            return;
+        }
+
+        var sessionId = Map.SelectedPilot?.Id ?? Map.SelectedAtc?.Id;
+        if (sessionId is not { } id)
+        {
+            return;
+        }
+
+        var track = await tracks.GetTracksAsync(id);
+
+        if (Map.SelectedPilot?.Id != id && Map.SelectedAtc?.Id != id)
+        {
+            return;
+        }
+
+        Map.SetSelectionTracks(track);
     }
 
     private void RaiseSelectionDependentChanges()

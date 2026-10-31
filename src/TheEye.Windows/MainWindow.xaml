@@ -7,6 +7,7 @@
         Width="1440" Height="900"
         MinWidth="1120" MinHeight="680"
         WindowStyle="None"
+        WindowState="Maximized"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBackgroundBrush}"
@@ -425,7 +426,8 @@
                 </Border>
 
                 <!-- Offline world map with the WPF pilot marker overlay -->
-                <Grid Grid.Column="1" Background="{DynamicResource MapWaterBrush}" ClipToBounds="True">
+                <Grid Grid.Column="1" Background="{DynamicResource MapWaterBrush}" ClipToBounds="True"
+                      PreviewMouseWheel="OnMapWheel">
                     <mapsui:MapControl x:Name="MapControl" Map="{Binding Map.Map}" MapTapped="OnMapTapped" />
 
                     <ItemsControl ItemsSource="{Binding Map.Pilots}"

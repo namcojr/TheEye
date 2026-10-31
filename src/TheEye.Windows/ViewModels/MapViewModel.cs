@@ -19,6 +19,15 @@ namespace TheEye.Windows.ViewModels;
 /// </summary>
 public sealed class MapViewModel : ObservableObject, IDisposable
 {
+    /// <summary>Width of the world in EPSG:3857 metres, used to detect routes that wrap the antimeridian.</summary>
+    private const double WorldWidth = 40075016.68;
+
+    /// <summary>
+    /// Smallest area framed around a selected flight, so a short hop does not
+    /// zoom all the way down to a single apron.
+    /// </summary>
+    private const double MinimumFrameSize = 40000;
+
     private readonly AircraftIconCache _icons = new();
     private readonly Dictionary<long, PilotItem> _pilotsById = [];
     private readonly Dictionary<long, AtcItem> _atcById = [];
@@ -36,6 +45,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private bool _showPilots = true;
     private bool _showAtc = true;
     private IReadOnlyList<IvaoAtc> _atc = [];
+    private IReadOnlyList<IvaoPilotTrack> _selectionTracks = [];
+    private IReadOnlyList<IvaoMapLayers.AtcStationPlacement> _stationPlacements = [];
+    private readonly List<AtcStationHitTarget> _stationTargets = [];
     private double _stationZoom = 1;
     private bool _disposed;
 
@@ -83,6 +95,14 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
     public Visibility PilotsVisibility => ShowPilots ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>
+    /// When true, picking something on the map — an aircraft marker, a station
+    /// badge or a sector — also frames it. The traffic lists pass
+    /// <c>center: true</c> explicitly, so finding an aircraft or a controller
+    /// from the list keeps working even when this is switched off.
+    /// </summary>
+    public bool CenterOnMapClick { get; set; } = true;
+
     /// <summary>Sectors, sector labels and station badges share a single switch.</summary>
     public bool ShowAtc
     {
@@ -106,7 +126,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
         _atcRegionsLayer = IvaoMapLayers.CreateAtcRegions([], palette);
         _atcLabelsLayer = IvaoMapLayers.CreateAtcLabels([], palette);
-        _atcStationsLayer = IvaoMapLayers.CreateAtcStations([], palette, _stationZoom);
+        _atcStationsLayer = CreateStationLayer([]);
         _routeLayer = new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };
         _selectedAtcLayer = IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), palette);
 
@@ -122,6 +142,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
         map.Navigator.ViewportChanged += OnViewportChanged;
         Map = map;
+        UpdateStationTargets();
         map.Refresh();
     }
 
@@ -136,13 +157,15 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         WorldMap.ApplyTheme(map, palette);
         ReplaceLayer(ref _atcRegionsLayer, IvaoMapLayers.CreateAtcRegions(Atc.Select(item => item.Atc), palette));
         ReplaceLayer(ref _atcLabelsLayer, IvaoMapLayers.CreateAtcLabels(Atc.Select(item => item.Atc), palette));
-        ReplaceLayer(ref _atcStationsLayer, IvaoMapLayers.CreateAtcStations(Atc.Select(item => item.Atc), palette, _stationZoom));
+        ReplaceLayer(ref _atcStationsLayer, CreateStationLayer(Atc.Select(item => item.Atc)));
         ReplaceLayer(ref _selectedAtcLayer, SelectedAtc is { } selected
             ? IvaoMapLayers.CreateSelectedAtc(selected.Atc, palette)
             : IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), palette));
         ReplaceLayer(ref _routeLayer, SelectedPilot is { } pilot
-            ? IvaoMapLayers.CreateRoute(pilot.Pilot, palette)
+            ? IvaoMapLayers.CreateRoute(pilot.Pilot, palette, _selectionTracks)
             : new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null });
+
+        RebuildRouteLayer();
 
         SetLayerEnabled(_atcRegionsLayer, _showAtc);
         SetLayerEnabled(_atcLabelsLayer, _showAtc);
@@ -164,7 +187,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         _atc = atc;
         ReplaceLayer(ref _atcRegionsLayer, IvaoMapLayers.CreateAtcRegions(atc, _palette));
         ReplaceLayer(ref _atcLabelsLayer, IvaoMapLayers.CreateAtcLabels(atc, _palette));
-        ReplaceLayer(ref _atcStationsLayer, IvaoMapLayers.CreateAtcStations(atc, _palette, _stationZoom));
+        ReplaceLayer(ref _atcStationsLayer, CreateStationLayer(atc));
         SetLayerEnabled(_atcRegionsLayer, _showAtc);
         SetLayerEnabled(_atcLabelsLayer, _showAtc);
         SetLayerEnabled(_atcStationsLayer, _showAtc);
@@ -174,7 +197,15 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         Map.Refresh();
     }
 
-    public void SelectPilot(PilotItem? pilot)
+    public void SelectPilot(PilotItem? pilot) => SelectPilot(pilot, center: true);
+
+    /// <summary>
+    /// Selects an aircraft and, when <paramref name="center"/> is true, frames
+    /// it together with its route. Map clicks pass the user's choice so the
+    /// selectable markers can stay put, while the traffic list always frames
+    /// the flight it just picked.
+    /// </summary>
+    public void SelectPilot(PilotItem? pilot, bool center)
     {
         if (ReferenceEquals(SelectedPilot, pilot))
         {
@@ -194,22 +225,33 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         SelectedPilot = pilot;
+        _selectionTracks = [];
         if (pilot is not null)
         {
             pilot.IsSelected = true;
-            ReplaceLayer(ref _routeLayer, _palette is null
-                ? new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null }
-                : IvaoMapLayers.CreateRoute(pilot.Pilot, _palette));
         }
-        else
+
+        RebuildRouteLayer();
+
+        if (pilot is not null && center)
         {
-            ReplaceLayer(ref _routeLayer, new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null });
+            // A row picked in the traffic list must also bring the aircraft and
+            // its route into view; a click on the marker only does so when the
+            // user kept map-click centring enabled.
+            CenterOnPilot(pilot);
         }
 
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void SelectAtc(AtcItem? atc)
+    public void SelectAtc(AtcItem? atc) => SelectAtc(atc, center: true);
+
+    /// <summary>
+    /// Selects a station and, when <paramref name="center"/> is true, brings it
+    /// into view. See <see cref="SelectPilot(PilotItem?, bool)"/> for why the
+    /// caller decides.
+    /// </summary>
+    public void SelectAtc(AtcItem? atc, bool center)
     {
         if (ReferenceEquals(SelectedAtc, atc))
         {
@@ -220,7 +262,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         {
             previousPilot.IsSelected = false;
             SelectedPilot = null;
-            ReplaceLayer(ref _routeLayer, new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null });
+            _selectionTracks = [];
         }
 
         if (SelectedAtc is { } previous)
@@ -233,12 +275,20 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         {
             atc.IsSelected = true;
             ReplaceLayer(ref _selectedAtcLayer, IvaoMapLayers.CreateSelectedAtc(atc.Atc, _palette ?? DefaultPalette));
+
+            // Selecting a station in the ATC list centres it too; a click on the
+            // map only centres while the option is enabled.
+            if (center)
+            {
+                CenterOnAtc(atc);
+            }
         }
         else
         {
             ReplaceLayer(ref _selectedAtcLayer, IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), _palette ?? DefaultPalette));
         }
 
+        RebuildRouteLayer();
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -251,19 +301,49 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Picks the pilot or ATC sector under a click on the map.</summary>
+    /// <summary>
+    /// Hands the recorded track of the current selection to the map. The route
+    /// layer is redrawn straight away and again on every snapshot or theme
+    /// change, so a slow request never leaves the map without a route: until the
+    /// track arrives the flight shows the part of its route it has already flown.
+    /// </summary>
+    public void SetSelectionTracks(IReadOnlyList<IvaoPilotTrack>? tracks)
+    {
+        _selectionTracks = tracks ?? [];
+        if (SelectedPilot is null && SelectedAtc is null)
+        {
+            return;
+        }
+
+        RebuildRouteLayer();
+        Map?.Refresh();
+    }
+
+    /// <summary>
+    /// Picks the pilot, station badge or ATC sector under a click on the map.
+    /// Centring follows <see cref="CenterOnMapClick"/> because the map is where
+    /// the user is already looking.
+    /// </summary>
     public void SelectAt(MPoint worldPosition, ScreenPosition screenPosition)
     {
         if (HitTestPilot(screenPosition) is { } pilot)
         {
-            SelectPilot(pilot);
+            SelectPilot(pilot, CenterOnMapClick);
+            return;
+        }
+
+        // Tower, ground and delivery badges are drawn inside the much larger
+        // control sector around their airport, so the glyphs win over the polygon.
+        if (HitTestStation(screenPosition) is { } station)
+        {
+            SelectAtc(station, CenterOnMapClick);
             return;
         }
 
         var atc = _regionIndex?.FindAt(worldPosition);
         if (atc is not null && _atcById.TryGetValue(atc.Id, out var item))
         {
-            SelectAtc(item);
+            SelectAtc(item, CenterOnMapClick);
             return;
         }
 
@@ -272,6 +352,13 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
     public PilotItem? HitTestPilot(ScreenPosition position)
     {
+        // Hidden markers must not swallow clicks, otherwise a parked aircraft
+        // sitting on an airport blocks the tower and ground badges under it.
+        if (!_showPilots)
+        {
+            return null;
+        }
+
         PilotItem? best = null;
         var bestDistanceSquared = 22d * 22d;
 
@@ -295,16 +382,74 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         return best;
     }
 
+    /// <summary>Returns the station badge drawn under a screen position, if any.</summary>
+    public AtcItem? HitTestStation(ScreenPosition position)
+    {
+        if (!_showAtc
+            || AtcStationHitTest.Find(_stationTargets, position.X, position.Y) is not { } station)
+        {
+            return null;
+        }
+
+        return _atcById.TryGetValue(station.Id, out var item) ? item : null;
+    }
+
+    /// <summary>
+    /// Brings a flight into view: the aircraft plus the great-circle route drawn
+    /// between its departure and arrival airports are framed together.
+    /// </summary>
     public void CenterOnPilot(PilotItem pilot)
     {
-        if (Map is null || pilot.Pilot.LastTrack?.Position is not { } position)
+        if (Map is not { } map || pilot.Pilot.LastTrack?.Position is not { } position)
         {
             return;
         }
 
-        Map.Navigator.CenterOn(WorldMap.Project(position), 250);
+        var aircraft = WorldMap.Project(position);
+        var flightPlan = pilot.Pilot.FlightPlan;
+        var departure = flightPlan?.Departure?.Position;
+        var arrival = flightPlan?.Arrival?.Position;
+
+        if (departure is not { } startCoordinate || arrival is not { } endCoordinate)
+        {
+            map.Navigator.CenterOn(aircraft, 250);
+            return;
+        }
+
+        // ZoomToBox divides by the viewport size, so it needs a laid out map.
+        if (map.Navigator.Viewport is not { Width: > 0, Height: > 0 })
+        {
+            return;
+        }
+
+        var start = WorldMap.Project(startCoordinate);
+        var end = WorldMap.Project(endCoordinate);
+        var minX = Math.Min(aircraft.X, Math.Min(start.X, end.X));
+        var maxX = Math.Max(aircraft.X, Math.Max(start.X, end.X));
+        var minY = Math.Min(aircraft.Y, Math.Min(start.Y, end.Y));
+        var maxY = Math.Max(aircraft.Y, Math.Max(start.Y, end.Y));
+
+        // A route that crosses the antimeridian is drawn as two separate lines,
+        // so its projected box would cover the whole world. Centring the aircraft
+        // is far more useful than zooming out to a meaningless world view.
+        if (maxX - minX > WorldWidth / 2)
+        {
+            map.Navigator.CenterOn(aircraft, 250);
+            return;
+        }
+
+        // Keep a little breathing room so the aircraft and both airports never
+        // end up glued to the edge of the map.
+        var paddingX = Math.Max((maxX - minX) * 0.1, MinimumFrameSize / 2);
+        var paddingY = Math.Max((maxY - minY) * 0.1, MinimumFrameSize / 2);
+
+        map.Navigator.ZoomToBox(
+            new MRect(minX - paddingX, minY - paddingY, maxX + paddingX, maxY + paddingY),
+            MBoxFit.Fit,
+            350);
     }
 
+    /// <summary>Brings an ATC position into view without zooming out from a closer view.</summary>
     public void CenterOnAtc(AtcItem atc)
     {
         if (Map is null || atc.Atc.Position is not { } position)
@@ -450,7 +595,49 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private void OnViewportChanged(object? sender, ViewportChangedEventArgs e)
     {
         UpdatePilotPositions();
+        UpdateStationTargets();
         UpdateStationZoom();
+    }
+
+    /// <summary>
+    /// Builds the station layer and keeps the placements used for hit testing in
+    /// sync with the badges that are actually drawn.
+    /// </summary>
+    private MemoryLayer CreateStationLayer(IEnumerable<IvaoAtc> atc)
+    {
+        _stationPlacements = IvaoMapLayers.CreateAtcStationPlacements(atc, _stationZoom);
+        UpdateStationTargets();
+        return IvaoMapLayers.CreateAtcStations(_stationPlacements, _palette ?? DefaultPalette, _stationZoom);
+    }
+
+    /// <summary>
+    /// Projects every badge onto the current viewport so a click can find it
+    /// where it is drawn, including the cluster fan-out offsets.
+    /// </summary>
+    private void UpdateStationTargets()
+    {
+        _stationTargets.Clear();
+        if (Map is not { } map)
+        {
+            return;
+        }
+
+        var viewport = map.Navigator.Viewport;
+        if (viewport.Width <= 0 || viewport.Height <= 0)
+        {
+            return;
+        }
+
+        foreach (var placement in _stationPlacements)
+        {
+            var screen = viewport.WorldToScreen(placement.Point);
+            _stationTargets.Add(new AtcStationHitTarget(
+                placement.Station,
+                screen.X + placement.OffsetX,
+                screen.Y + placement.OffsetY,
+                AtcMarkerStyles.HitRadius(placement.Marker),
+                AtcMarkerStyles.SortOrder(placement.Station.Facility, placement.Station.Callsign)));
+        }
     }
 
     /// <summary>
@@ -473,9 +660,25 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         _stationZoom = zoom;
-        ReplaceLayer(ref _atcStationsLayer, IvaoMapLayers.CreateAtcStations(_atc, _palette, _stationZoom));
+        ReplaceLayer(ref _atcStationsLayer, CreateStationLayer(_atc));
         SetLayerEnabled(_atcStationsLayer, _showAtc);
         map.Refresh();
+    }
+
+    /// <summary>
+    /// Paints the route of whatever is selected: the flown trail of an aircraft,
+    /// the recorded track of a station, or an empty layer when nothing is
+    /// selected.
+    /// </summary>
+    private void RebuildRouteLayer()
+    {
+        ILayer layer = SelectedPilot is { } pilot
+            ? IvaoMapLayers.CreateRoute(pilot.Pilot, _palette ?? DefaultPalette, _selectionTracks)
+            : SelectedAtc is { } atc
+                ? IvaoMapLayers.CreateAtcRoute(atc.Atc, _selectionTracks)
+                : new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };
+
+        ReplaceLayer(ref _routeLayer, layer);
     }
 
     private void ReplaceLayer(ref ILayer? field, ILayer replacement)

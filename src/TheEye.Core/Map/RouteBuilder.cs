@@ -75,6 +75,17 @@ public static class RouteBuilder
         int maxSegments = 128)
     {
         var points = Build(start, end, maxSegments);
+        return points.Count < 2 ? [] : SplitAtAntimeridian(points);
+    }
+
+    /// <summary>
+    /// Splits an already built point list wherever two consecutive points sit on
+    /// opposite sides of the 180 degree meridian. Each half is closed against
+    /// the meridian so the resulting lines stay on one side of the map.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<GeoCoordinate>> SplitAtAntimeridian(
+        IReadOnlyList<GeoCoordinate> points)
+    {
         if (points.Count < 2)
         {
             return [];
@@ -112,6 +123,69 @@ public static class RouteBuilder
         }
 
         return lines;
+    }
+
+    /// <summary>
+    /// Keeps the part of a route up to <paramref name="fraction"/> of its
+    /// length, interpolating the point that ends the trimmed route. Used to show
+    /// only the distance an aircraft has already covered.
+    /// </summary>
+    public static IReadOnlyList<GeoCoordinate> TrimToFraction(
+        IReadOnlyList<GeoCoordinate> points,
+        double fraction)
+    {
+        if (points.Count < 2 || double.IsNaN(fraction))
+        {
+            return points;
+        }
+
+        if (fraction >= 1)
+        {
+            return points;
+        }
+
+        if (fraction <= 0)
+        {
+            return [points[0]];
+        }
+
+        var exact = fraction * (points.Count - 1);
+        var index = (int)Math.Floor(exact);
+        if (index >= points.Count - 1)
+        {
+            return points;
+        }
+
+        var trimmed = new List<GeoCoordinate>(index + 2);
+        for (var i = 0; i <= index; i++)
+        {
+            trimmed.Add(points[i]);
+        }
+
+        var remainder = exact - index;
+        if (remainder > 0)
+        {
+            var start = points[index];
+            var end = points[index + 1];
+
+            // Longitudes may jump across the antimeridian; take the short way
+            // round before interpolating and normalise the result again.
+            var deltaLongitude = end.Longitude - start.Longitude;
+            if (deltaLongitude > 180)
+            {
+                deltaLongitude -= 360;
+            }
+            else if (deltaLongitude < -180)
+            {
+                deltaLongitude += 360;
+            }
+
+            trimmed.Add(new GeoCoordinate(
+                start.Latitude + ((end.Latitude - start.Latitude) * remainder),
+                NormalizeLongitude(start.Longitude + (deltaLongitude * remainder))));
+        }
+
+        return trimmed;
     }
 
     public static double DistanceNm(GeoCoordinate start, GeoCoordinate end)

@@ -340,6 +340,67 @@ public sealed class AtcMarkerStylesTests
         Assert.True(label.Font.Size > 9);
     }
 
+    [Fact]
+    public void HitRadius_GrowsWithTheZoomButStaysClickable()
+    {
+        var tower = AtcMarkerStyles.For("TWR", "EDDB_TWR");
+        var zoomed = AtcMarkerStyles.For("TWR", "EDDB_TWR", AtcMarkerStyles.MaxZoomScale);
+        var ground = AtcMarkerStyles.For("GND", "EDDB_GND", AtcMarkerStyles.MinZoomScale);
+
+        Assert.Equal((16 * tower.Scale) + 4, AtcMarkerStyles.HitRadius(tower), 6);
+        Assert.True(AtcMarkerStyles.HitRadius(zoomed) > AtcMarkerStyles.HitRadius(tower));
+        Assert.True(AtcMarkerStyles.HitRadius(ground) >= 10);
+    }
+
+    [Fact]
+    public void CreateAtcStationPlacements_MatchesTheDrawnBadges()
+    {
+        var stations = new[]
+        {
+            CreateAirportAtc("EDDB_GND", "GND"),
+            CreateAirportAtc("EDDB_TWR", "TWR"),
+            CreateAirportAtc("EDDB_APP", "APP")
+        };
+
+        var placements = IvaoMapLayers.CreateAtcStationPlacements(stations, zoom: 2);
+
+        Assert.Equal(3, placements.Count);
+        Assert.Equal(3, placements.Select(placement => (placement.OffsetX, placement.OffsetY)).Distinct().Count());
+        Assert.All(
+            placements,
+            placement => Assert.Equal(
+                AtcMarkerStyles.For(placement.Station.Facility, placement.Station.Callsign, 2).Scale,
+                placement.Marker.Scale,
+                6));
+        Assert.Single(placements.Select(placement => placement.Point).Distinct());
+
+        var layer = IvaoMapLayers.CreateAtcStations(placements, Palette, zoom: 2);
+
+        Assert.Equal(placements.Count, layer.Features.Count());
+    }
+
+    [Fact]
+    public void CreateAtcStationPlacements_LeavesSectorStationsToTheRegionLayer()
+    {
+        // A center that also publishes an airport position keeps its polygon as
+        // the click target, so it must not get a badge on top of the airport.
+        var center = CreateAirportAtc("EDWW_CTR", "CTR");
+        center.AtcPosition!.RegionMapPolygon =
+        [
+            new IvaoCoordinate(52, 13),
+            new IvaoCoordinate(52, 14),
+            new IvaoCoordinate(53, 14),
+            new IvaoCoordinate(53, 13)
+        ];
+
+        var placements = IvaoMapLayers.CreateAtcStationPlacements([center, CreateAirportAtc("EDDB_TWR", "TWR")]);
+
+        var placement = Assert.Single(placements);
+        Assert.Equal("EDDB_TWR", placement.Station.Callsign);
+        Assert.Equal(0, placement.OffsetX, 6);
+        Assert.Equal(0, placement.OffsetY, 6);
+    }
+
     private static IvaoAtc CreateAirportAtc(string callsign, string facility) =>
         new()
         {

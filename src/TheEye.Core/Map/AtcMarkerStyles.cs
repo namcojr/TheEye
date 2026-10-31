@@ -146,6 +146,13 @@ public static class AtcMarkerStyles
         Images.GetOrAdd(marker.SvgSource, source => new Image { Source = SvgSourcePrefix + source });
 
     /// <summary>
+    /// Screen radius that still counts as a click on the badge. The artwork is
+    /// 32 px wide and scaled by <see cref="AtcMarkerStyle.Scale"/>, plus a few
+    /// pixels of slack so the small ground stars stay easy to hit.
+    /// </summary>
+    public static double HitRadius(AtcMarkerStyle marker) => Math.Max(10, (16 * marker.Scale) + 4);
+
+    /// <summary>
     /// Tower, ground and approach positions of one airport share the airport
     /// coordinate, so their glyphs are fanned out around a small circle to keep
     /// every badge visible. A lone station keeps the exact coordinate. The ring

@@ -45,6 +45,16 @@ public sealed class IvaoApiClient : IDisposable
     public Task<IvaoFlightPlan?> GetFlightPlanAsync(long id, CancellationToken cancellationToken = default) =>
         GetObjectAsync<IvaoFlightPlan>($"v2/tracker/now/flight-plans/{id}", "flightPlan", cancellationToken);
 
+    /// <summary>
+    /// Every recorded position of a pilot or ATC session. This is the feed the
+    /// IVAO web map uses to trace the path an aircraft has flown; it requires a
+    /// consumer key, so callers must cope with an unauthorised response.
+    /// </summary>
+    public Task<IReadOnlyList<IvaoPilotTrack>> GetSessionTracksAsync(
+        long sessionId,
+        CancellationToken cancellationToken = default) =>
+        GetListAsync<IvaoPilotTrack>($"v2/tracker/sessions/{sessionId}/tracks", cancellationToken);
+
     public void Dispose()
     {
         if (_ownsHttpClient)

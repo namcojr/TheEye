@@ -388,7 +388,10 @@
         <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
         <Setter Property="FontSize" Value="10.5" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Focusable" Value="False" />
+        <!-- A TabItem selects itself when it receives keyboard focus, so it has to
+             stay focusable: with Focusable="False" the mouse click is swallowed
+             and the tab never becomes the selected one. -->
+        <Setter Property="Focusable" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type TabItem}">

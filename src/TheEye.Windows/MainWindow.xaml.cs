@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using Mapsui;
+using Mapsui.Manipulations;
 using TheEye.Windows.Services;
 using TheEye.Windows.ViewModels;
 
@@ -86,15 +87,50 @@ public partial class MainWindow : Window
 
     private void OnPilotMarkerClick(object sender, RoutedEventArgs e)
     {
-        if (ViewModel is { } viewModel && sender is Button { DataContext: PilotItem pilot })
+        if (ViewModel is not { } viewModel || sender is not Button { DataContext: PilotItem pilot })
         {
-            viewModel.SelectedPilot = pilot;
+            return;
         }
+
+        if (ReferenceEquals(viewModel.SelectedPilot, pilot))
+        {
+            // Clicking the marker that is already selected should still bring the
+            // flight back into view after the map has been panned away, unless the
+            // user switched map-click centring off.
+            if (viewModel.Map is { CenterOnMapClick: true } map)
+            {
+                map.CenterOnPilot(pilot);
+            }
+
+            return;
+        }
+
+        // A marker click selects like the traffic list, but only centres the map
+        // while the option in Settings > Map behaviour is enabled.
+        viewModel.SelectPilotFromMap(pilot);
     }
 
     private void OnMapTapped(object sender, MapEventArgs e)
     {
         ViewModel?.Map.SelectAt(e.WorldPosition, e.ScreenPosition);
+    }
+
+    /// <summary>
+    /// The aircraft marker buttons and the map overlays sit above the Mapsui
+    /// control, so a wheel turned over them never reaches it. Forwarding the
+    /// wheel from the map host keeps zooming while the pointer rests on a
+    /// marker, a station badge or a zoom button.
+    /// </summary>
+    private void OnMapWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (MapControl?.Map is not { } map)
+        {
+            return;
+        }
+
+        var position = e.GetPosition(MapControl);
+        e.Handled = true;
+        map.Navigator.MouseWheelZoom(e.Delta, new ScreenPosition(position.X, position.Y));
     }
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;

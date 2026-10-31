@@ -18,6 +18,7 @@ public sealed class SettingsStoreTests
         Assert.Equal(30, settings.RefreshSeconds);
         Assert.True(settings.ShowPilots);
         Assert.True(settings.ShowAtc);
+        Assert.True(settings.CenterOnMapClick);
         Assert.Equal(45, settings.MapLatitude);
         Assert.Equal(10, settings.MapLongitude);
         Assert.Equal(25000, settings.MapResolution);
@@ -36,6 +37,7 @@ public sealed class SettingsStoreTests
             RefreshSeconds = 120,
             ShowPilots = false,
             ShowAtc = false,
+            CenterOnMapClick = false,
             MapLatitude = 52.31,
             MapLongitude = 4.76,
             MapResolution = 5000
@@ -49,6 +51,7 @@ public sealed class SettingsStoreTests
         Assert.Equal(120, loaded.RefreshSeconds);
         Assert.False(loaded.ShowPilots);
         Assert.False(loaded.ShowAtc);
+        Assert.False(loaded.CenterOnMapClick);
         Assert.Equal(52.31, loaded.MapLatitude);
         Assert.Equal(4.76, loaded.MapLongitude);
         Assert.Equal(5000, loaded.MapResolution);
@@ -56,6 +59,47 @@ public sealed class SettingsStoreTests
         var json = File.ReadAllText(store.FilePath);
         Assert.Contains("\"theme\": \"Forest\"", json);
         Assert.Contains("\"apiKey\": \"test-key\"", json);
+        Assert.Contains("\"centerOnMapClick\": false", json);
+    }
+
+    [Fact]
+    public void ExistingSettingsWithoutMapClickOptionKeepCentringEnabled()
+    {
+        using var temporary = new TemporaryDirectory();
+        var path = temporary.FilePath("settings.json");
+        File.WriteAllText(path, """
+            {
+              "apiKey": "",
+              "theme": "light",
+              "refreshSeconds": 60,
+              "showPilots": true,
+              "showAtc": false,
+              "mapLatitude": 52.31,
+              "mapLongitude": 4.76,
+              "mapResolution": 5000
+            }
+            """);
+        var store = new SettingsStore(path);
+
+        var settings = store.Load();
+
+        Assert.True(settings.CenterOnMapClick);
+    }
+
+    [Fact]
+    public void CloneAndCopyFrom_CarryTheMapClickOption()
+    {
+        var original = new TheEyeSettings { CenterOnMapClick = false };
+
+        var clone = original.Clone();
+        clone.CenterOnMapClick = true;
+
+        Assert.False(original.CenterOnMapClick);
+        Assert.True(clone.CenterOnMapClick);
+
+        original.CopyFrom(clone);
+
+        Assert.True(original.CenterOnMapClick);
     }
 
     [Fact]

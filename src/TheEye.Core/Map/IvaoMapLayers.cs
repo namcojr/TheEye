@@ -15,6 +15,17 @@ public static class IvaoMapLayers
     public const string RouteLayerName = "Route";
     public const string SelectedAtcLayerName = "Selected ATC";
 
+    /// <summary>
+    /// One station badge and where it is drawn: the projected coordinate, the
+    /// cluster fan-out in screen pixels and the glyph itself.
+    /// </summary>
+    public sealed record AtcStationPlacement(
+        IvaoAtc Station,
+        MPoint Point,
+        double OffsetX,
+        double OffsetY,
+        AtcMarkerStyle Marker);
+
     public static MemoryLayer CreateAtcRegions(IEnumerable<IvaoAtc> atc, MapPalette palette)
     {
         var features = new List<IFeature>();
@@ -84,7 +95,62 @@ public static class IvaoMapLayers
         };
     }
 
-    public static MemoryLayer CreateAtcStations(IEnumerable<IvaoAtc> atc, MapPalette palette, double zoom = 1)
+    public static MemoryLayer CreateAtcStations(IEnumerable<IvaoAtc> atc, MapPalette palette, double zoom = 1) =>
+        CreateAtcStations(CreateAtcStationPlacements(atc, zoom), palette, zoom);
+
+    public static MemoryLayer CreateAtcStations(
+        IEnumerable<AtcStationPlacement> placements,
+        MapPalette palette,
+        double zoom = 1)
+    {
+        var features = new List<IFeature>();
+        foreach (var placement in placements)
+        {
+            var offset = (placement.OffsetX, placement.OffsetY);
+            var labelOffset = AtcMarkerStyles.LabelOffset(placement.Marker, offset);
+            var labelAlignment = AtcMarkerStyles.LabelAlignment(labelOffset);
+
+            var feature = new PointFeature(placement.Point);
+            feature["Callsign"] = placement.Station.Callsign;
+            feature["Frequency"] = placement.Station.FrequencyText;
+            feature.Styles.Add(AtcMarkerStyles.CreateImageStyle(placement.Marker, offset));
+            feature.Styles.Add(new LabelStyle
+            {
+                LabelColumn = "Callsign",
+                Font = new Font
+                {
+                    FontFamily = "Segoe UI",
+                    Size = AtcMarkerStyles.LabelFontSize(zoom),
+                    Bold = true
+                },
+                ForeColor = WorldMap.Parse(FacilityPalette.ForFacility(placement.Station.Facility)),
+                BackColor = null,
+                Halo = new Pen(WorldMap.Parse(palette.Land), 2.5),
+                Offset = new Offset(labelOffset.X, labelOffset.Y),
+                HorizontalAlignment = labelAlignment.Horizontal,
+                VerticalAlignment = labelAlignment.Vertical,
+                CollisionDetection = true,
+                MaxVisible = 3200
+            });
+            features.Add(feature);
+        }
+
+        return new MemoryLayer(AtcStationsLayerName)
+        {
+            Features = features,
+            Style = null
+        };
+    }
+
+    /// <summary>
+    /// Works out where every station badge is drawn: the projected coordinate
+    /// plus the screen pixel offset that fans clustered positions apart. The
+    /// station layer and the click handler share these numbers, so a badge is
+    /// always hit exactly where it is rendered.
+    /// </summary>
+    public static IReadOnlyList<AtcStationPlacement> CreateAtcStationPlacements(
+        IEnumerable<IvaoAtc> atc,
+        double zoom = 1)
     {
         // Only positions without a sector polygon need a glyph; sector shapes are
         // drawn (and labelled at the centroid) by the sector layers instead.
@@ -93,7 +159,7 @@ public static class IvaoMapLayers
             .Select(station => new { Station = station, Point = WorldMap.Project(station.Position!.Value) })
             .ToList();
 
-        var features = new List<IFeature>(stations.Count);
+        var placements = new List<AtcStationPlacement>(stations.Count);
         foreach (var cluster in stations.GroupBy(
             station => (X: Math.Round(station.Point.X), Y: Math.Round(station.Point.Y))))
         {
@@ -106,76 +172,74 @@ public static class IvaoMapLayers
             for (var index = 0; index < members.Count; index++)
             {
                 var station = members[index].Station;
-                var marker = AtcMarkerStyles.For(station.Facility, station.Callsign, zoom);
-                var offset = offsets[index];
-                var labelOffset = AtcMarkerStyles.LabelOffset(marker, offset);
-                var labelAlignment = AtcMarkerStyles.LabelAlignment(labelOffset);
-
-                var feature = new PointFeature(members[index].Point);
-                feature["Callsign"] = station.Callsign;
-                feature["Frequency"] = station.FrequencyText;
-                feature.Styles.Add(AtcMarkerStyles.CreateImageStyle(marker, offset));
-                feature.Styles.Add(new LabelStyle
-                {
-                    LabelColumn = "Callsign",
-                    Font = new Font
-                    {
-                        FontFamily = "Segoe UI",
-                        Size = AtcMarkerStyles.LabelFontSize(zoom),
-                        Bold = true
-                    },
-                    ForeColor = WorldMap.Parse(FacilityPalette.ForFacility(station.Facility)),
-                    BackColor = null,
-                    Halo = new Pen(WorldMap.Parse(palette.Land), 2.5),
-                    Offset = new Offset(labelOffset.X, labelOffset.Y),
-                    HorizontalAlignment = labelAlignment.Horizontal,
-                    VerticalAlignment = labelAlignment.Vertical,
-                    CollisionDetection = true,
-                    MaxVisible = 3200
-                });
-                features.Add(feature);
+                placements.Add(new AtcStationPlacement(
+                    station,
+                    members[index].Point,
+                    offsets[index].X,
+                    offsets[index].Y,
+                    AtcMarkerStyles.For(station.Facility, station.Callsign, zoom)));
             }
         }
 
-        return new MemoryLayer(AtcStationsLayerName)
+        return placements;
+    }
+
+    /// <summary>
+    /// Width of the flown trail, in device independent pixels.
+    /// </summary>
+    public const double TrailWidth = 1.0;
+
+    /// <summary>
+    /// Draws the path the aircraft has flown, coloured by the altitude of every
+    /// point, and marks the airports of the flight plan. The trail comes from the
+    /// recorded tracks of the session when <paramref name="tracks"/> is given and
+    /// from the flown part of the filed route otherwise.
+    /// </summary>
+    public static MemoryLayer CreateRoute(
+        IvaoPilot pilot,
+        MapPalette palette,
+        IReadOnlyList<IvaoPilotTrack>? tracks = null)
+    {
+        var features = new List<IFeature>();
+        AddTrail(features, FlightTrail.BuildPilotTrail(pilot, tracks));
+
+        var flightPlan = pilot.FlightPlan;
+        var color = WorldMap.Parse(palette.Accent);
+        if (flightPlan?.Departure?.Position is { } departure)
+        {
+            features.Add(CreateAirportFeature(departure, flightPlan.DepartureIcao, color, palette));
+        }
+
+        if (flightPlan?.Arrival?.Position is { } arrival)
+        {
+            features.Add(CreateAirportFeature(arrival, flightPlan.ArrivalIcao, color, palette));
+        }
+
+        return new MemoryLayer(RouteLayerName)
         {
             Features = features,
             Style = null
         };
     }
 
-    public static MemoryLayer CreateRoute(IvaoPilot pilot, MapPalette palette)
+    /// <summary>
+    /// Traces the recorded track of a station, in the colour of its facility.
+    /// A controller session has no altitude, so the whole line shares one colour.
+    /// </summary>
+    public static MemoryLayer CreateAtcRoute(IvaoAtc atc, IReadOnlyList<IvaoPilotTrack>? tracks = null)
     {
         var features = new List<IFeature>();
-        var flightPlan = pilot.FlightPlan;
-        var departure = flightPlan?.Departure?.Position;
-        var arrival = flightPlan?.Arrival?.Position;
+        var color = WorldMap.Parse(FacilityPalette.ForFacility(atc.Facility));
 
-        if (departure is { } start && arrival is { } end)
+        foreach (var line in FlightTrail.BuildLines(tracks))
         {
-            var color = WorldMap.Parse(palette.Accent);
-            foreach (var line in RouteBuilder.BuildLines(start, end))
+            var coordinates = line.Select(ToCoordinate).ToList();
+            if (coordinates.Count < 2)
             {
-                var coordinates = line
-                    .Select(point => WorldMap.Project(point))
-                    .Select(point => new Coordinate(point.X, point.Y))
-                    .ToArray();
-
-                if (coordinates.Length < 2)
-                {
-                    continue;
-                }
-
-                var feature = new GeometryFeature { Geometry = new LineString(coordinates) };
-                feature.Styles.Add(new VectorStyle
-                {
-                    Line = new Pen(color, 2.2) { PenStyle = PenStyle.Dash }
-                });
-                features.Add(feature);
+                continue;
             }
 
-            features.Add(CreateAirportFeature(start, flightPlan!.DepartureIcao, color, palette));
-            features.Add(CreateAirportFeature(end, flightPlan.ArrivalIcao, color, palette));
+            features.Add(CreateTrailFeature(coordinates, color));
         }
 
         return new MemoryLayer(RouteLayerName)
@@ -234,6 +298,58 @@ public static class IvaoMapLayers
         }
 
         return new Polygon(new LinearRing(coordinates.ToArray()));
+    }
+
+    /// <summary>
+    /// Adds one line per run of segments that share an altitude band. Consecutive
+    /// segments share their endpoints, so a run becomes a single line instead of
+    /// one feature per recorded point.
+    /// </summary>
+    private static void AddTrail(List<IFeature> features, IReadOnlyList<TrailSegment> segments)
+    {
+        if (segments.Count == 0)
+        {
+            return;
+        }
+
+        var coordinates = new List<Coordinate>
+        {
+            ToCoordinate(segments[0].Start),
+            ToCoordinate(segments[0].End)
+        };
+        var band = segments[0].Band;
+
+        for (var index = 1; index < segments.Count; index++)
+        {
+            var segment = segments[index];
+            if (segment.Band == band && segment.Start == segments[index - 1].End)
+            {
+                coordinates.Add(ToCoordinate(segment.End));
+                continue;
+            }
+
+            features.Add(CreateTrailFeature(coordinates, WorldMap.Parse(AltitudePalette.For(band))));
+            coordinates = [ToCoordinate(segment.Start), ToCoordinate(segment.End)];
+            band = segment.Band;
+        }
+
+        features.Add(CreateTrailFeature(coordinates, WorldMap.Parse(AltitudePalette.For(band))));
+    }
+
+    private static IFeature CreateTrailFeature(IReadOnlyList<Coordinate> coordinates, Color color)
+    {
+        var feature = new GeometryFeature { Geometry = new LineString(coordinates.ToArray()) };
+        feature.Styles.Add(new VectorStyle
+        {
+            Line = new Pen(color, TrailWidth)
+        });
+        return feature;
+    }
+
+    private static Coordinate ToCoordinate(GeoCoordinate point)
+    {
+        var projected = WorldMap.Project(point);
+        return new Coordinate(projected.X, projected.Y);
     }
 
     private static PointFeature CreateAirportFeature(GeoCoordinate coordinate, string name, Color color, MapPalette palette)
