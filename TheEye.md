@@ -260,3 +260,30 @@ dotnet publish src\TheEye.Windows\TheEye.Windows.csproj `
   -p:IncludeNativeLibrariesForSelfExtract=true `
   -p:EnableCompressionInSingleFile=true `
   -o dist\TheEye-win-x64-single
+
+## LINUX INSTALL (implemented)
+=============================
+
+`tools/install-linux.sh` publishes the Avalonia shell and installs it into the
+user profile, so the launcher picks it up without touching any system directory:
+
+- `~/.local/opt/the-eye` — `dotnet publish src/TheEye.Desktop -c Release -r linux-x64
+  --self-contained false`. Framework-dependent on purpose: the .NET 10 runtime already
+  sits in `/usr/share/dotnet`, so the payload is ~32 MB instead of ~250 MB. The
+  distro's `/usr/bin/dotnet` is runtime-only, so the script resolves the SDK from
+  `$DOTNET` first, then `~/.dotnet/dotnet`.
+- `~/.local/share/icons/hicolor/<16…512>/apps/the-eye.png` — the 256 px frame of
+  `TheEye.ico`, resized with ImageMagick. `.ico` is a Windows format; the freedesktop
+  icon theme only understands PNG/SVG. `gtk-update-icon-cache` is skipped: the user
+  hicolor tree has no valid cache on this machine and GTK scans the folders when the
+  cache is absent.
+- `~/.local/bin/the-eye` — the wrapper the entry and the terminal share;
+  `THE_EYE_DIR` repoints it at another payload.
+- `~/.local/share/applications/the-eye.desktop` — `Name=The Eye of IVAO`,
+  `Icon=the-eye`, `Categories=Network;`, `StartupWMClass=TheEye.Desktop` (the single
+  WM_CLASS Avalonia sets on X11/XWayland, so taskbars group the window with the entry).
+
+`tools/install-linux.sh --no-build` only rewrites the launcher files; re-run the
+script after UI changes to ship a new build. Settings keep living in
+`~/.config/TheEyeIVAO/settings.json` and crashes in `~/.config/TheEyeIVAO/crash.log`,
+independently of where the payload was installed.
