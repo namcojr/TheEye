@@ -20,6 +20,14 @@ internal static class Program
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            // Avalonia's X11 backend exports a native menu through D-Bus for every
+            // window it creates, transient popups included, and registers it with
+            // com.canonical.AppMenu.Registrar. That service is missing on most
+            // desktops, and the exporter in 11.3.22 forgets the task that unregisters
+            // the window, so the resulting ServiceUnknown failure is rethrown by the
+            // finalizer and reaches TaskScheduler.UnobservedTaskException as a crash.
+            // The windows draw their own menu, so there is nothing to export.
+            .With(new X11PlatformOptions { UseDBusMenu = false })
             .WithInterFont()
             .LogToTrace();
 }
