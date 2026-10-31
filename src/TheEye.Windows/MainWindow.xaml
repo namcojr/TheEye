@@ -44,9 +44,61 @@
                     <StackPanel>
                         <TextBlock Text="{Binding Callsign}" FontSize="22" FontWeight="Bold"
                                    FontFamily="{DynamicResource MonoFontFamily}" />
-                        <TextBlock Text="{Binding Aircraft}" Style="{StaticResource MutedText}" Margin="0,2,0,0" />
+                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                            <TextBlock Text="{Binding Aircraft}" Style="{StaticResource MutedText}" />
+                            <TextBlock Text="·" Style="{StaticResource MutedText}" Margin="6,0" />
+                            <TextBlock Text="VID" Style="{StaticResource MutedText}" Margin="0,0,4,0" />
+                            <TextBlock Text="{Binding PilotId}" Style="{StaticResource MutedText}" />
+                        </StackPanel>
                     </StackPanel>
                 </DockPanel>
+
+                <!-- Identity: who is behind the callsign, once IVAO described the session -->
+                <Border Style="{StaticResource FlatCard}" Margin="0,12,0,0" Padding="11,9"
+                        Visibility="{Binding HasProfile, Converter={StaticResource BoolToVisibility}}">
+                    <DockPanel>
+                        <Image DockPanel.Dock="Left" Source="{Binding RatingBadge}" Height="20"
+                               Margin="0,0,10,0" VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ProfileName}" FontSize="12.5" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" />
+                            <Grid Margin="0,3,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Image Grid.Column="0" Source="{Binding FlagImage}" Height="11"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality" />
+                                <TextBlock Grid.Column="1" Text="{Binding HomeText}"
+                                           Style="{StaticResource MutedText}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                                <Border Grid.Column="2" Style="{StaticResource Pill}" Margin="7,0,0,0"
+                                        Padding="6,1">
+                                    <TextBlock Text="{Binding RatingText}" FontSize="9" FontWeight="Bold" />
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- Why the identity block is missing: the roster feed needs a sign-in or a key -->
+                <Border Style="{StaticResource FlatCard}" Margin="0,12,0,0" Padding="11,8"
+                        Visibility="{Binding ProfileNotice, Converter={StaticResource EmptyStringToVisibility}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                   Foreground="{DynamicResource WarningBrush}" Margin="0,1,7,0"
+                                   VerticalAlignment="Top" />
+                        <TextBlock Grid.Column="1" Text="{Binding ProfileNotice}" FontSize="10.5"
+                                   Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+                    </Grid>
+                </Border>
 
                 <Border Style="{StaticResource Divider}" Margin="0,12,0,12" />
 
@@ -81,6 +133,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,10">
                         <TextBlock Text="ALTITUDE" Style="{StaticResource DetailLabel}" />
@@ -99,22 +152,65 @@
                         <TextBlock Text="{Binding Transponder}" Style="{StaticResource DetailValueMono}" />
                     </StackPanel>
                     <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="TIME ONLINE" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding OnlineText}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="EST. ARRIVAL" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding EtaText}" Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,8,10">
                         <TextBlock Text="FLIGHT RULES" Style="{StaticResource DetailLabel}" />
                         <TextBlock Text="{Binding FlightRules}" Style="{StaticResource DetailValue}" />
                     </StackPanel>
-                    <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,10">
+                    <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,10">
                         <TextBlock Text="FLIGHT TYPE" Style="{StaticResource DetailLabel}" />
                         <TextBlock Text="{Binding FlightType}" Style="{StaticResource DetailValue}" />
                     </StackPanel>
-                    <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,8,0">
+                    <StackPanel Grid.Row="4" Grid.Column="0" Margin="0,0,8,0">
                         <TextBlock Text="CRUISE LEVEL" Style="{StaticResource DetailLabel}" />
                         <TextBlock Text="{Binding CruisingLevel}" Style="{StaticResource DetailValueMono}" />
                     </StackPanel>
-                    <StackPanel Grid.Row="3" Grid.Column="1">
+                    <StackPanel Grid.Row="4" Grid.Column="1">
                         <TextBlock Text="CRUISE SPEED" Style="{StaticResource DetailLabel}" />
                         <TextBlock Text="{Binding CruisingSpeed}" Style="{StaticResource DetailValueMono}" />
                     </StackPanel>
                 </Grid>
+
+                <!-- Connection: the client, simulator and server the member is on -->
+                <Border Style="{StaticResource FlatCard}" Margin="0,12,0,0" Padding="11,9"
+                        Visibility="{Binding HasProfile, Converter={StaticResource BoolToVisibility}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,8" ToolTip="{Binding SoftwareText}">
+                            <TextBlock Text="SOFTWARE" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding SoftwareText}" Style="{StaticResource DetailValue}"
+                                       Margin="0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" ToolTip="{Binding SimulatorText}">
+                            <TextBlock Text="SIMULATOR" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding SimulatorText}" Style="{StaticResource DetailValue}"
+                                       Margin="0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,0" ToolTip="{Binding ServerText}">
+                            <TextBlock Text="SERVER" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding ServerText}" Style="{StaticResource DetailValue}"
+                                       Margin="0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" ToolTip="{Binding ConnectedText}">
+                            <TextBlock Text="CONNECTED" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding ConnectedText}" Style="{StaticResource DetailValue}"
+                                       Margin="0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
 
                 <Border Style="{StaticResource Divider}" Margin="0,12,0,12" />
 
@@ -137,6 +233,81 @@
                     </StackPanel>
                 </Grid>
 
+                <!-- Filed plan: the cruise figures, the times and the equipment and
+                     surveillance codes the tracker summary leaves out, from the
+                     session's own filing -->
+                <Border Style="{StaticResource FlatCard}" Margin="0,12,0,0" Padding="11,9"
+                        Visibility="{Binding HasFlightPlanDetails, Converter={StaticResource BoolToVisibility}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,8">
+                            <TextBlock Text="EET" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding EstimatedEnroute}" Style="{StaticResource DetailValueMono}" Margin="0" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,8">
+                            <TextBlock Text="ENDURANCE" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding Endurance}" Style="{StaticResource DetailValueMono}" Margin="0" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,8">
+                            <TextBlock Text="ALTERNATE" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding Alternate}" Style="{StaticResource DetailValueMono}" Margin="0" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,8"
+                                    Visibility="{Binding HasSecondAlternate, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="SECOND ALTERNATE" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding Alternate2}" Style="{StaticResource DetailValueMono}" Margin="0" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,8">
+                            <TextBlock Text="FILED OFF-BLOCKS" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding FiledDepartureText}" Style="{StaticResource DetailValueMono}" Margin="0" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,8">
+                            <TextBlock Text="ACTUAL OFF-BLOCKS" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding ActualDepartureText}" Style="{StaticResource DetailValueMono}" Margin="0" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,8,8">
+                            <TextBlock Text="PEOPLE ON BOARD" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding PeopleOnBoardText}" Style="{StaticResource DetailValueMono}" Margin="0" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,8" ToolTip="{Binding EquipmentText}">
+                            <TextBlock Text="EQUIPMENT" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding EquipmentText}" Style="{StaticResource DetailValueMono}" Margin="0"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="4" Grid.ColumnSpan="2" ToolTip="{Binding TransponderTypeText}">
+                            <TextBlock Text="TRANSPONDER CAPABILITY" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding TransponderTypeText}" Style="{StaticResource DetailValueMono}" Margin="0"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Why the filed details are missing: the endpoint needs a sign-in or a key -->
+                <Border Style="{StaticResource FlatCard}" Margin="0,12,0,0" Padding="11,8"
+                        Visibility="{Binding HasFlightPlanNotice, Converter={StaticResource BoolToVisibility}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                   Foreground="{DynamicResource WarningBrush}" Margin="0,1,7,0"
+                                   VerticalAlignment="Top" />
+                        <TextBlock Grid.Column="1" Text="{Binding FlightPlanNotice}" FontSize="10.5"
+                                   Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+                    </Grid>
+                </Border>
+
                 <StackPanel Margin="0,12,0,0"
                             Visibility="{Binding Remarks, Converter={StaticResource EmptyStringToVisibility}}">
                     <TextBlock Text="REMARKS" Style="{StaticResource DetailLabel}" />
@@ -157,10 +328,68 @@
                     <StackPanel>
                         <TextBlock Text="{Binding Callsign}" FontSize="22" FontWeight="Bold"
                                    FontFamily="{DynamicResource MonoFontFamily}" />
-                        <TextBlock Text="{Binding FacilityName}" Style="{StaticResource MutedText}"
-                                   Margin="0,2,0,0" />
+                        <Grid Margin="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding StationName}"
+                                       Style="{StaticResource MutedText}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
+                                <TextBlock Text="VID" Style="{StaticResource MutedText}" Margin="0,0,4,0" />
+                                <TextBlock Text="{Binding ControllerId}" Style="{StaticResource MutedText}" />
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
                 </DockPanel>
+
+                <!-- Identity: who is on the frequency, once IVAO described the session -->
+                <Border Style="{StaticResource FlatCard}" Margin="0,12,0,0" Padding="11,9"
+                        Visibility="{Binding HasProfile, Converter={StaticResource BoolToVisibility}}">
+                    <DockPanel>
+                        <Image DockPanel.Dock="Left" Source="{Binding RatingBadge}" Height="20"
+                               Margin="0,0,10,0" VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ProfileName}" FontSize="12.5" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" />
+                            <Grid Margin="0,3,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Image Grid.Column="0" Source="{Binding FlagImage}" Height="11"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality" />
+                                <TextBlock Grid.Column="1" Text="{Binding HomeText}"
+                                           Style="{StaticResource MutedText}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                                <Border Grid.Column="2" Style="{StaticResource Pill}" Margin="7,0,0,0"
+                                        Padding="6,1" ToolTip="{Binding RatingName}">
+                                    <TextBlock Text="{Binding RatingText}" FontSize="9" FontWeight="Bold" />
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- Why the identity block is missing: the roster feed needs a sign-in or a key -->
+                <Border Style="{StaticResource FlatCard}" Margin="0,12,0,0" Padding="11,8"
+                        Visibility="{Binding ProfileNotice, Converter={StaticResource EmptyStringToVisibility}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                   Foreground="{DynamicResource WarningBrush}" Margin="0,1,7,0"
+                                   VerticalAlignment="Top" />
+                        <TextBlock Grid.Column="1" Text="{Binding ProfileNotice}" FontSize="10.5"
+                                   Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+                    </Grid>
+                </Border>
 
                 <Border Style="{StaticResource Divider}" Margin="0,12,0,12" />
 
@@ -190,13 +419,17 @@
                         <TextBlock Text="SECTOR POINTS" Style="{StaticResource DetailLabel}" />
                         <TextBlock Text="{Binding SectorPoints}" Style="{StaticResource DetailValueMono}" />
                     </StackPanel>
-                    <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,0">
+                    <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,0"
+                                Visibility="{Binding HasAirport, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="CITY" Style="{StaticResource DetailLabel}" />
-                        <TextBlock Text="{Binding City}" Style="{StaticResource DetailValue}" />
+                        <TextBlock Text="{Binding City}" Style="{StaticResource DetailValue}"
+                                   TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <StackPanel Grid.Row="2" Grid.Column="1">
+                    <StackPanel Grid.Row="2" Grid.Column="1"
+                                Visibility="{Binding HasAirport, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="COUNTRY" Style="{StaticResource DetailLabel}" />
-                        <TextBlock Text="{Binding Country}" Style="{StaticResource DetailValue}" />
+                        <TextBlock Text="{Binding CountryName}" Style="{StaticResource DetailValue}"
+                                   TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                 </Grid>
 
@@ -205,8 +438,41 @@
                 <TextBlock Text="STATION POSITION" Style="{StaticResource DetailLabel}" />
                 <TextBlock Text="{Binding PositionText}" Style="{StaticResource DetailValueMono}" Margin="0,3,0,0" />
                 <TextBlock Text="{Binding AirportName}" Style="{StaticResource MutedText}" Margin="0,8,0,0"
-                           TextWrapping="Wrap" />
-                <TextBlock Text="{Binding ConnectionType}" Style="{StaticResource MutedText}" Margin="0,2,0,0" />
+                           TextWrapping="Wrap"
+                           Visibility="{Binding HasAirport, Converter={StaticResource BoolToVisibility}}" />
+
+                <!-- Connection: the client and server the controller is on -->
+                <Border Style="{StaticResource FlatCard}" Margin="0,12,0,0" Padding="11,9"
+                        Visibility="{Binding HasProfile, Converter={StaticResource BoolToVisibility}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,8" ToolTip="{Binding SoftwareText}">
+                            <TextBlock Text="SOFTWARE" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding SoftwareText}" Style="{StaticResource DetailValue}"
+                                       Margin="0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" ToolTip="{Binding ServerText}">
+                            <TextBlock Text="SERVER" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding ServerText}" Style="{StaticResource DetailValue}"
+                                       Margin="0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="TIME ONLINE" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding OnlineText}" Style="{StaticResource DetailValue}" Margin="0" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" ToolTip="{Binding ConnectedText}">
+                            <TextBlock Text="CONNECTED" Style="{StaticResource DetailLabel}" />
+                            <TextBlock Text="{Binding ConnectedText}" Style="{StaticResource DetailValue}" Margin="0" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
             </StackPanel>
         </DataTemplate>
     </Window.Resources>

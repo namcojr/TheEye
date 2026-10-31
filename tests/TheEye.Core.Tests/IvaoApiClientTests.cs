@@ -7,6 +7,30 @@ public sealed class IvaoApiClientTests
 {
     private const string TracksPath = "/v2/tracker/sessions/4242/tracks";
 
+    private const string SessionPath = "/v2/tracker/sessions/4242";
+
+    // The session record is a single object, either bare or wrapped in "session";
+    // its members are what the pilot card shows next to the tracker summary.
+    private const string SessionObject = """
+        {
+          "id": 4242,
+          "callsign": "TAP123",
+          "userId": 123456,
+          "connectionType": "PILOT",
+          "time": 3720,
+          "softwareTypeId": "ALTITUDE",
+          "softwareVersion": "0.4.1",
+          "createdAt": "2026-10-31T10:00:00Z",
+          "user": {
+            "id": 123456,
+            "firstName": "Ana",
+            "lastName": "Silva",
+            "divisionId": "PT",
+            "rating": { "pilotRating": { "id": 3, "name": "Senior Flight Student", "shortName": "FS3" } }
+          }
+        }
+        """;
+
     // The tracks feed is a list of positions, newest shape shown first: the
     // reported altitude is the one a trail segment is coloured by.
     private const string TrackArray = """
@@ -213,6 +237,77 @@ public sealed class IvaoApiClientTests
         Assert.Equal(["", "", "consumer-key"], handler.ApiKeys.ToArray());
     }
 
+    [Fact]
+    public async Task GetSessionAsync_ReadsABareSessionObject()
+    {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json(SessionObject)));
+        using var api = CreateApi(httpClient);
+
+        var session = await api.GetSessionAsync(4242);
+
+        Assert.NotNull(session);
+        Assert.Equal("TAP123", session.Callsign);
+        Assert.Equal(123456, session.UserId);
+        Assert.Equal("Ana Silva", session.User?.FullName);
+        Assert.Equal("Portugal", session.User?.DivisionName);
+        Assert.Equal("FS3", session.User?.PilotRatingText);
+        Assert.Equal("ALTITUDE 0.4.1", session.SoftwareText);
+        Assert.Equal(new DateTimeOffset(2026, 10, 31, 10, 0, 0, TimeSpan.Zero), session.CreatedAt);
+    }
+
+    [Fact]
+    public async Task GetSessionAsync_ReadsASessionWrappedInANamedProperty()
+    {
+        var wrapped = $$"""{"session":{{SessionObject}}}""";
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json(wrapped)));
+        using var api = CreateApi(httpClient);
+
+        var session = await api.GetSessionAsync(4242);
+
+        Assert.Equal(4242, session?.Id);
+        Assert.Equal(3720, session?.Time);
+    }
+
+    [Fact]
+    public async Task GetSessionAsync_AsksTheSessionEndpointAndSendsTheConsumerKey()
+    {
+        var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json(SessionObject));
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+
+        await api.GetSessionAsync(4242);
+
+        Assert.Equal(SessionPath, Assert.Single(handler.Requests));
+        Assert.Equal("consumer-key", Assert.Single(handler.ApiKeys));
+    }
+
+    [Fact]
+    public async Task GetSessionAsync_ReportsTheRefusalWhenTheFeedIsNotAuthenticated()
+    {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ =>
+            StubHttpMessageHandler.Json(
+                HttpStatusCode.Unauthorized,
+                """{"message":"not_authenticated"}""")));
+        using var api = new IvaoApiClient(
+            new IvaoApiOptions { BaseAddress = "https://test.local", Origin = "https://test.origin" },
+            httpClient);
+
+        var exception = await Assert.ThrowsAsync<IvaoApiException>(() => api.GetSessionAsync(4242));
+
+        Assert.Equal(401, exception.StatusCode);
+        Assert.True(exception.IsUnauthorized);
+    }
+
+    [Fact]
+    public async Task GetSessionAsync_ThrowsWhenTheResponseCarriesNoObject()
+    {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ =>
+            StubHttpMessageHandler.Json("\"not a session\"")));
+        using var api = CreateApi(httpClient);
+
+        await Assert.ThrowsAsync<IvaoApiException>(() => api.GetSessionAsync(4242));
+    }
+
     private static IvaoApiClient CreateApi(HttpClient httpClient) =>
         new(
             new IvaoApiOptions
@@ -222,6 +317,7 @@ public sealed class IvaoApiClientTests
                 ApiKey = "consumer-key"
             },
             httpClient);
+
 
     /// <summary>Hands out the tokens in order and remembers what was asked for.</summary>
     private sealed class StubTokenSource(params string?[] tokens) : IIvaoAccessTokenSource

@@ -130,6 +130,20 @@ public static class WorldMap
     public static Color WithAlpha(Color color, int alpha) =>
         new(color.R, color.G, color.B, Math.Clamp(alpha, 0, 255));
 
+    /// <summary>
+    /// Blends two colours: 0 keeps <paramref name="from"/>, 1 gives
+    /// <paramref name="to"/>. The airport surfaces derive from the theme this way,
+    /// so every palette gets a readable runway without a colour of its own.
+    /// </summary>
+    public static Color Mix(Color from, Color to, double amount)
+    {
+        var ratio = Math.Clamp(amount, 0, 1);
+        return new Color(
+            (int)Math.Round(from.R + (to.R - from.R) * ratio),
+            (int)Math.Round(from.G + (to.G - from.G) * ratio),
+            (int)Math.Round(from.B + (to.B - from.B) * ratio));
+    }
+
     private static (IFeature[] Borders, IFeature[] Labels) LoadCountries()
     {
         using var stream = typeof(WorldMap).Assembly.GetManifestResourceStream("TheEye.Core.Resources.Maps.countries.geojson")

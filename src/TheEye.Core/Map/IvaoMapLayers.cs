@@ -4,6 +4,7 @@ using Mapsui.Nts;
 using Mapsui.Styles;
 using NetTopologySuite.Geometries;
 using TheEye.Core.Models;
+using TheEye.Core.Reference;
 
 namespace TheEye.Core.Maps;
 
@@ -14,6 +15,21 @@ public static class IvaoMapLayers
     public const string AtcStationsLayerName = "IVAO ATC stations";
     public const string RouteLayerName = "Route";
     public const string SelectedAtcLayerName = "Selected ATC";
+    public const string AirportsLayerName = "Airports";
+
+    /// <summary>
+    /// Zoom level at which the runway pavement and the ICAO codes of the airports
+    /// come into view. Higher levels frame a whole region, where a few thousand
+    /// metres of asphalt is a sub-pixel smudge; from here on a runway is wide
+    /// enough to read and tells the user which airport sits under the aircraft.
+    /// </summary>
+    public const int RunwayZoomLevel = 12;
+
+    /// <summary>Resolution of <see cref="RunwayZoomLevel"/>, i.e. when runways start being drawn.</summary>
+    public static double RunwayResolution => WorldMap.MaxResolution / Math.Pow(2, RunwayZoomLevel);
+
+    /// <summary>True when the zoom is close enough for the airport pavement to be drawn.</summary>
+    public static bool ShowsRunways(double resolution) => resolution <= RunwayResolution;
 
     /// <summary>
     /// One station badge and where it is drawn: the projected coordinate, the
@@ -265,6 +281,105 @@ public static class IvaoMapLayers
             Features = features,
             Style = null
         };
+    }
+
+    /// <summary>
+    /// Draws the pavement of every runway of the given airports, plus the ICAO
+    /// code of each of them. The strip is a real rectangle built from the two
+    /// thresholds and the published width, so it points the right way and scales
+    /// with the map. <paramref name="resolution"/> is the resolution of the map
+    /// being drawn: the narrowest runway is widened to a little over a pixel, so a
+    /// small airfield stays visible at the zoom where runways appear at all.
+    /// </summary>
+    public static MemoryLayer CreateAirports(
+        IEnumerable<AirportRecord> airports,
+        MapPalette palette,
+        double resolution)
+    {
+        var features = new List<IFeature>();
+        var land = WorldMap.Parse(palette.Land);
+        var label = WorldMap.Parse(palette.Label);
+
+        // No palette member for the pavement: blending the land towards the label
+        // colour gives a strip that reads as asphalt on every theme, dark or light.
+        var surface = WorldMap.Mix(land, label, palette.IsDark ? 0.5 : 0.55);
+        var pavement = new Pen(WorldMap.Parse(palette.Border), 0.8);
+        var minimumWidth = Math.Max(resolution * 1.6, 25);
+
+        foreach (var airport in airports)
+        {
+            foreach (var runway in airport.Runways)
+            {
+                var geometry = CreateRunway(runway, Math.Max(runway.WidthMetres, minimumWidth));
+                if (geometry is null)
+                {
+                    continue;
+                }
+
+                var feature = new GeometryFeature { Geometry = geometry };
+                feature["Icao"] = airport.Icao;
+                feature.Styles.Add(new VectorStyle
+                {
+                    Fill = new Brush(surface),
+                    Outline = pavement
+                });
+                features.Add(feature);
+            }
+
+            var code = new PointFeature(WorldMap.Project(airport.Position));
+            code["Icao"] = airport.Icao;
+            code.Styles.Add(new LabelStyle
+            {
+                LabelColumn = "Icao",
+                Font = new Font { FontFamily = "Segoe UI", Size = 10, Bold = true },
+                ForeColor = label,
+                BackColor = null,
+                Halo = new Pen(land, 2.5),
+                Offset = new Offset(0, -16),
+                CollisionDetection = true
+            });
+            features.Add(code);
+        }
+
+        return new MemoryLayer(AirportsLayerName)
+        {
+            Features = features,
+            Style = null
+        };
+    }
+
+    /// <summary>
+    /// Turns a runway into a rectangle in map coordinates: both thresholds are
+    /// projected and offset by half the width along the perpendicular. Web Mercator
+    /// stretches a metre by 1/cos(latitude), so the width is scaled the same way to
+    /// keep the strip as wide on the ground as it is published.
+    /// </summary>
+    private static Polygon? CreateRunway(AirportRunway runway, double widthMetres)
+    {
+        var start = WorldMap.Project(runway.Threshold);
+        var end = WorldMap.Project(runway.End);
+        var deltaX = end.X - start.X;
+        var deltaY = end.Y - start.Y;
+        var length = Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
+        if (length < 1)
+        {
+            return null;
+        }
+
+        var latitude = runway.Threshold.Latitude * Math.PI / 180;
+        var stretch = 1 / Math.Max(Math.Cos(latitude), 0.2);
+        var halfWidth = widthMetres * stretch / 2;
+        var offsetX = -deltaY / length * halfWidth;
+        var offsetY = deltaX / length * halfWidth;
+
+        return new Polygon(new LinearRing(
+        [
+            new Coordinate(start.X + offsetX, start.Y + offsetY),
+            new Coordinate(end.X + offsetX, end.Y + offsetY),
+            new Coordinate(end.X - offsetX, end.Y - offsetY),
+            new Coordinate(start.X - offsetX, start.Y - offsetY),
+            new Coordinate(start.X + offsetX, start.Y + offsetY)
+        ]));
     }
 
     public static MemoryLayer CreateSelectedAtc(IvaoAtc atc, MapPalette palette)

@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\Maps\countries.geojson" LogicalName="TheEye.Core.Resources.Maps.countries.geojson" />
+    <EmbeddedResource Include="Resources\Maps\airports.txt" LogicalName="TheEye.Core.Resources.Maps.airports.txt" />
     <EmbeddedResource Include="Resources\Aircraft\*.png" LogicalName="TheEye.Core.Resources.Aircraft.%(Filename)%(Extension)" />
   </ItemGroup>
 

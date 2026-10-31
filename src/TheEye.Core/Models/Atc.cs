@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using TheEye.Core.Reference;
 
 namespace TheEye.Core.Models;
 
@@ -50,6 +51,20 @@ public sealed class IvaoAtc
 
     [JsonIgnore]
     public string Country => AtcPosition?.Airport?.CountryId ?? "—";
+
+    /// <summary>The airport country spelled out ("RO" → "Romania"), for the card.</summary>
+    [JsonIgnore]
+    public string CountryName => DivisionCatalog.Name(AtcPosition?.Airport?.CountryId) is { Length: > 0 } name
+        ? name
+        : "—";
+
+    /// <summary>
+    /// True when the station serves an airport. Only an airport position carries a
+    /// city and a country; a control centre covers a region, so the card has no
+    /// location to print for it.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasAirport => AtcPosition?.Airport is not null;
 
     [JsonIgnore]
     public string PositionText => AtcPosition?.Position ?? Subcenter?.Position ?? Facility;

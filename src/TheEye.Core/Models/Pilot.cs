@@ -111,6 +111,27 @@ public sealed class IvaoPilot
 
     [JsonIgnore]
     public bool IsOnGround => LastTrack?.OnGround == true;
+
+    /// <summary>
+    /// Estimated time of arrival from the remaining distance and the current
+    /// ground speed. A flight on the ground, standing still, or with no distance
+    /// left to run, has no estimate: a time derived from a taxi speed would be
+    /// nonsense, and an arrival in the past would look like an error.
+    /// </summary>
+    public DateTimeOffset? EstimatedArrival(DateTimeOffset now)
+    {
+        if (LastTrack is not { ArrivalDistance: { } distance, GroundSpeed: { } speed })
+        {
+            return null;
+        }
+
+        if (IsOnGround || distance <= 0 || speed <= 0)
+        {
+            return null;
+        }
+
+        return now.AddMinutes(distance / speed * 60);
+    }
 }
 
 public sealed class IvaoPilotSummary

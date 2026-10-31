@@ -112,6 +112,82 @@ public sealed class IvaoJsonConverterTests
         Assert.Equal("military", airport.Military);
     }
 
+    [Fact]
+    public void CodeList_ReadsTheEquipmentRecordsOfTheFiledPlan()
+    {
+        const string json = """
+            {
+              "id": 73050832,
+              "sessionId": 63815993,
+              "eet": 79860,
+              "aircraftEquipments": [
+                { "id": "S", "name": "Standard (VHF, VOR, ILS)", "order": 1 },
+                { "id": "E2", "name": "D-FIS ACARS", "order": 7 },
+                "H"
+              ],
+              "aircraftTransponderTypes": [
+                { "id": "L", "name": "mode S", "type": null, "order": 6 }
+              ]
+            }
+            """;
+
+        var plan = JsonSerializer.Deserialize<IvaoFlightPlan>(json, IvaoJson.Options);
+
+        Assert.NotNull(plan);
+        var equipment = plan.AircraftEquipments;
+        var transponder = plan.AircraftTransponderTypes;
+        Assert.NotNull(equipment);
+        Assert.NotNull(transponder);
+        Assert.Equal(["S", "E2", "H"], equipment);
+        Assert.Equal("S E2 H", plan.EquipmentText);
+        Assert.Equal(["L"], transponder);
+        Assert.Equal("L", plan.TransponderText);
+    }
+
+    [Fact]
+    public void CodeList_DescribesARecordWithoutAnIdByItsName()
+    {
+        const string json = """
+            { "aircraftEquipments": [ { "name": "RVSM (FL290-FL410)", "order": 33 } ] }
+            """;
+
+        var plan = JsonSerializer.Deserialize<IvaoFlightPlan>(json, IvaoJson.Options);
+
+        var equipment = plan!.AircraftEquipments;
+        Assert.NotNull(equipment);
+        Assert.Equal(["RVSM (FL290-FL410)"], equipment);
+    }
+
+    [Fact]
+    public void CodeList_TreatsAMemberThatIsNotAListAsNotFiled()
+    {
+        const string json = """
+            { "aircraftEquipments": "SDE", "aircraftTransponderTypes": null }
+            """;
+
+        var plan = JsonSerializer.Deserialize<IvaoFlightPlan>(json, IvaoJson.Options);
+
+        Assert.NotNull(plan);
+        Assert.Null(plan.AircraftEquipments);
+        Assert.Null(plan.AircraftTransponderTypes);
+        Assert.Empty(plan.EquipmentText);
+        Assert.Empty(plan.TransponderText);
+    }
+
+    [Fact]
+    public void CodeList_WritesTheBareCodes()
+    {
+        var plan = new IvaoFlightPlan { AircraftEquipments = ["S", "E2"] };
+
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(plan, IvaoJson.Options));
+
+        var codes = document.RootElement
+            .GetProperty("aircraftEquipments")
+            .EnumerateArray()
+            .Select(code => code.GetString());
+        Assert.Equal(["S", "E2"], codes);
+    }
+
     private static JsonSerializerOptions CreateCoordinateOptions()
     {
         var options = new JsonSerializerOptions();

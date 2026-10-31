@@ -8,6 +8,7 @@ namespace TheEye.Windows;
 public partial class SettingsWindow : Window
 {
     private readonly Func<IvaoOAuthOptions, CancellationToken, Task<IvaoSignInResult>>? _signIn;
+    private bool _signInBusy;
 
     public SettingsWindow(
         SettingsViewModel viewModel,
@@ -85,16 +86,27 @@ public partial class SettingsWindow : Window
 
     private void SetSignInBusy(bool busy)
     {
-        SignInButton.IsEnabled = !busy;
+        _signInBusy = busy;
         SignInButton.Content = busy ? "Waiting for IVAO…" : "Sign in with IVAO";
         UpdateSignInButtons();
     }
 
+    /// <summary>
+    /// Signing in twice would replace the tokens the running session is already
+    /// using, so the button is disabled once IVAO is signed in: signing out is
+    /// the way to switch accounts.
+    /// </summary>
     private void UpdateSignInButtons()
     {
+        var signedIn = ViewModel.IsSignedIn;
+        SignInButton.IsEnabled = !_signInBusy && !signedIn;
+        SignInButton.ToolTip = signedIn
+            ? "You are already signed in to IVAO. Sign out first to use another account."
+            : "Sign in with your IVAO account";
+
         if (SignOutButton is not null)
         {
-            SignOutButton.IsEnabled = ViewModel.IsSignedIn;
+            SignOutButton.IsEnabled = signedIn && !_signInBusy;
         }
     }
 }

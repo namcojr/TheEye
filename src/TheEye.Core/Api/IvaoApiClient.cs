@@ -48,6 +48,18 @@ public sealed class IvaoApiClient : IDisposable
         GetObjectAsync<IvaoFlightPlan>($"v2/tracker/now/flight-plans/{id}", "flightPlan", cancellationToken);
 
     /// <summary>
+    /// The newest flight plan IVAO holds for a session
+    /// (<c>/v2/tracker/sessions/{id}/flightPlans/latest</c>): what the pilot
+    /// filed, including the times, the endurance, the alternate and the
+    /// equipment the tracker summary leaves out. Like the other session feeds
+    /// this one is authenticated, so callers must cope with a 401.
+    /// </summary>
+    public Task<IvaoFlightPlan?> GetSessionFlightPlanAsync(
+        long sessionId,
+        CancellationToken cancellationToken = default) =>
+        GetObjectAsync<IvaoFlightPlan>($"v2/tracker/sessions/{sessionId}/flightPlans/latest", null, cancellationToken);
+
+    /// <summary>
     /// Every recorded position of a pilot or ATC session, keyed by the session
     /// id carried by the tracker summaries (<c>id</c>, not <c>userId</c>). The
     /// feed is authenticated: IVAO answers 401 <c>not_authenticated</c> unless
@@ -59,6 +71,18 @@ public sealed class IvaoApiClient : IDisposable
         long sessionId,
         CancellationToken cancellationToken = default) =>
         GetListAsync<IvaoPilotTrack>($"v2/tracker/sessions/{sessionId}/tracks", cancellationToken);
+
+    /// <summary>
+    /// The record of a single session: the member behind the callsign, the
+    /// division they fly for, their ratings and the software they are connected
+    /// with. Like the tracks feed this endpoint is authenticated, so a caller
+    /// without an IVAO sign-in or a consumer key gets a 401 and the card says so
+    /// rather than showing half an identity.
+    /// </summary>
+    public Task<IvaoSessionDetail?> GetSessionAsync(
+        long sessionId,
+        CancellationToken cancellationToken = default) =>
+        GetObjectAsync<IvaoSessionDetail>($"v2/tracker/sessions/{sessionId}", "session", cancellationToken);
 
     public void Dispose()
     {

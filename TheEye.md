@@ -86,13 +86,6 @@ the public API.
 THINGS TO ADD / CORRECTIONS
 ===========================
 
-- Please check Examples/A330 Speed.PNG in order to know what i'd like to see on the pilot's card. Flags and logos are a long long shot (can this be done?) but the time online, software, simulator in use, speed, altitude, callsign, DEP and ARR airports as well as pilotID and HOME, etc would be interesting. api.ivao.aero/v2/tracker/sessions/<sessionid> returns all required data for this.
-
-- In settings, disable IVAO SIGN IN when signed in.
-
-- MAP specific corrections:
-a) Add more map detail (at least airport runways), so that when we zoom-in, at least the airport detail can be seen.
-
 - Make these focused fixes to the fallback glyphs (I will test everything visually - Do not test, only implement):
     a) Concerning the _DEL facility, rotate the shape 45% so it is distinguishable from the existing _GND facility.
     b) These SVG glyphs must zoom-in with the map like other _CTR facilities already do, maintaining its centre on the airport they belong to.
@@ -132,6 +125,55 @@ It also works for accounts that have no API key at all.
   http://localhost:8000/auth/callback, so the flow can be exercised locally; those
   credentials only authorise /v2/users/me, proving the sign-in (account label appears)
   but not the trail.
+
+
+## RUNWAY PAVEMENT ON THE MAP (implemented)
+========================================
+
+Zooming into an airport draws its runways, so a parked aircraft sits on a strip
+instead of on blank land. It is all offline, like the rest of the map.
+
+- Table: `src/TheEye.Core/Resources/Maps/airports.txt`, embedded, about 17 500
+  airports built from the public-domain OurAirports data by `tools/build-airports.py`.
+  One line per airport, `ICAO|lat|lon|name|runways`, and one runway per `;` with
+  `leLat,leLon,heLat,heLon,widthMetres`. `AirportReference` reads it once, indexes
+  it by ICAO and keeps the records in latitude order, so a viewport scan only walks
+  the band it covers.
+- Drawing: `IvaoMapLayers.CreateAirports` builds one rectangle per runway from the
+  two real thresholds and the published width (projected, then offset by half the
+  width along the perpendicular), so the strip points the right way and stretches
+  with the projection. The narrowest runway is widened to `max(resolution * 1.6, 25)`
+  metres so a small field stays visible at the zoom where runways appear at all, and
+  the fill is the land colour blended towards the label colour, which reads as
+  asphalt on every theme. Each airport also gets its ICAO label.
+- Zoom gate: runways appear from `IvaoMapLayers.RunwayZoomLevel` (12, i.e.
+  `RunwayResolution`) downwards; further out the layer is emptied, so panning costs
+  nothing. `MapViewModel.UpdateAirports` rebuilds the layer only when the set of
+  airports in view or the zoom level changed, and it looks 25 % beyond the viewport
+  so the fields just off screen are already drawn when the user pans onto them.
+- Order: the airport layer is added first, under the sectors, the trail and the
+  aircraft markers, so the pavement never covers a badge.
+
+
+## FILED FLIGHT PLAN ON THE CARD (implemented)
+===========================================
+
+The tracker summary embeds a trimmed copy of the flight plan (airports, aircraft,
+route) but not the figures a pilot filed. Selecting a flight fetches the whole
+filing from `/v2/tracker/sessions/{id}/flightPlans/latest`
+(`SessionFlightPlanStore`, cached per session), and the card fills in:
+
+- EET, endurance, first and (when filed) second alternate.
+- Filed off-blocks next to the off-blocks the aircraft actually left at.
+- People on board, the radio/navigation equipment codes of item 10a and the
+  surveillance capabilities of item 10b (`TRANSPONDER CAPABILITY`, e.g. `L B1 D1`).
+- The remarks of the filed plan.
+
+The filed plan sends the equipment and transponder codes as records
+(`{ "id": "E2", "name": "D-FIS ACARS" }`) while the summaries send bare codes, so
+`IvaoCodeListConverter` reads both and keeps the codes. A refusal is named on the
+card instead of leaving it empty: 401/403 points at the sign-in (or a personal API
+key), and any other failure prints the reason.
 
 
 ## RECORDED TRAIL

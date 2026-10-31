@@ -26,6 +26,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private IvaoSession? _session;
     private TrackerService? _tracker;
     private SessionTrackStore? _tracks;
+    private SessionDetailStore? _details;
+    private SessionFlightPlanStore? _flightPlans;
     private IvaoConnectionCounts _stats = new();
     private bool _syncingSelection;
     private bool _started;
@@ -482,6 +484,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // The recorded track of the selected flight or station is fetched on
         // demand, because only one of them is ever on screen.
         _tracks = new SessionTrackStore(_api);
+
+        // So is the roster record behind the selected callsign; the summary the
+        // tracker already delivered carries the flight, not the member.
+        _details = new SessionDetailStore(_api);
+
+        // The summary carries the airports and the route only, so the rest of the
+        // filing is fetched for the aircraft on screen and cached for a minute.
+        _flightPlans = new SessionFlightPlanStore(_api);
         _refreshCommand.RaiseCanExecuteChanged();
 
         OnPropertyChanged(nameof(IsSignedIn));
@@ -570,6 +580,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // The trail ends on the live position, so it follows every refresh.
         _ = RefreshSelectionTracksAsync();
 
+        // The card's time online and arrival estimate move with the refresh too.
+        _ = RefreshSelectionDetailAsync();
+
+        // A pilot can amend the filing mid-flight; the store keeps the answer for
+        // a minute, so this costs one request per minute at most.
+        _ = RefreshSelectionFlightPlanAsync();
+
         _stats = snapshot.Stats.Now ?? new IvaoConnectionCounts();
         PilotCount = snapshot.PilotCount;
         AtcCount = snapshot.AtcCount;
@@ -629,6 +646,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // one, and the answer for it is not in yet.
         TrackNotice = string.Empty;
         _ = RefreshSelectionTracksAsync();
+        _ = RefreshSelectionDetailAsync();
+        _ = RefreshSelectionFlightPlanAsync();
     }
 
     /// <summary>
@@ -680,6 +699,91 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         Map.SetSelectionTracks(result.Tracks);
         TrackNotice = result.HasTrack ? string.Empty : DescribeMissingTrack(result);
+    }
+
+    /// <summary>
+    /// Loads the roster record of the selected flight or station, so the card can
+    /// name the member, the division and the ratings behind the callsign. Like the
+    /// tracks feed this endpoint is authenticated: a refusal is handed to the card,
+    /// which explains it, instead of being swallowed. A response for a selection
+    /// the user has already left is dropped.
+    /// </summary>
+    private async Task RefreshSelectionDetailAsync()
+    {
+        if (_details is not { } details)
+        {
+            return;
+        }
+
+        // A station is described by the same record as a flight: who is behind
+        // the callsign, their ratings and the client they are connected with.
+        var pilot = Map.SelectedPilot;
+        var atc = Map.SelectedAtc;
+        if ((pilot?.Id ?? atc?.Id) is not { } sessionId)
+        {
+            return;
+        }
+
+        SessionDetailResult result;
+        try
+        {
+            result = await details.GetSessionAsync(sessionId);
+        }
+        catch
+        {
+            // IVAO never answered, so the card keeps the details the summary
+            // already gave it rather than blanking the identity block.
+            return;
+        }
+
+        if (pilot is not null)
+        {
+            if (Map.SelectedPilot is { } currentPilot && currentPilot.Id == sessionId)
+            {
+                currentPilot.ApplySessionDetail(result);
+            }
+
+            return;
+        }
+
+        if (atc is not null && Map.SelectedAtc is { } currentAtc && currentAtc.Id == sessionId)
+        {
+            currentAtc.ApplySessionDetail(result);
+        }
+    }
+
+    /// <summary>
+    /// Loads the filing IVAO keeps for the selected flight, so the card can show
+    /// what the tracker summary leaves out: the cruise level and speed, the filed
+    /// and actual times, the endurance, both alternates and the equipment. A
+    /// station has nothing to file, so only a pilot is asked about. Like the other
+    /// session feeds this endpoint is authenticated, and a response for a
+    /// selection the user has already left is dropped.
+    /// </summary>
+    private async Task RefreshSelectionFlightPlanAsync()
+    {
+        if (_flightPlans is not { } flightPlans || Map.SelectedPilot is not { } pilot)
+        {
+            return;
+        }
+
+        var sessionId = pilot.Id;
+        SessionFlightPlanResult result;
+        try
+        {
+            result = await flightPlans.GetFlightPlanAsync(sessionId);
+        }
+        catch
+        {
+            // IVAO never answered, so the card keeps the details the summary
+            // already gave it rather than blanking the flight plan block.
+            return;
+        }
+
+        if (Map.SelectedPilot is { } currentPilot && currentPilot.Id == sessionId)
+        {
+            currentPilot.ApplyFlightPlan(result);
+        }
     }
 
     /// <summary>
