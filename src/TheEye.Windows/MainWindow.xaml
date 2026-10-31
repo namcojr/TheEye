@@ -320,11 +320,11 @@
         <DataTemplate x:Key="AtcDetailTemplate">
             <StackPanel>
                 <DockPanel>
-                    <Border DockPanel.Dock="Right" Background="{Binding AccentSoftBrush}"
-                            BorderBrush="{Binding AccentBrush}" BorderThickness="1"
+                    <Border DockPanel.Dock="Right" Background="{Binding AccentSoftColor, Converter={StaticResource HexToBrush}}"
+                            BorderBrush="{Binding AccentColor, Converter={StaticResource HexToBrush}}" BorderThickness="1"
                             CornerRadius="8" Padding="7,3" VerticalAlignment="Top">
                         <TextBlock Text="{Binding Facility}" FontSize="9" FontWeight="Bold"
-                                   Foreground="{Binding AccentBrush}" />
+                                   Foreground="{Binding AccentColor, Converter={StaticResource HexToBrush}}" />
                     </Border>
                     <StackPanel>
                         <TextBlock Text="{Binding Callsign}" FontSize="22" FontWeight="Bold"
@@ -698,7 +698,7 @@
                     <mapsui:MapControl x:Name="MapControl" Map="{Binding Map.Map}" MapTapped="OnMapTapped" />
 
                     <ItemsControl ItemsSource="{Binding Map.Pilots}"
-                                  Visibility="{Binding Map.PilotsVisibility}"
+                                  Visibility="{Binding Map.ShowPilots, Converter={StaticResource BoolToVisibility}}"
                                   Panel.ZIndex="2">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>

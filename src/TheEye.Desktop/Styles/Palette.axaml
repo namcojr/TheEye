@@ -1,0 +1,34 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- The starting palette is the Dark theme from the shared table. The theme
+         service replaces every brush below at startup and whenever Settings
+         picks another theme, so these values only matter for the designer and
+         for the split second before the first window opens. -->
+    <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#12171C" />
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#171E25" />
+    <SolidColorBrush x:Key="PanelAltBackgroundBrush" Color="#1E2730" />
+    <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#0E1317" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#2A3642" />
+    <SolidColorBrush x:Key="TextBrush" Color="#E8EDF2" />
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#93A3B3" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#38BDF8" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#7DD3FC" />
+    <SolidColorBrush x:Key="AccentTextBrush" Color="#06121B" />
+    <SolidColorBrush x:Key="SelectionBrush" Color="#1F3A4D" />
+    <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#222D38" />
+    <SolidColorBrush x:Key="GridLineBrush" Color="#26323D" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="#34D399" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#FBBF24" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="#F87171" />
+    <SolidColorBrush x:Key="MapWaterBrush" Color="#0B1721" />
+    <SolidColorBrush x:Key="MapLandBrush" Color="#1B2A35" />
+    <SolidColorBrush x:Key="MapBorderBrush" Color="#4A6070" />
+    <SolidColorBrush x:Key="MapLabelBrush" Color="#6FE3F5" />
+    <SolidColorBrush x:Key="ShadowBrush" Color="#66000000" />
+
+    <!-- Same rounded corner on every control the Fluent theme still paints,
+         so text boxes and tooltips match the hand-written templates. -->
+    <CornerRadius x:Key="ControlCornerRadius">5</CornerRadius>
+
+</ResourceDictionary>

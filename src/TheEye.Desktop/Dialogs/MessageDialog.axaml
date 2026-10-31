@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="TheEye.Desktop.Dialogs.MessageDialog"
+        Title="The Eye of IVAO"
+        Width="460"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="BorderOnly"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource TextBrush}">
+
+    <StackPanel Margin="20" Spacing="14">
+        <TextBlock Name="HeadlineText" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock Name="MessageText" Classes="value" TextWrapping="Wrap" Margin="0" />
+        <Button Content="OK" HorizontalAlignment="Right" MinWidth="86"
+                Theme="{StaticResource PrimaryButton}" Click="OnOkClick" />
+    </StackPanel>
+</Window>

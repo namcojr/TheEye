@@ -670,7 +670,7 @@
                                RenderOptions.BitmapScalingMode="HighQuality"
                                RenderTransformOrigin="0.5,0.5">
                             <Image.RenderTransform>
-                                <RotateTransform Angle="{Binding Heading}" />
+                                <RotateTransform Angle="{Binding HeadingAngle}" />
                             </Image.RenderTransform>
                         </Image>
                     </Grid>

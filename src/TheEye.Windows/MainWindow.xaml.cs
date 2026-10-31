@@ -3,8 +3,9 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using Mapsui;
 using Mapsui.Manipulations;
+using TheEye.Presentation.Services;
 using TheEye.Windows.Services;
-using TheEye.Windows.ViewModels;
+using TheEye.Presentation.ViewModels;
 
 namespace TheEye.Windows;
 

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>TheEye.Presentation</RootNamespace>
+    <AssemblyName>TheEye.Presentation</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TheEye.Core\TheEye.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The map model is Mapsui's; only the renderer belongs to a shell. -->
+    <PackageReference Include="Mapsui.Nts" Version="5.1.0" />
+  </ItemGroup>
+
+</Project>

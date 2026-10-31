@@ -1,26 +1,25 @@
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using TheEye.Core.Maps;
 using TheEye.Core.Models;
 using TheEye.Core.Reference;
 using TheEye.Core.Services;
-using TheEye.Windows.Services;
+using TheEye.Presentation.Services;
+using TheEye.Presentation.Theming;
 
-namespace TheEye.Windows.ViewModels;
+namespace TheEye.Presentation.ViewModels;
 
 public sealed class AtcItem : ObservableObject
 {
-    private readonly RemoteImageCache _images;
+    private readonly IImageCache _images;
     private IvaoAtc _atc;
     private IvaoSessionDetail? _detail;
     private int? _detailStatus;
     private string? _detailError;
     private bool _detailRequested;
-    private BitmapImage? _ratingBadge;
-    private BitmapImage? _flagImage;
+    private object? _ratingBadge;
+    private object? _flagImage;
     private bool _isSelected;
 
-    public AtcItem(IvaoAtc atc, RemoteImageCache images)
+    public AtcItem(IvaoAtc atc, IImageCache images)
     {
         _atc = atc;
         _images = images;
@@ -144,14 +143,14 @@ public sealed class AtcItem : ObservableObject
         : "—";
 
     /// <summary>The controller rating badge, drawn once the image is decoded.</summary>
-    public BitmapImage? RatingBadge
+    public object? RatingBadge
     {
         get => _ratingBadge;
         private set => SetProperty(ref _ratingBadge, value);
     }
 
     /// <summary>The flag of the controller's division, drawn once the image is decoded.</summary>
-    public BitmapImage? FlagImage
+    public object? FlagImage
     {
         get => _flagImage;
         private set => SetProperty(ref _flagImage, value);
@@ -186,9 +185,16 @@ public sealed class AtcItem : ObservableObject
 
     public bool HasProfileNotice => ProfileNotice.Length > 0;
 
-    public Brush AccentBrush { get; private set; } = Brushes.Gray;
+    /// <summary>
+    /// The colour that identifies the facility, as "#RRGGBB": green for a ground
+    /// station, up through the tower and approach shades to the blue of a centre.
+    /// The view turns the string into its own brush so the same colour reaches
+    /// both shells.
+    /// </summary>
+    public string AccentColor { get; private set; } = "#808080";
 
-    public Brush AccentSoftBrush { get; private set; } = Brushes.Transparent;
+    /// <summary>The same colour at a quarter opacity, for the pill behind the facility name.</summary>
+    public string AccentSoftColor { get; private set; } = "#00000000";
 
     public string SearchText { get; private set; } = string.Empty;
 
@@ -234,9 +240,9 @@ public sealed class AtcItem : ObservableObject
 
     private void Refresh()
     {
-        var color = (Color)ColorConverter.ConvertFromString(FacilityPalette.ForFacility(_atc.Facility));
-        AccentBrush = Freeze(new SolidColorBrush(color));
-        AccentSoftBrush = Freeze(new SolidColorBrush(Color.FromArgb(40, color.R, color.G, color.B)));
+        var (red, green, blue) = ThemeCatalog.ParseRgb(FacilityPalette.ForFacility(_atc.Facility));
+        AccentColor = ThemeCatalog.ToHex(0xFF, red, green, blue);
+        AccentSoftColor = ThemeCatalog.ToHex(40, red, green, blue);
 
         SearchText = string.Join(' ', new[]
         {
@@ -273,11 +279,5 @@ public sealed class AtcItem : ObservableObject
 
         _ = SessionImageBinder.ApplyAsync(_images, badgeUrl, image => RatingBadge = image);
         _ = SessionImageBinder.ApplyAsync(_images, flagUrl, image => FlagImage = image);
-    }
-
-    private static SolidColorBrush Freeze(SolidColorBrush brush)
-    {
-        brush.Freeze();
-        return brush;
     }
 }

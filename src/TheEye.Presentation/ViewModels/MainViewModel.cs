@@ -1,15 +1,16 @@
 using System.ComponentModel;
 using System.IO;
-using System.Windows;
-using System.Windows.Data;
 using TheEye.Core.Api;
 using TheEye.Core.Maps;
 using TheEye.Core.Models;
 using TheEye.Core.Services;
 using TheEye.Core.Settings;
-using TheEye.Windows.Services;
+using TheEye.Presentation.Collections;
+using TheEye.Presentation.Services;
+using TheEye.Presentation.Theming;
+using TheEye.Presentation.Threading;
 
-namespace TheEye.Windows.ViewModels;
+namespace TheEye.Presentation.ViewModels;
 
 /// <summary>
 /// Shell view model: owns settings, the polling tracker, the traffic lists and
@@ -19,8 +20,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 {
     private readonly SettingsStore _store;
     private readonly TheEyeSettings _settings;
-    private readonly ICollectionView _pilotsView;
-    private readonly ICollectionView _atcView;
+    private readonly IThemeService _theme;
+    private readonly FilteredCollection<PilotItem> _pilotsView;
+    private readonly FilteredCollection<AtcItem> _atcView;
     private readonly AsyncRelayCommand _refreshCommand;
 
     private IvaoApiClient? _api;
@@ -52,16 +54,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private int _worldTourCount;
     private int _uniqueUsers24h;
 
-    public MainViewModel(SettingsStore store, TheEyeSettings settings)
+    public MainViewModel(SettingsStore store, TheEyeSettings settings, IThemeService theme, IImagePipeline images)
     {
         _store = store;
         _settings = settings;
-        Map = new MapViewModel();
+        _theme = theme;
+        Map = new MapViewModel(images);
 
-        _pilotsView = CollectionViewSource.GetDefaultView(Map.Pilots);
-        _pilotsView.Filter = FilterPilot;
-        _atcView = CollectionViewSource.GetDefaultView(Map.Atc);
-        _atcView.Filter = FilterAtc;
+        // The lists a search box narrows: the map keeps every aircraft and
+        // station, and these two collections are the filtered projection the
+        // traffic panels show.
+        _pilotsView = new FilteredCollection<PilotItem>(Map.Pilots, FilterPilot);
+        _atcView = new FilteredCollection<AtcItem>(Map.Atc, FilterAtc);
 
         RefreshCommand = _refreshCommand = new AsyncRelayCommand(RefreshAsync, () => _tracker is not null);
         LocateSelectedCommand = new RelayCommand(LocateSelected, () => SelectedPilot is not null || SelectedAtc is not null);
@@ -71,14 +75,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         HomeCommand = new RelayCommand(() => Map.ResetView(new GeoCoordinate(45, 10), WorldMap.MaxZoomOutResolution));
 
         Map.SelectionChanged += OnMapSelectionChanged;
-        ThemeService.ThemeChanged += OnThemeChanged;
+        _theme.ThemeChanged += OnThemeChanged;
     }
 
     public MapViewModel Map { get; }
 
-    public ICollectionView PilotsView => _pilotsView;
+    public FilteredCollection<PilotItem> PilotsView => _pilotsView;
 
-    public ICollectionView AtcView => _atcView;
+    public FilteredCollection<AtcItem> AtcView => _atcView;
 
     public AsyncRelayCommand RefreshCommand { get; }
 
@@ -325,7 +329,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void Initialize()
     {
         Map.Initialize(
-            ThemeService.CreateMapPalette(),
+            _theme.CreateMapPalette(),
             new GeoCoordinate(_settings.MapLatitude, _settings.MapLongitude),
             _settings.MapResolution);
 
@@ -398,7 +402,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (themeChanged)
         {
-            ThemeService.Apply(_settings.Theme);
+            _theme.Apply(_settings.Theme);
         }
 
         Map.ShowPilots = _settings.ShowPilots;
@@ -450,7 +454,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         _disposed = true;
-        ThemeService.ThemeChanged -= OnThemeChanged;
+        _theme.ThemeChanged -= OnThemeChanged;
         Map.SelectionChanged -= OnMapSelectionChanged;
         _tracker?.Dispose();
         _session?.Dispose();
@@ -552,22 +556,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return Task.CompletedTask;
     }
 
-    private static void RaiseOnDispatcher(Action action)
-    {
-        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
-        {
-            dispatcher.BeginInvoke(action);
-            return;
-        }
-
-        action();
-    }
+    private static void RaiseOnDispatcher(Action action) => UiThread.Post(action);
 
     private void OnSnapshotUpdated(object? sender, TrackerSnapshot snapshot)
     {
-        if (Application.Current.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        if (!UiThread.CheckAccess())
         {
-            dispatcher.BeginInvoke(new Action(() => OnSnapshotUpdated(sender, snapshot)));
+            UiThread.Post(() => OnSnapshotUpdated(sender, snapshot));
             return;
         }
 
@@ -610,9 +605,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void OnRefreshFailed(object? sender, TrackerRefreshException exception)
     {
-        if (Application.Current.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        if (!UiThread.CheckAccess())
         {
-            dispatcher.BeginInvoke(new Action(() => OnRefreshFailed(sender, exception)));
+            UiThread.Post(() => OnRefreshFailed(sender, exception));
             return;
         }
 
@@ -837,5 +832,5 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnThemeChanged(object? sender, EventArgs e) => Map.ApplyTheme(ThemeService.CreateMapPalette());
+    private void OnThemeChanged(object? sender, EventArgs e) => Map.ApplyTheme(_theme.CreateMapPalette());
 }

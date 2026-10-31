@@ -1,7 +1,8 @@
 using System.Windows;
 using TheEye.Core.Api;
+using TheEye.Presentation.Services;
 using TheEye.Windows.Services;
-using TheEye.Windows.ViewModels;
+using TheEye.Presentation.ViewModels;
 
 namespace TheEye.Windows;
 

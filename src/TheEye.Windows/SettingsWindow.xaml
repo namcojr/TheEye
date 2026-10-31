@@ -85,10 +85,10 @@
                                              IsChecked="{Binding IsSelected, Mode=TwoWay}">
                                     <StackPanel Orientation="Horizontal">
                                         <Border Width="16" Height="16" CornerRadius="3"
-                                                Background="{Binding BackgroundPreview}"
+                                                Background="{Binding BackgroundPreview, Converter={StaticResource HexToBrush}}"
                                                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                                             <Border Width="6" Height="6" CornerRadius="2"
-                                                    Background="{Binding AccentPreview}"
+                                                    Background="{Binding AccentPreview, Converter={StaticResource HexToBrush}}"
                                                     HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
                                         <TextBlock Text="{Binding Label}" Margin="7,0,0,0" VerticalAlignment="Center" />

@@ -1,0 +1,181 @@
+<Window x:Class="TheEye.Desktop.SettingsWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings — The Eye of IVAO"
+        Width="560" Height="760"
+        SystemDecorations="None"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource TextBrush}">
+
+    <!-- The whole window is hand-drawn, like the main shell, so the palette owns
+         the frame and the caption row still drags the dialog. -->
+    <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+        <Grid RowDefinitions="44,*,Auto">
+
+            <Border Grid.Row="0" Background="{DynamicResource HeaderBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                    PointerPressed="OnTitleBarPressed">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
+                        <Path Width="13" Height="13" Stretch="Uniform"
+                              Fill="{DynamicResource AccentBrush}"
+                              Data="M 7,0.8 L 8.7,1.6 L 10.2,1.1 L 11.2,2.6 L 12.7,3.1 L 12.7,4.9 L 13.9,6 L 13.1,7.6 L 13.3,9.3 L 11.7,10 L 10.9,11.6 L 9.2,11.2 L 7.6,12 L 6.5,10.7 L 4.8,10.7 L 4,9.2 L 2.3,8.7 L 2.6,7 L 1.6,5.6 L 2.7,4.3 L 2.8,2.6 L 4.5,2.2 Z M 7.6,4.6 A 2.6,2.6 0 1 1 7.6,9.8 A 2.6,2.6 0 1 1 7.6,4.6 Z" />
+                        <TextBlock Text="SETTINGS" Margin="9,0,0,0" FontSize="11" FontWeight="Bold"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <Button Grid.Column="1" Theme="{StaticResource CloseWindowButton}"
+                            ToolTip.Tip="Close settings" AutomationProperties.Name="Close settings"
+                            Click="OnCloseClick">
+                        <Path Data="M 0,0 L 9,9 M 9,0 L 0,9" StrokeThickness="1"
+                              Width="9" Height="9" Stretch="None"
+                              Stroke="{Binding $parent[Button].Foreground}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="22,20,22,10">
+
+                    <TextBlock Text="REFRESH INTERVAL" Classes="section" />
+                    <TextBlock Classes="muted" Margin="0,5,0,9" TextWrapping="Wrap"
+                               Text="How often the tracker polls IVAO. Shorter intervals update faster and use more requests." />
+                    <ItemsControl ItemsSource="{Binding IntervalOptions}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <RadioButton Theme="{StaticResource ChoiceButton}" GroupName="RefreshInterval"
+                                             Content="{Binding Label}" Margin="0,0,8,8"
+                                             IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Classes="divider" Margin="0,10,0,0" />
+
+                    <TextBlock Text="APPEARANCE" Classes="section" Margin="0,18,0,0" />
+                    <TextBlock Classes="muted" Margin="0,5,0,9" TextWrapping="Wrap"
+                               Text="The shell and the offline map recolor together. The map keeps the same layers and traffic." />
+                    <ItemsControl ItemsSource="{Binding ThemeOptions}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <RadioButton Theme="{StaticResource ChoiceButton}" GroupName="Theme"
+                                             Margin="0,0,8,8" AutomationProperties.Name="{Binding Label}"
+                                             IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Width="16" Height="16" CornerRadius="3"
+                                                Background="{Binding BackgroundPreview, Converter={StaticResource HexToBrush}}"
+                                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                                            <Border Width="6" Height="6" CornerRadius="2"
+                                                    Background="{Binding AccentPreview, Converter={StaticResource HexToBrush}}"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Text="{Binding Label}" Margin="7,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </RadioButton>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Classes="divider" Margin="0,10,0,0" />
+
+                    <TextBlock Text="MAP LAYERS" Classes="section" Margin="0,18,0,0" />
+                    <StackPanel Margin="0,9,0,0">
+                        <CheckBox Content="Show pilots" IsChecked="{Binding Draft.ShowPilots}"
+                                  Margin="0,0,0,9" />
+                        <CheckBox Content="Show ATC sectors, labels and stations"
+                                  IsChecked="{Binding Draft.ShowAtc}" Margin="0,0,0,9" />
+                    </StackPanel>
+
+                    <Border Classes="divider" Margin="0,10,0,0" />
+
+                    <TextBlock Text="MAP BEHAVIOUR" Classes="section" Margin="0,18,0,0" />
+                    <StackPanel Margin="0,9,0,0">
+                        <CheckBox IsChecked="{Binding Draft.CenterOnMapClick}"
+                                  Content="Centre the map when I click an aircraft or station on it"
+                                  AutomationProperties.Name="Centre the map on map clicks" />
+                    </StackPanel>
+                    <TextBlock Classes="muted" Margin="0,7,0,0" TextWrapping="Wrap"
+                               Text="Only affects clicks on the map." />
+
+                    <Border Classes="divider" Margin="0,18,0,18" />
+
+                    <TextBlock Text="CONNECTION" Classes="section" />
+                    <TextBlock Text="IVAO API KEY" Classes="detail-label" Margin="0,12,0,5" />
+                    <TextBox Text="{Binding Draft.ApiKey, Mode=TwoWay}"
+                             AutomationProperties.Name="IVAO API key" Classes="mono" />
+                    <TextBlock Classes="muted" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="Optional. Without a key the app reads the public tracker summary only. The recorded tracks behind the altitude-coloured trail are an authenticated endpoint: request your own consumer key on api.ivao.aero and paste it here to trace the selected flight or station." />
+
+                    <Border Classes="divider" Margin="0,18,0,0" />
+
+                    <TextBlock Text="IVAO SIGN-IN" Classes="section" Margin="0,18,0,0" />
+                    <TextBlock Classes="muted" Margin="0,5,0,9" TextWrapping="Wrap"
+                               Text="Signing in authorises the app as you, which is how the recorded tracks and the per-session details become readable without a consumer key. Create an application on developers.ivao.aero, add the redirect URL below to its allowed URLs, then paste the client id and secret it gives you." />
+
+                    <TextBlock Text="CLIENT ID" Classes="detail-label" Margin="0,0,0,5" />
+                    <TextBox Text="{Binding Draft.OAuthClientId, Mode=TwoWay}"
+                             AutomationProperties.Name="IVAO application client id" Classes="mono" />
+
+                    <TextBlock Text="CLIENT SECRET" Classes="detail-label" Margin="0,10,0,5" />
+                    <TextBox x:Name="ClientSecretBox" PasswordChar="•"
+                             Text="{Binding Draft.OAuthClientSecret, Mode=TwoWay}"
+                             AutomationProperties.Name="IVAO application client secret" Classes="mono" />
+
+                    <TextBlock Text="REDIRECT URL" Classes="detail-label" Margin="0,10,0,5" />
+                    <TextBox Text="{Binding Draft.OAuthRedirectUri, Mode=TwoWay}"
+                             AutomationProperties.Name="IVAO sign-in redirect URL"
+                             LostFocus="OnRedirectUriLostFocus" Classes="mono" />
+                    <TextBlock Classes="muted" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="{Binding RedirectUriHint}" />
+
+                    <TextBlock Text="SCOPES" Classes="detail-label" Margin="0,10,0,5" />
+                    <TextBox Text="{Binding Draft.OAuthScopes, Mode=TwoWay}"
+                             AutomationProperties.Name="IVAO sign-in scopes" Classes="mono" />
+                    <TextBlock Classes="muted" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="IVAO approves scopes per application. The tracker scope covers recorded sessions; an application approved without it still reads the public traffic." />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button x:Name="SignInButton" Theme="{StaticResource PrimaryButton}" MinWidth="136"
+                                Content="Sign in with IVAO" AutomationProperties.Name="Sign in with IVAO"
+                                Click="OnSignInClick" />
+                        <Button x:Name="SignOutButton" Theme="{StaticResource GhostButton}" Margin="8,0,0,0"
+                                Content="Sign out" AutomationProperties.Name="Sign out of IVAO"
+                                Click="OnSignOutClick" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding SignInSummary}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding SignInStatus}" Classes="muted" Margin="0,4,0,0"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <Border Grid.Row="2" Background="{DynamicResource PanelBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+                    Padding="22,14">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Theme="{StaticResource PrimaryButton}"
+                            Content="Save settings" AutomationProperties.Name="Save settings"
+                            Click="OnSaveClick" MinWidth="118" />
+                    <Button DockPanel.Dock="Right" Theme="{StaticResource GhostButton}" Content="Cancel"
+                            AutomationProperties.Name="Cancel" Click="OnCancelClick" Margin="0,0,8,0" />
+                    <TextBlock Classes="muted" VerticalAlignment="Center"
+                               Text="Changes apply immediately after saving." />
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

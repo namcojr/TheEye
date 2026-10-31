@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TheEye.Core\TheEye.Core.csproj" />
+    <ProjectReference Include="..\TheEye.Presentation\TheEye.Presentation.csproj" />
     <PackageReference Include="Mapsui.Wpf" Version="5.1.0" />
   </ItemGroup>
 

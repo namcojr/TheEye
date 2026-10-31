@@ -3,7 +3,7 @@ using System.Net;
 using System.Net.Http;
 using TheEye.Core.Api;
 
-namespace TheEye.Windows.Services;
+namespace TheEye.Presentation.Services;
 
 /// <summary>
 /// Outcome of an interactive IVAO sign-in. <see cref="Error"/> is empty on

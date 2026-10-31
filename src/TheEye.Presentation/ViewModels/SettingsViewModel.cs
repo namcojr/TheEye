@@ -1,8 +1,8 @@
-using System.Windows.Media;
 using TheEye.Core.Api;
 using TheEye.Core.Settings;
+using TheEye.Presentation.Theming;
 
-namespace TheEye.Windows.ViewModels;
+namespace TheEye.Presentation.ViewModels;
 
 /// <summary>
 /// Editable copy of the persisted settings. Nothing is written until the user
@@ -17,14 +17,11 @@ public sealed class SettingsViewModel : ObservableObject
         Draft = draft;
         Draft.Normalize();
 
-        ThemeOptions =
-        [
-            CreateThemeOption(TheEyeThemes.Dark, "Dark", "#12171C", "#38BDF8"),
-            CreateThemeOption(TheEyeThemes.Light, "Light", "#F2F5F8", "#0369A1"),
-            CreateThemeOption(TheEyeThemes.MidnightBlue, "Midnight Blue", "#07101F", "#4C9FFF"),
-            CreateThemeOption(TheEyeThemes.Forest, "Forest", "#0D1713", "#6EE7B7"),
-            CreateThemeOption(TheEyeThemes.Sunset, "Sunset", "#1A1210", "#FB923C")
-        ];
+        // The tiles are built from the same table the shells paint with, so a
+        // preview can never drift from the palette it promises.
+        ThemeOptions = ThemeCatalog.All
+            .Select(palette => new ThemeOption(palette.Name, palette.Label, palette.WindowBackground, palette.Accent))
+            .ToList();
 
         IntervalOptions =
         [
@@ -142,9 +139,6 @@ public sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(Draft));
     }
 
-    private ThemeOption CreateThemeOption(string name, string label, string background, string accent) =>
-        new(name, label, Brush(background), Brush(accent));
-
     private void SelectTheme(ThemeOption selected)
     {
         Draft.Theme = selected.Name;
@@ -172,34 +166,29 @@ public sealed class SettingsViewModel : ObservableObject
 
         OnPropertyChanged(nameof(Draft));
     }
-
-    private static SolidColorBrush Brush(string hex)
-    {
-        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
-        brush.Freeze();
-        return brush;
-    }
 }
 
 public sealed class ThemeOption : ObservableObject
 {
     private bool _isSelected;
 
-    public ThemeOption(string name, string label, Brush background, Brush accent)
+    public ThemeOption(string name, string label, string backgroundPreview, string accentPreview)
     {
         Name = name;
         Label = label;
-        BackgroundPreview = background;
-        AccentPreview = accent;
+        BackgroundPreview = backgroundPreview;
+        AccentPreview = accentPreview;
     }
 
     public string Name { get; }
 
     public string Label { get; }
 
-    public Brush BackgroundPreview { get; }
+    /// <summary>The theme's window colour as "#RRGGBB", painted by the view.</summary>
+    public string BackgroundPreview { get; }
 
-    public Brush AccentPreview { get; }
+    /// <summary>The theme's accent colour as "#RRGGBB", painted by the view.</summary>
+    public string AccentPreview { get; }
 
     public bool IsSelected
     {

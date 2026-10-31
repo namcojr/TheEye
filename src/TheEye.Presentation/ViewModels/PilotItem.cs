@@ -1,18 +1,17 @@
-using System.Windows.Media.Imaging;
 using TheEye.Core.Maps;
 using TheEye.Core.Models;
 using TheEye.Core.Reference;
 using TheEye.Core.Services;
-using TheEye.Windows.Services;
+using TheEye.Presentation.Services;
 
-namespace TheEye.Windows.ViewModels;
+namespace TheEye.Presentation.ViewModels;
 
 public sealed class PilotItem : ObservableObject
 {
-    private readonly AircraftIconCache _icons;
-    private readonly RemoteImageCache _images;
+    private readonly IAircraftIconCache _icons;
+    private readonly IImageCache _images;
     private IvaoPilot _pilot;
-    private BitmapImage? _icon;
+    private object? _icon;
     private int? _iconHeading;
     private IvaoSessionDetail? _detail;
     private int? _detailStatus;
@@ -22,14 +21,14 @@ public sealed class PilotItem : ObservableObject
     private bool _flightPlanRequested;
     private int? _flightPlanStatus;
     private string? _flightPlanError;
-    private BitmapImage? _ratingBadge;
-    private BitmapImage? _flagImage;
+    private object? _ratingBadge;
+    private object? _flagImage;
     private double _x;
     private double _y;
     private bool _isVisible;
     private bool _isSelected;
 
-    public PilotItem(IvaoPilot pilot, AircraftIconCache icons, RemoteImageCache images)
+    public PilotItem(IvaoPilot pilot, IAircraftIconCache icons, IImageCache images)
     {
         _pilot = pilot;
         _icons = icons;
@@ -56,6 +55,12 @@ public sealed class PilotItem : ObservableObject
     public string Speed => _pilot.SpeedText;
 
     public string Heading => _pilot.HeadingText;
+
+    /// <summary>
+    /// The same heading as a bearing in degrees, for the shells that rotate the
+    /// marker artwork instead of picking a different icon per heading.
+    /// </summary>
+    public double HeadingAngle => _pilot.LastTrack?.Heading ?? 0;
 
     public string State => _pilot.State;
 
@@ -210,14 +215,14 @@ public sealed class PilotItem : ObservableObject
         : "—";
 
     /// <summary>The pilot rating badge, drawn once the image is decoded.</summary>
-    public BitmapImage? RatingBadge
+    public object? RatingBadge
     {
         get => _ratingBadge;
         private set => SetProperty(ref _ratingBadge, value);
     }
 
     /// <summary>The flag of the member's division, drawn once the image is decoded.</summary>
-    public BitmapImage? FlagImage
+    public object? FlagImage
     {
         get => _flagImage;
         private set => SetProperty(ref _flagImage, value);
@@ -282,7 +287,7 @@ public sealed class PilotItem : ObservableObject
 
     public string SearchText { get; private set; } = string.Empty;
 
-    public BitmapImage? Icon => _icon;
+    public object? Icon => _icon;
 
     public double X
     {

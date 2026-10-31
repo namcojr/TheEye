@@ -1,0 +1,832 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:TheEye.Desktop.Controls"
+        xmlns:mapsui="clr-namespace:Mapsui.UI.Avalonia;assembly=Mapsui.UI.Avalonia"
+        x:Class="TheEye.Desktop.MainWindow"
+        Title="The Eye of IVAO"
+        Icon="/Assets/TheEye.ico"
+        Width="1440" Height="900"
+        MinWidth="1120" MinHeight="680"
+        SystemDecorations="None"
+        WindowState="Maximized"
+        CanResize="True"
+        WindowStartupLocation="CenterScreen">
+
+    <!--
+        The templates the WPF shell keeps in its resource dictionary, spelled with
+        the classes the Avalonia styles define. BoolToVisibility becomes IsVisible
+        (Avalonia hides on false) and the three-state status dot is three stacked
+        ellipses, because Avalonia has no data triggers.
+    -->
+    <Window.Resources>
+        <DataTemplate x:Key="PilotDetailTemplate">
+            <StackPanel>
+                <DockPanel>
+                    <Border DockPanel.Dock="Right" Classes="pill accent" VerticalAlignment="Top">
+                        <TextBlock Text="{Binding State}" FontSize="9" FontWeight="Bold" />
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="{Binding Callsign}" Classes="mono" FontSize="22" FontWeight="Bold" />
+                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                            <TextBlock Text="{Binding Aircraft}" Classes="muted" />
+                            <TextBlock Text="·" Classes="muted" Margin="6,0" />
+                            <TextBlock Text="VID" Classes="muted" Margin="0,0,4,0" />
+                            <TextBlock Text="{Binding PilotId}" Classes="muted" />
+                        </StackPanel>
+                    </StackPanel>
+                </DockPanel>
+
+                <!-- Identity: who is behind the callsign, once IVAO described the session -->
+                <Border Classes="flat-card" Margin="0,12,0,0" Padding="11,9"
+                        IsVisible="{Binding HasProfile}">
+                    <DockPanel>
+                        <Image DockPanel.Dock="Left" Source="{Binding RatingBadge}" Height="20"
+                               Margin="0,0,10,0" VerticalAlignment="Center"
+                               RenderOptions.BitmapInterpolationMode="HighQuality" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ProfileName}" FontSize="12.5" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" />
+                            <Grid Margin="0,3,0,0" ColumnDefinitions="Auto,*,Auto">
+                                <Image Grid.Column="0" Source="{Binding FlagImage}" Height="11"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"
+                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                                <TextBlock Grid.Column="1" Text="{Binding HomeText}" Classes="muted"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <Border Grid.Column="2" Classes="pill" Margin="7,0,0,0" Padding="6,1"
+                                        ToolTip.Tip="{Binding RatingName}">
+                                    <TextBlock Text="{Binding RatingText}" FontSize="9" FontWeight="Bold" />
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- Why the identity block is missing: the roster feed needs a sign-in or a key -->
+                <Border Classes="flat-card" Margin="0,12,0,0" Padding="11,8"
+                        IsVisible="{Binding ProfileNotice, Converter={StaticResource IsNotEmpty}}">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Grid.Column="0" Text="!" FontSize="11" FontWeight="Bold"
+                                   Foreground="{DynamicResource WarningBrush}" Margin="0,1,7,0"
+                                   VerticalAlignment="Top" />
+                        <TextBlock Grid.Column="1" Text="{Binding ProfileNotice}" FontSize="10.5"
+                                   Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+                    </Grid>
+                </Border>
+
+                <Border Classes="divider" Margin="0,12,0,12" />
+
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel>
+                        <TextBlock Text="FROM" Classes="detail-label" />
+                        <TextBlock Text="{Binding Departure}" Classes="mono" FontSize="15"
+                                   FontWeight="Bold" Margin="0,2,0,0" />
+                    </StackPanel>
+                    <TextBlock Text="→" FontSize="13" Foreground="{DynamicResource AccentBrush}"
+                               VerticalAlignment="Center" Margin="16,12,16,0" />
+                    <StackPanel>
+                        <TextBlock Text="TO" Classes="detail-label" />
+                        <TextBlock Text="{Binding Arrival}" Classes="mono" FontSize="15"
+                                   FontWeight="Bold" Margin="0,2,0,0" />
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock Text="{Binding DepartureName}" Classes="muted"
+                           Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding ArrivalName}" Classes="muted" TextTrimming="CharacterEllipsis" />
+
+                <Border Classes="divider" Margin="0,12,0,12" />
+
+                <Grid ColumnDefinitions="*,*"
+                      RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="ALTITUDE" Classes="detail-label" />
+                        <TextBlock Text="{Binding Altitude}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="GROUND SPEED" Classes="detail-label" />
+                        <TextBlock Text="{Binding Speed}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="HEADING" Classes="detail-label" />
+                        <TextBlock Text="{Binding Heading}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="TRANSPONDER" Classes="detail-label" />
+                        <TextBlock Text="{Binding Transponder}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="TIME ONLINE" Classes="detail-label" />
+                        <TextBlock Text="{Binding OnlineText}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="EST. ARRIVAL" Classes="detail-label" />
+                        <TextBlock Text="{Binding EtaText}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="FLIGHT RULES" Classes="detail-label" />
+                        <TextBlock Text="{Binding FlightRules}" Classes="value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="FLIGHT TYPE" Classes="detail-label" />
+                        <TextBlock Text="{Binding FlightType}" Classes="value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="4" Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock Text="CRUISE LEVEL" Classes="detail-label" />
+                        <TextBlock Text="{Binding CruisingLevel}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="4" Grid.Column="1">
+                        <TextBlock Text="CRUISE SPEED" Classes="detail-label" />
+                        <TextBlock Text="{Binding CruisingSpeed}" Classes="mono value" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Connection: the client, simulator and server the member is on -->
+                <Border Classes="flat-card" Margin="0,12,0,0" Padding="11,9"
+                        IsVisible="{Binding HasProfile}">
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,8"
+                                    ToolTip.Tip="{Binding SoftwareText}">
+                            <TextBlock Text="SOFTWARE" Classes="detail-label" />
+                            <TextBlock Text="{Binding SoftwareText}" Classes="value" Margin="0"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,8"
+                                    ToolTip.Tip="{Binding SimulatorText}">
+                            <TextBlock Text="SIMULATOR" Classes="detail-label" />
+                            <TextBlock Text="{Binding SimulatorText}" Classes="value" Margin="0"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,0"
+                                    ToolTip.Tip="{Binding ServerText}">
+                            <TextBlock Text="SERVER" Classes="detail-label" />
+                            <TextBlock Text="{Binding ServerText}" Classes="value" Margin="0"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" ToolTip.Tip="{Binding ConnectedText}">
+                            <TextBlock Text="CONNECTED" Classes="detail-label" />
+                            <TextBlock Text="{Binding ConnectedText}" Classes="value" Margin="0"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Classes="divider" Margin="0,12,0,12" />
+
+                <TextBlock Text="ROUTE" Classes="detail-label" />
+                <TextBlock Text="{Binding RouteText}" Classes="mono value" Margin="0,3,0,0"
+                           TextWrapping="Wrap" MaxHeight="88" />
+
+                <Grid Margin="0,12,0,0" ColumnDefinitions="*,*">
+                    <StackPanel>
+                        <TextBlock Text="POSITION" Classes="detail-label" />
+                        <TextBlock Text="{Binding PositionText}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="LAST SEEN" Classes="detail-label" />
+                        <TextBlock Text="{Binding LastSeenText}" Classes="mono value" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- The filed plan: only there once the detail feed described it -->
+                <Border Classes="divider" Margin="0,3,0,12"
+                        IsVisible="{Binding HasFlightPlanDetails}" />
+
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto"
+                      IsVisible="{Binding HasFlightPlanDetails}">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="EET" Classes="detail-label" />
+                        <TextBlock Text="{Binding EstimatedEnroute}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="ENDURANCE" Classes="detail-label" />
+                        <TextBlock Text="{Binding Endurance}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="ALTERNATE" Classes="detail-label" />
+                        <TextBlock Text="{Binding Alternate}" Classes="mono value" />
+                    </StackPanel>
+                    <!-- The second alternate is only worth a row when the plan
+                         filed one, which is what the Windows shell does too. -->
+                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,10"
+                                IsVisible="{Binding HasSecondAlternate}">
+                        <TextBlock Text="SECOND ALTERNATE" Classes="detail-label" />
+                        <TextBlock Text="{Binding Alternate2}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="FILED OFF-BLOCKS" Classes="detail-label" />
+                        <TextBlock Text="{Binding FiledDepartureText}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="ACTUAL OFF-BLOCKS" Classes="detail-label" />
+                        <TextBlock Text="{Binding ActualDepartureText}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock Text="PEOPLE ON BOARD" Classes="detail-label" />
+                        <TextBlock Text="{Binding PeopleOnBoardText}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="3" Grid.Column="1" ToolTip.Tip="{Binding TransponderTypeText}">
+                        <TextBlock Text="TRANSPONDER CAPABILITY" Classes="detail-label" />
+                        <TextBlock Text="{Binding TransponderTypeText}" Classes="mono value"
+                                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Margin="0,0,0,9" IsVisible="{Binding HasFlightPlanDetails}"
+                            ToolTip.Tip="{Binding EquipmentText}">
+                    <TextBlock Text="EQUIPMENT" Classes="detail-label" />
+                    <TextBlock Text="{Binding EquipmentText}" Classes="mono value" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <Border Classes="flat-card" Margin="0,3,0,0" Padding="11,8"
+                        IsVisible="{Binding FlightPlanNotice, Converter={StaticResource IsNotEmpty}}">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Grid.Column="0" Text="!" FontSize="11" FontWeight="Bold"
+                                   Foreground="{DynamicResource WarningBrush}" Margin="0,1,7,0"
+                                   VerticalAlignment="Top" />
+                        <TextBlock Grid.Column="1" Text="{Binding FlightPlanNotice}" FontSize="10.5"
+                                   Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+                    </Grid>
+                </Border>
+
+                <StackPanel Margin="0,12,0,0"
+                            IsVisible="{Binding Remarks, Converter={StaticResource IsNotEmpty}}">
+                    <TextBlock Text="REMARKS" Classes="detail-label" />
+                    <TextBlock Text="{Binding Remarks}" Classes="muted" Margin="0,3,0,0"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <DataTemplate x:Key="AtcDetailTemplate">
+            <StackPanel>
+                <DockPanel>
+                    <Border DockPanel.Dock="Right" VerticalAlignment="Top"
+                            Background="{Binding AccentSoftColor, Converter={StaticResource HexToBrush}}"
+                            BorderBrush="{Binding AccentColor, Converter={StaticResource HexToBrush}}"
+                            BorderThickness="1" CornerRadius="8" Padding="7,3">
+                        <TextBlock Text="{Binding Facility}" FontSize="9" FontWeight="Bold"
+                                   Foreground="{Binding AccentColor, Converter={StaticResource HexToBrush}}" />
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="{Binding Callsign}" Classes="mono" FontSize="22" FontWeight="Bold" />
+                        <Grid Margin="0,2,0,0" ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding StationName}" Classes="muted"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
+                                <TextBlock Text="VID" Classes="muted" Margin="0,0,4,0" />
+                                <TextBlock Text="{Binding ControllerId}" Classes="muted" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </DockPanel>
+
+                <!-- Identity: who is on the frequency, once IVAO described the session -->
+                <Border Classes="flat-card" Margin="0,12,0,0" Padding="11,9"
+                        IsVisible="{Binding HasProfile}">
+                    <DockPanel>
+                        <Image DockPanel.Dock="Left" Source="{Binding RatingBadge}" Height="20"
+                               Margin="0,0,10,0" VerticalAlignment="Center"
+                               RenderOptions.BitmapInterpolationMode="HighQuality" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ProfileName}" FontSize="12.5" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" />
+                            <Grid Margin="0,3,0,0" ColumnDefinitions="Auto,*,Auto">
+                                <Image Grid.Column="0" Source="{Binding FlagImage}" Height="11"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"
+                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                                <TextBlock Grid.Column="1" Text="{Binding HomeText}" Classes="muted"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <Border Grid.Column="2" Classes="pill" Margin="7,0,0,0" Padding="6,1"
+                                        ToolTip.Tip="{Binding RatingName}">
+                                    <TextBlock Text="{Binding RatingText}" FontSize="9" FontWeight="Bold" />
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- Why the identity block is missing: the roster feed needs a sign-in or a key -->
+                <Border Classes="flat-card" Margin="0,12,0,0" Padding="11,8"
+                        IsVisible="{Binding ProfileNotice, Converter={StaticResource IsNotEmpty}}">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Grid.Column="0" Text="!" FontSize="11" FontWeight="Bold"
+                                   Foreground="{DynamicResource WarningBrush}" Margin="0,1,7,0"
+                                   VerticalAlignment="Top" />
+                        <TextBlock Grid.Column="1" Text="{Binding ProfileNotice}" FontSize="10.5"
+                                   Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+                    </Grid>
+                </Border>
+
+
+                <Border Classes="divider" Margin="0,12,0,12" />
+
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="FREQUENCY" Classes="detail-label" />
+                        <TextBlock Text="{Binding Frequency}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="SCOPE" Classes="detail-label" />
+                        <TextBlock Text="{Binding Scope}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,10">
+                        <TextBlock Text="AIRPORT" Classes="detail-label" />
+                        <TextBlock Text="{Binding AirportIcao}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,10">
+                        <TextBlock Text="SECTOR POINTS" Classes="detail-label" />
+                        <TextBlock Text="{Binding SectorPoints}" Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,0"
+                                IsVisible="{Binding HasAirport}">
+                        <TextBlock Text="CITY" Classes="detail-label" />
+                        <TextBlock Text="{Binding City}" Classes="value"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="1" IsVisible="{Binding HasAirport}">
+                        <TextBlock Text="COUNTRY" Classes="detail-label" />
+                        <TextBlock Text="{Binding CountryName}" Classes="value"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Classes="divider" Margin="0,12,0,12" />
+
+                <TextBlock Text="STATION POSITION" Classes="detail-label" />
+                <TextBlock Text="{Binding PositionText}" Classes="mono value" Margin="0,3,0,0" />
+                <TextBlock Text="{Binding AirportName}" Classes="muted" Margin="0,8,0,0"
+                           TextWrapping="Wrap" IsVisible="{Binding HasAirport}" />
+
+                <!-- Connection: the client and server the controller is on -->
+                <Border Classes="flat-card" Margin="0,12,0,0" Padding="11,9"
+                        IsVisible="{Binding HasProfile}">
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,8"
+                                    ToolTip.Tip="{Binding SoftwareText}">
+                            <TextBlock Text="SOFTWARE" Classes="detail-label" />
+                            <TextBlock Text="{Binding SoftwareText}" Classes="value" Margin="0"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,8"
+                                    ToolTip.Tip="{Binding ServerText}">
+                            <TextBlock Text="SERVER" Classes="detail-label" />
+                            <TextBlock Text="{Binding ServerText}" Classes="value" Margin="0"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="TIME ONLINE" Classes="detail-label" />
+                            <TextBlock Text="{Binding OnlineText}" Classes="value" Margin="0" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" ToolTip.Tip="{Binding ConnectedText}">
+                            <TextBlock Text="CONNECTED" Classes="detail-label" />
+                            <TextBlock Text="{Binding ConnectedText}" Classes="value" Margin="0" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
+
+    <!-- The window frame: the same 46 / * / 28 rows the Windows chrome draws. -->
+    <Panel>
+        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid RowDefinitions="46,*,28">
+
+                <!-- Caption: brand, live status and the window buttons -->
+                <Border Grid.Row="0" Background="{DynamicResource HeaderBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                        PointerPressed="OnTitleBarPressed">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
+                            <Border Width="27" Height="27" CornerRadius="7"
+                                    Background="{DynamicResource SelectionBrush}"
+                                    BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1">
+                                <Path HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Fill="{DynamicResource AccentBrush}"
+                                      Data="M 1,8 C 4,2 14,2 17,8 C 14,14 4,14 1,8 Z M 9,5 A 3,3 0 1 1 9,11 A 3,3 0 1 1 9,5 Z" />
+                            </Border>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="THE EYE OF IVAO" FontSize="11" FontWeight="Bold" />
+                                <TextBlock Text="LIVE NETWORK OVERVIEW" FontSize="8" FontWeight="Bold"
+                                           Foreground="{DynamicResource MutedTextBrush}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <!-- Success stays visible underneath; warnings and errors
+                                 stack on top, so the dot always shows the worst state. -->
+                            <Panel Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center">
+                                <Ellipse Fill="{DynamicResource SuccessBrush}" />
+                                <Ellipse Fill="{DynamicResource WarningBrush}"
+                                         IsVisible="{Binding HasWarnings}" />
+                                <Ellipse Fill="{DynamicResource ErrorBrush}"
+                                         IsVisible="{Binding HasError}" />
+                            </Panel>
+                            <TextBlock Text="{Binding StatusText}" FontSize="10.5"
+                                       FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Border Width="1" Height="12" Margin="12,0"
+                                    Background="{DynamicResource BorderBrush}" />
+                            <TextBlock Text="{Binding LastUpdatedText}" Classes="muted"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Theme="{StaticResource WindowButton}" ToolTip.Tip="Settings"
+                                    AutomationProperties.Name="Settings" Click="OnSettingsClick">
+                                <TextBlock Text="⚙" FontSize="12" VerticalAlignment="Center" />
+                            </Button>
+                            <Button Theme="{StaticResource WindowButton}" ToolTip.Tip="Minimize"
+                                    AutomationProperties.Name="Minimize" Click="OnMinimizeClick">
+                                <Path Data="M 0,0 L 10,0" StrokeThickness="1" Width="10" Height="2"
+                                      Stretch="None"
+                                      Stroke="{Binding $parent[Button].Foreground}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Button>
+                            <Button x:Name="MaximizeButton" Theme="{StaticResource WindowButton}"
+                                    ToolTip.Tip="Maximize" AutomationProperties.Name="Maximize"
+                                    Click="OnMaximizeClick">
+                                <Path x:Name="MaximizeGlyph" Stretch="None" StrokeThickness="1"
+                                      Width="10" Height="10"
+                                      Stroke="{Binding $parent[Button].Foreground}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Data="M 0.5,0.5 L 9.5,0.5 L 9.5,9.5 L 0.5,9.5 Z" />
+                            </Button>
+                            <Button Theme="{StaticResource CloseWindowButton}" ToolTip.Tip="Close"
+                                    AutomationProperties.Name="Close" Click="OnCloseClick">
+                                <Path Data="M 0,0 L 9,9 M 9,0 L 0,9" StrokeThickness="1"
+                                      Width="9" Height="9" Stretch="None"
+                                      Stroke="{Binding $parent[Button].Foreground}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+
+                <Grid Grid.Row="1" ColumnDefinitions="322,*,348">
+
+                    <!-- Traffic browser -->
+                    <Border Grid.Column="0" Background="{DynamicResource PanelBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+                        <Grid RowDefinitions="Auto,*">
+                            <StackPanel Margin="14,14,14,10">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Theme="{StaticResource IconButton}"
+                                            ToolTip.Tip="Refresh now" AutomationProperties.Name="Refresh now"
+                                            Command="{Binding RefreshCommand}">
+                                        <TextBlock Text="↻" FontSize="14" VerticalAlignment="Center" />
+                                    </Button>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="LIVE TRAFFIC" Classes="section" />
+                                        <TextBlock Text="{Binding LastUpdatedText}" Classes="muted"
+                                                   Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </DockPanel>
+
+                                <Grid Margin="0,11,0,0" ColumnDefinitions="*,*,*">
+                                    <Border Grid.Column="0" Classes="tile">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding PilotCount}" Classes="metric-value" />
+                                            <TextBlock Text="PILOTS" Classes="metric-label" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="1" Classes="tile">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding AtcCount}" Classes="metric-value" />
+                                            <TextBlock Text="CONTROLLERS" Classes="metric-label" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="2" Classes="tile" Margin="0">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding TotalCount}" Classes="metric-value" />
+                                            <TextBlock Text="CONNECTIONS" Classes="metric-label" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <Grid Margin="0,7,0,0" ColumnDefinitions="*,*,*">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <TextBlock Text="{Binding ObserverCount}" Classes="mono"
+                                                   FontWeight="SemiBold" />
+                                        <TextBlock Text=" obs" Classes="muted" Margin="2,0,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <TextBlock Text="{Binding SupervisorCount}" Classes="mono"
+                                                   FontWeight="SemiBold" />
+                                        <TextBlock Text=" sup" Classes="muted" Margin="2,0,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                        <TextBlock Text="{Binding UniqueUsers24h}" Classes="mono"
+                                                   FontWeight="SemiBold" />
+                                        <TextBlock Text=" /24h" Classes="muted" Margin="2,0,0,0" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBox Text="{Binding SearchText, Mode=TwoWay}"
+                                         Watermark="Filter by callsign, route, airport…"
+                                         Margin="0,12,0,0"
+                                         ToolTip.Tip="Filter by callsign, route, airport, facility or country"
+                                         AutomationProperties.Name="Filter traffic" />
+                            </StackPanel>
+
+
+                            <TabControl Grid.Row="1" SelectedIndex="0">
+                                <TabItem AutomationProperties.Name="Pilots">
+                                    <TabItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="PILOTS" />
+                                            <TextBlock Text="{Binding PilotCount}" Margin="6,0,0,0"
+                                                       Foreground="{DynamicResource AccentBrush}" />
+                                        </StackPanel>
+                                    </TabItem.Header>
+                                    <Grid RowDefinitions="Auto,*">
+                                        <Grid ColumnDefinitions="96,*,76" Margin="14,8,14,6">
+                                            <TextBlock Grid.Column="0" Text="CALLSIGN"
+                                                       Classes="detail-label" />
+                                            <TextBlock Grid.Column="1" Text="ROUTE" Classes="detail-label" />
+                                            <TextBlock Grid.Column="2" Text="ALT" Classes="detail-label"
+                                                       HorizontalAlignment="Right" Margin="0" />
+                                        </Grid>
+                                        <ListBox Grid.Row="1" Classes="traffic"
+                                                 ItemsSource="{Binding PilotsView}"
+                                                 SelectedItem="{Binding SelectedPilot, Mode=TwoWay}"
+                                                 AutomationProperties.Name="Pilot list"
+                                                 DoubleTapped="OnTrafficDoubleTapped">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid ColumnDefinitions="96,*,76" Margin="14,0">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Callsign}"
+                                                                   Classes="mono" FontWeight="SemiBold"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding RouteLabel}"
+                                                                   Classes="muted"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="2" Text="{Binding Altitude}"
+                                                                   Classes="mono"
+                                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                                   VerticalAlignment="Center"
+                                                                   HorizontalAlignment="Right" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </TabItem>
+                                <TabItem AutomationProperties.Name="ATC">
+                                    <TabItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="ATC" />
+                                            <TextBlock Text="{Binding AtcCount}" Margin="6,0,0,0"
+                                                       Foreground="{DynamicResource AccentBrush}" />
+                                        </StackPanel>
+                                    </TabItem.Header>
+                                    <Grid RowDefinitions="Auto,*">
+                                        <Grid ColumnDefinitions="96,*,76" Margin="14,8,14,6">
+                                            <TextBlock Grid.Column="0" Text="CALLSIGN"
+                                                       Classes="detail-label" />
+                                            <TextBlock Grid.Column="1" Text="FACILITY"
+                                                       Classes="detail-label" />
+                                            <TextBlock Grid.Column="2" Text="FREQ" Classes="detail-label"
+                                                       HorizontalAlignment="Right" Margin="0" />
+                                        </Grid>
+                                        <ListBox Grid.Row="1" Classes="traffic"
+                                                 ItemsSource="{Binding AtcView}"
+                                                 SelectedItem="{Binding SelectedAtc, Mode=TwoWay}"
+                                                 AutomationProperties.Name="ATC list"
+                                                 DoubleTapped="OnTrafficDoubleTapped">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid ColumnDefinitions="96,*,76" Margin="14,0">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Callsign}"
+                                                                   Classes="mono" FontWeight="SemiBold"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{Binding FacilityName}"
+                                                                   Classes="muted"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="2" Text="{Binding Frequency}"
+                                                                   Classes="mono"
+                                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                                   VerticalAlignment="Center"
+                                                                   HorizontalAlignment="Right" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </TabItem>
+                            </TabControl>
+                        </Grid>
+                    </Border>
+
+
+
+                    <!-- Offline world map with the aircraft pins layered on top -->
+                    <Grid Grid.Column="1" Background="{DynamicResource MapWaterBrush}" ClipToBounds="True"
+                          PointerWheelChanged="OnMapWheel">
+                        <mapsui:MapControl x:Name="MapView" Map="{Binding Map.Map}"
+                                           MapTapped="OnMapTapped" />
+
+                        <!-- Every pin is placed in screen pixels by the view model, so
+                             panning and zooming moves it without this overlay knowing
+                             anything about the map. -->
+                        <ItemsControl ItemsSource="{Binding Map.Pilots}"
+                                      IsVisible="{Binding ShowPilots}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <controls:AircraftCanvas />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemContainerTheme>
+                                <ControlTheme TargetType="ContentPresenter">
+                                    <Setter Property="Canvas.Left" Value="{Binding X}" />
+                                    <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                                    <Setter Property="IsVisible" Value="{Binding IsVisible}" />
+                                </ControlTheme>
+                            </ItemsControl.ItemContainerTheme>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Theme="{StaticResource PilotMarkerButton}"
+                                            ToolTip.Tip="{Binding Tooltip}"
+                                            Click="OnPilotMarkerClick" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"
+                                    VerticalAlignment="Top" Margin="14">
+                            <ToggleButton Content="PILOTS" IsChecked="{Binding ShowPilots, Mode=TwoWay}"
+                                          Margin="0,0,6,0" ToolTip.Tip="Show or hide aircraft" />
+                            <ToggleButton Content="ATC" IsChecked="{Binding ShowAtc, Mode=TwoWay}"
+                                          ToolTip.Tip="Show or hide controllers, sectors and stations" />
+                        </StackPanel>
+
+                        <Border Classes="map-overlay" HorizontalAlignment="Right"
+                                VerticalAlignment="Top" Margin="14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding ConnectionDescription}" Classes="muted"
+                                           FontSize="10" />
+                                <TextBlock Text="{Binding RefreshDescription}" Classes="muted"
+                                           FontSize="10" Margin="0,1,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,14">
+                            <Border Background="{DynamicResource PanelBackgroundBrush}"
+                                    BorderBrush="{DynamicResource ErrorBrush}" BorderThickness="1"
+                                    CornerRadius="6" Padding="12,7" Margin="0,0,0,6"
+                                    IsVisible="{Binding HasError}">
+                                <TextBlock Text="{Binding ErrorMessage}"
+                                           Foreground="{DynamicResource ErrorBrush}" FontSize="11"
+                                           TextWrapping="Wrap" MaxWidth="520" />
+                            </Border>
+                            <Border Background="{DynamicResource PanelBackgroundBrush}"
+                                    BorderBrush="{DynamicResource WarningBrush}" BorderThickness="1"
+                                    CornerRadius="6" Padding="12,7"
+                                    IsVisible="{Binding HasWarnings}">
+                                <TextBlock Text="{Binding WarningText}"
+                                           Foreground="{DynamicResource WarningBrush}" FontSize="11"
+                                           TextWrapping="Wrap" MaxWidth="520" />
+                            </Border>
+                            <Border Background="{DynamicResource PanelBackgroundBrush}"
+                                    BorderBrush="{DynamicResource WarningBrush}" BorderThickness="1"
+                                    CornerRadius="6" Padding="12,7" Margin="0,6,0,0"
+                                    IsVisible="{Binding HasTrackNotice}">
+                                <TextBlock Text="{Binding TrackNotice}"
+                                           Foreground="{DynamicResource WarningBrush}" FontSize="11"
+                                           TextWrapping="Wrap" MaxWidth="520" />
+                            </Border>
+                        </StackPanel>
+
+
+                        <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="14">
+                            <Button Theme="{StaticResource SquareButton}" ToolTip.Tip="Zoom in"
+                                    AutomationProperties.Name="Zoom in"
+                                    Command="{Binding ZoomInCommand}" Margin="0,0,0,5">
+                                <TextBlock Text="+" FontSize="14" VerticalAlignment="Center" />
+                            </Button>
+                            <Button Theme="{StaticResource SquareButton}" ToolTip.Tip="Zoom out"
+                                    AutomationProperties.Name="Zoom out"
+                                    Command="{Binding ZoomOutCommand}" Margin="0,0,0,5">
+                                <TextBlock Text="−" FontSize="14" VerticalAlignment="Center" />
+                            </Button>
+                            <Button Theme="{StaticResource SquareButton}"
+                                    ToolTip.Tip="Reset the world view"
+                                    AutomationProperties.Name="Reset view"
+                                    Command="{Binding HomeCommand}">
+                                <TextBlock Text="⌂" FontSize="13" VerticalAlignment="Center" />
+                            </Button>
+                        </StackPanel>
+
+                        <Border Classes="map-overlay" HorizontalAlignment="Left"
+                                VerticalAlignment="Bottom" Margin="14">
+                            <TextBlock Classes="muted" FontSize="9.5"
+                                       Text="DRAG TO PAN  ·  SCROLL TO ZOOM  ·  CLICK TO SELECT" />
+                        </Border>
+                    </Grid>
+
+
+
+                    <!-- Selection detail pane -->
+                    <Border Grid.Column="2" Background="{DynamicResource PanelBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0">
+                        <Grid RowDefinitions="Auto,*">
+                            <Border Background="{DynamicResource HeaderBackgroundBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                                    Padding="14,11">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Theme="{StaticResource IconButton}"
+                                            ToolTip.Tip="Clear selection"
+                                            AutomationProperties.Name="Clear selection"
+                                            Command="{Binding ClearSelectionCommand}"
+                                            VerticalAlignment="Center">
+                                        <Path Data="M 0,0 L 9,9 M 9,0 L 0,9" StrokeThickness="1"
+                                              Width="9" Height="9" Stretch="None"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Button>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="SELECTION" Classes="section" />
+                                        <TextBlock Text="Click a marker, sector or list row"
+                                                   Classes="muted" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                          Padding="16,14,16,18">
+                                <Grid>
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                Margin="0,60,0,0"
+                                                IsVisible="{Binding HasSelection, Converter={StaticResource Not}}">
+                                        <Border Width="44" Height="44" CornerRadius="22"
+                                                HorizontalAlignment="Center"
+                                                Background="{DynamicResource PanelAltBackgroundBrush}">
+                                            <Path HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.3"
+                                                  Width="20" Height="14" Stretch="None"
+                                                  Data="M 1,7 C 4,2 16,2 19,7 C 16,12 4,12 1,7 Z M 10,4.4 A 2.6,2.6 0 1 1 10,9.6 A 2.6,2.6 0 1 1 10,4.4 Z" />
+                                        </Border>
+                                        <TextBlock Text="Nothing selected" FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center" Margin="0,12,0,0" />
+                                        <TextBlock Text="Pick an aircraft or controller to inspect the live flight plan, telemetry and radio details."
+                                                   Classes="muted" TextAlignment="Center"
+                                                   TextWrapping="Wrap" MaxWidth="230" Margin="0,5,0,0" />
+                                    </StackPanel>
+
+                                    <ContentControl Content="{Binding SelectedPilot}"
+                                                    ContentTemplate="{StaticResource PilotDetailTemplate}"
+                                                    IsVisible="{Binding SelectedPilot, Converter={StaticResource IsNotNull}}" />
+                                    <ContentControl Content="{Binding SelectedAtc}"
+                                                    ContentTemplate="{StaticResource AtcDetailTemplate}"
+                                                    IsVisible="{Binding SelectedAtc, Converter={StaticResource IsNotNull}}" />
+                                </Grid>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- Status bar: live connection facts and the two settings entries -->
+                <Border Grid.Row="2" Background="{DynamicResource HeaderBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
+                    <DockPanel Margin="14,0" VerticalAlignment="Center">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="{Binding RefreshDescription}" Classes="muted"
+                                       VerticalAlignment="Center" />
+                            <Border Width="1" Height="11" Margin="10,0"
+                                    Background="{DynamicResource BorderBrush}" />
+                            <TextBlock Text="{Binding ThemeDescription}" Classes="muted"
+                                       VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <Button Theme="{StaticResource GhostButton}" Content="SETTINGS"
+                                    Height="20" Padding="8,0" FontSize="9"
+                                    Click="OnSettingsClick" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentBrush}"
+                                     Margin="0,0,7,0" />
+                            <TextBlock Text="{Binding StatusText}" Classes="mono" FontSize="10"
+                                       VerticalAlignment="Center" />
+                            <Border Width="1" Height="11" Margin="10,0"
+                                    Background="{DynamicResource BorderBrush}" />
+                            <TextBlock Text="{Binding ConnectionDescription}" Classes="muted"
+                                       VerticalAlignment="Center" />
+                            <Border Width="1" Height="11" Margin="10,0"
+                                    Background="{DynamicResource BorderBrush}" />
+                            <TextBlock Classes="muted" VerticalAlignment="Center"
+                                       Text="{Binding Map.Pilots.Count, StringFormat='{}{0} aircraft tracked'}" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Panel>
+</Window>

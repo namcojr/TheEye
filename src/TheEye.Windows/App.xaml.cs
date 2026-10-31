@@ -2,8 +2,9 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using TheEye.Core.Settings;
+using TheEye.Presentation.Threading;
+using TheEye.Presentation.ViewModels;
 using TheEye.Windows.Services;
-using TheEye.Windows.ViewModels;
 
 namespace TheEye.Windows;
 
@@ -20,11 +21,16 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
+        // The shared view models marshal through this dispatcher, and the WPF
+        // pipeline decodes the pictures they ask for, before the first one runs.
+        UiThread.Initialize(new WpfDispatcher());
+
         var store = new SettingsStore();
         var settings = store.Load();
-        ThemeService.Apply(settings.Theme);
+        var theme = new WpfThemeService();
+        theme.Apply(settings.Theme);
 
-        _viewModel = new MainViewModel(store, settings);
+        _viewModel = new MainViewModel(store, settings, theme, new WpfImagePipeline());
         _viewModel.Initialize();
 
         var window = new MainWindow

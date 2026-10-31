@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Windows;
 using Mapsui;
 using Mapsui.Extensions;
 using Mapsui.Layers;
@@ -8,15 +7,15 @@ using TheEye.Core.Maps;
 using TheEye.Core.Models;
 using TheEye.Core.Reference;
 using TheEye.Core.Services;
-using TheEye.Windows.Services;
+using TheEye.Presentation.Services;
 
-namespace TheEye.Windows.ViewModels;
+namespace TheEye.Presentation.ViewModels;
 
 /// <summary>
 /// Owns the Mapsui map, the theme palettes handed to it, and the live pilot and
-/// ATC collections. Pilot markers are WPF elements (an ItemsControl layered over
-/// the map) so they get the full themed <c>PilotMarkerButton</c> styling and a
-/// native tooltip, while ATC sectors are rendered natively by Mapsui.
+/// ATC collections. Pilot markers are UI elements (an ItemsControl layered over
+/// the map) so they get the full themed marker styling and a native tooltip,
+/// while ATC sectors are rendered natively by Mapsui.
 /// </summary>
 public sealed class MapViewModel : ObservableObject, IDisposable
 {
@@ -29,8 +28,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     /// </summary>
     private const double MinimumFrameSize = 40000;
 
-    private readonly AircraftIconCache _icons = new();
-    private readonly RemoteImageCache _images = new();
+    private readonly IAircraftIconCache _icons;
+    private readonly IImageCache _images;
+    private readonly IImagePipeline _pipeline;
     private readonly Dictionary<long, PilotItem> _pilotsById = [];
     private readonly Dictionary<long, AtcItem> _atcById = [];
 
@@ -56,8 +56,13 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private string _airportsKey = string.Empty;
     private bool _disposed;
 
-    public MapViewModel()
+    public MapViewModel(IImagePipeline images)
     {
+        ArgumentNullException.ThrowIfNull(images);
+
+        _pipeline = images;
+        _icons = images.AircraftIcons;
+        _images = images.SessionImages;
         Pilots = [];
         Atc = [];
     }
@@ -91,14 +96,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         get => _showPilots;
         set
         {
-            if (SetProperty(ref _showPilots, value))
-            {
-                OnPropertyChanged(nameof(PilotsVisibility));
-            }
+            SetProperty(ref _showPilots, value);
         }
     }
-
-    public Visibility PilotsVisibility => ShowPilots ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     /// When true, picking something on the map — an aircraft marker, a station
@@ -513,7 +513,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         _disposed = true;
-        _images.Dispose();
+        _pipeline.Dispose();
         if (Map is not null)
         {
             Map.Navigator.ViewportChanged -= OnViewportChanged;

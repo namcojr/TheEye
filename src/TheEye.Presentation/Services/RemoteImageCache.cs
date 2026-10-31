@@ -1,28 +1,32 @@
 using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
-using System.Windows.Media.Imaging;
 
-namespace TheEye.Windows.Services;
+namespace TheEye.Presentation.Services;
 
 /// <summary>
 /// Downloads the small pictures a pilot card shows — IVAO rating badges and
-/// national flags — once per address and shares the frozen frames between
+/// national flags — once per address and shares the decoded frames between
 /// selections. A picture that cannot be fetched is remembered as missing, so a
 /// badge IVAO does not publish is not requested again for every member who
 /// holds it. Nothing is written to disk: these files are a few kilobytes and
-/// the memory lasts as long as the window.
+/// the memory lasts as long as the window. The decoded type is the shell's: a
+/// WPF <c>BitmapImage</c> or an Avalonia <c>Bitmap</c>.
 /// </summary>
-public sealed class RemoteImageCache : IDisposable
+public sealed class RemoteImageCache<TImage> : IImageCache
+    where TImage : class
 {
-    private readonly ConcurrentDictionary<string, BitmapImage> _images = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, Task<BitmapImage?>> _requests = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, TImage> _images = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Task<TImage?>> _requests = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Func<Stream, TImage> _decode;
     private readonly HttpClient _http;
     private readonly bool _ownsHttpClient;
     private bool _disposed;
 
-    public RemoteImageCache(HttpClient? httpClient = null)
+    public RemoteImageCache(Func<Stream, TImage> decode, HttpClient? httpClient = null)
     {
+        _decode = decode ?? throw new ArgumentNullException(nameof(decode));
+
         // A client handed in belongs to the caller and is left alone; one made
         // here is this cache's to dispose, which is what the window does when it
         // closes. A shared static client would be disposed by the first window
@@ -35,7 +39,7 @@ public sealed class RemoteImageCache : IDisposable
     /// The picture when it is already decoded, so a card that is drawn again can
     /// paint its badge and flag without a blank frame first.
     /// </summary>
-    public BitmapImage? TryGet(string? url) =>
+    public object? TryGet(string? url) =>
         !string.IsNullOrWhiteSpace(url) && _images.TryGetValue(url, out var image) ? image : null;
 
     /// <summary>
@@ -44,20 +48,27 @@ public sealed class RemoteImageCache : IDisposable
     /// rest of the run; cancelling one caller does not cancel the download the
     /// others are waiting for.
     /// </summary>
-    public Task<BitmapImage?> GetAsync(string? url, CancellationToken cancellationToken = default)
+    public async Task<object?> GetAsync(string? url, CancellationToken cancellationToken = default)
+    {
+        var request = GetImageAsync(url);
+        return cancellationToken.CanBeCanceled
+            ? await request.WaitAsync(cancellationToken)
+            : await request;
+    }
+
+    private Task<TImage?> GetImageAsync(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            return Task.FromResult<BitmapImage?>(null);
+            return Task.FromResult<TImage?>(null);
         }
 
         if (_images.TryGetValue(url, out var cached))
         {
-            return Task.FromResult<BitmapImage?>(cached);
+            return Task.FromResult<TImage?>(cached);
         }
 
-        var request = _requests.GetOrAdd(url, DownloadAsync);
-        return cancellationToken.CanBeCanceled ? request.WaitAsync(cancellationToken) : request;
+        return _requests.GetOrAdd(url, DownloadAsync);
     }
 
     public void Dispose()
@@ -74,7 +85,7 @@ public sealed class RemoteImageCache : IDisposable
         }
     }
 
-    private async Task<BitmapImage?> DownloadAsync(string url)
+    private async Task<TImage?> DownloadAsync(string url)
     {
         try
         {
@@ -84,14 +95,12 @@ public sealed class RemoteImageCache : IDisposable
                 return null;
             }
 
-            // The stream of a network read cannot be seeked, and WPF cannot finish
-            // loading — let alone freeze — a picture from a stream it cannot
-            // rewind: the frame stayed unfreezable and the card silently showed
-            // nothing. A badge or a flag is a few kilobytes, so the bytes are
-            // pulled into memory and decoded from there.
+            // A badge or a flag is a few kilobytes, so the bytes are pulled into
+            // memory and decoded from a seekable stream: both imaging stacks want
+            // to read a picture twice.
             var bytes = await response.Content.ReadAsByteArrayAsync();
             using var buffer = new MemoryStream(bytes, writable: false);
-            var image = Decode(buffer);
+            var image = _decode(buffer);
             _images[url] = image;
             return image;
         }
@@ -102,19 +111,6 @@ public sealed class RemoteImageCache : IDisposable
             // an image: the card simply has nothing to draw.
             return null;
         }
-    }
-
-    private static BitmapImage Decode(Stream stream)
-    {
-        var image = new BitmapImage();
-        image.BeginInit();
-        // OnLoad reads the whole picture at EndInit, which is what allows the
-        // frame to be frozen and handed to the UI thread.
-        image.CacheOption = BitmapCacheOption.OnLoad;
-        image.StreamSource = stream;
-        image.EndInit();
-        image.Freeze();
-        return image;
     }
 
     private static HttpClient CreateClient()

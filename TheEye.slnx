@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/TheEye.Core/TheEye.Core.csproj" />
+    <Project Path="src/TheEye.Desktop/TheEye.Desktop.csproj" />
     <Project Path="src/TheEye.Windows/TheEye.Windows.csproj" />
   </Folder>
   <Folder Name="/tests/">

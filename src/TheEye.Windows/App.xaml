@@ -12,6 +12,7 @@
             </ResourceDictionary.MergedDictionaries>
 
             <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+            <converters:HexToBrushConverter x:Key="HexToBrush" />
             <converters:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
             <converters:NullToVisibilityConverter x:Key="NullToVisibility" />
             <converters:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibility" />
