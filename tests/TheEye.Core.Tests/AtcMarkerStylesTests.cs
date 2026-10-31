@@ -382,6 +382,45 @@ public sealed class AtcMarkerStylesTests
         Assert.True(placement.LabelOffsetY > 0);
     }
 
+    [Fact]
+    public void CreateAtcStations_RingsTheBadgeOfASupervisedStation()
+    {
+        var supervised = CreateAirportAtc("EDDB_TWR", "TWR");
+        supervised.UserId = 601;
+        var plain = CreateAirportAtc("EDDB_GND", "GND");
+        plain.UserId = 602;
+
+        var layer = IvaoMapLayers.CreateAtcStations(
+            [supervised, plain],
+            Palette,
+            supervisors: new HashSet<long> { 601 });
+
+        var ringed = layer.Features.Single(feature => Equals(feature["Callsign"], "EDDB_TWR"));
+        var other = layer.Features.Single(feature => Equals(feature["Callsign"], "EDDB_GND"));
+
+        // The station keeps the glyph and colour of what it controls; the ring
+        // marks the member, it does not turn the station into a new facility.
+        var images = ringed.Styles.OfType<ImageStyle>().ToList();
+        Assert.Equal(2, images.Count);
+        Assert.Contains(FacilityPalette.Supervisor, images[1].Image!.Source?.ToString(), StringComparison.Ordinal);
+        Assert.Single(other.Styles.OfType<ImageStyle>());
+
+        // The ring is drawn over the glyph and under the callsign.
+        Assert.IsType<ImageStyle>(ringed.Styles.ElementAt(1));
+        Assert.IsType<LabelStyle>(ringed.Styles.Last());
+    }
+
+    [Fact]
+    public void CreateAtcStations_WithoutSupervisorsDrawsNoRing()
+    {
+        var tower = CreateAirportAtc("EDDB_TWR", "TWR");
+        tower.UserId = 601;
+
+        var layer = IvaoMapLayers.CreateAtcStations([tower], Palette);
+
+        Assert.Single(Assert.Single(layer.Features).Styles.OfType<ImageStyle>());
+    }
+
     private static IvaoAtc CreateAirportAtc(string callsign, string facility) =>
         new()
         {

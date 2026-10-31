@@ -44,6 +44,32 @@ public sealed class IvaoSessionUser
         }
     }
 
+    /// <summary>
+    /// Takes the name of a record that knows it. The tracker answers the roster
+    /// feed of the traffic list with the name of every connection, but the
+    /// record of a single session carries the division and the ratings and
+    /// leaves the name out for most members; the card prints the name whichever
+    /// answer brought it. The other details are left alone, because a record
+    /// that named the member still describes the connection the card shows.
+    /// </summary>
+    public void ApplyNameFrom(IvaoSessionUser? other)
+    {
+        if (other is null || ReferenceEquals(other, this))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(FirstName) && !string.IsNullOrWhiteSpace(other.FirstName))
+        {
+            FirstName = other.FirstName;
+        }
+
+        if (string.IsNullOrWhiteSpace(LastName) && !string.IsNullOrWhiteSpace(other.LastName))
+        {
+            LastName = other.LastName;
+        }
+    }
+
     [JsonIgnore]
     public string DivisionName => DivisionCatalog.Name(DivisionId);
 

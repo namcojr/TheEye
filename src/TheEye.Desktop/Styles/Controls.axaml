@@ -128,8 +128,9 @@
         </Style>
     </ControlTheme>
 
-    <!-- The aircraft pin: the artwork rotates by the heading and the halo marks
-         the selection, mirroring the WPF marker template. -->
+    <!-- The aircraft pin: the icon set carries one frame per degree of heading,
+         so the artwork is drawn as it is and the halo marks the selection,
+         mirroring the WPF marker template. -->
     <ControlTheme x:Key="PilotMarkerButton" TargetType="Button">
         <Setter Property="Width" Value="26" />
         <Setter Property="Height" Value="26" />
@@ -151,11 +152,7 @@
                            Height="{Binding IsSelected, Converter={StaticResource BoolToDouble}, ConverterParameter='24,21'}"
                            Opacity="{Binding IsOnGround, Converter={StaticResource BoolToDouble}, ConverterParameter='0.72,1'}"
                            RenderOptions.BitmapInterpolationMode="HighQuality"
-                           RenderTransformOrigin="50%,50%">
-                        <Image.RenderTransform>
-                            <RotateTransform Angle="{Binding HeadingAngle}" />
-                        </Image.RenderTransform>
-                    </Image>
+                           RenderTransformOrigin="50%,50%" />
                 </Grid>
             </ControlTemplate>
         </Setter>

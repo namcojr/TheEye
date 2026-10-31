@@ -650,9 +650,26 @@
                                           SelectedItem="{Binding SelectedPilot, Mode=TwoWay}"
                                           AutomationProperties.Name="Pilot list"
                                           MouseDoubleClick="OnTrafficDoubleClick">
+                                    <!-- A member IVAO lists with supervisor rights is
+                                         painted behind the whole row, not marked with a
+                                         glyph beside the callsign. -->
+                                    <DataGrid.RowStyle>
+                                        <Style TargetType="{x:Type DataGridRow}"
+                                               BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                            <Setter Property="Background"
+                                                    Value="{Binding RowTint, Converter={StaticResource HexToBrush}}" />
+                                        </Style>
+                                    </DataGrid.RowStyle>
                                     <DataGrid.Columns>
-                                        <DataGridTextColumn Header="CALLSIGN" Width="96"
-                                                            Binding="{Binding Callsign}" />
+                                        <DataGridTemplateColumn Header="CALLSIGN" Width="96">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding CallsignLabel}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               VerticalAlignment="Center" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
                                         <DataGridTextColumn Header="ROUTE" Width="*">
                                             <DataGridTextColumn.Binding>
                                                 <MultiBinding StringFormat="{}{0} → {1}">
@@ -663,6 +680,18 @@
                                         </DataGridTextColumn>
                                         <DataGridTextColumn Header="ALT" Width="76"
                                                             Binding="{Binding Altitude}" />
+                                        <DataGridTemplateColumn Width="34" CanUserSort="False"
+                                                                CanUserResize="False">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="★"
+                                                               Foreground="{DynamicResource SupervisorBrush}"
+                                                               Visibility="{Binding IsSupervisor, Converter={StaticResource BoolToVisibility}}"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                               ToolTip="This member holds supervisor rights" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </TabItem>
@@ -678,13 +707,118 @@
                                           SelectedItem="{Binding SelectedAtc, Mode=TwoWay}"
                                           AutomationProperties.Name="ATC list"
                                           MouseDoubleClick="OnTrafficDoubleClick">
+                                    <DataGrid.RowStyle>
+                                        <Style TargetType="{x:Type DataGridRow}"
+                                               BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                            <Setter Property="Background"
+                                                    Value="{Binding RowTint, Converter={StaticResource HexToBrush}}" />
+                                        </Style>
+                                    </DataGrid.RowStyle>
                                     <DataGrid.Columns>
-                                        <DataGridTextColumn Header="CALLSIGN" Width="96"
-                                                            Binding="{Binding Callsign}" />
+                                        <DataGridTemplateColumn Header="CALLSIGN" Width="96">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding CallsignLabel}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               VerticalAlignment="Center" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
                                         <DataGridTextColumn Header="FACILITY" Width="*"
                                                             Binding="{Binding FacilityName}" />
                                         <DataGridTextColumn Header="FREQ" Width="76"
                                                             Binding="{Binding Frequency}" />
+                                        <DataGridTemplateColumn Width="34" CanUserSort="False"
+                                                                CanUserResize="False">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="★"
+                                                               Foreground="{DynamicResource SupervisorBrush}"
+                                                               Visibility="{Binding IsSupervisor, Converter={StaticResource BoolToVisibility}}"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                               ToolTip="This member holds supervisor rights" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+                            <TabItem AutomationProperties.Name="Supervisors">
+                                <TabItem.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="SUP" />
+                                        <TextBlock Text="{Binding SupervisorListCount, StringFormat='  {0}'}"
+                                                   Foreground="{DynamicResource SupervisorBrush}" />
+                                    </StackPanel>
+                                </TabItem.Header>
+                                <DataGrid ItemsSource="{Binding SupervisorsView}"
+                                          SelectedItem="{Binding SelectedSupervisor, Mode=TwoWay}"
+                                          AutomationProperties.Name="Supervisor list"
+                                          MouseDoubleClick="OnTrafficDoubleClick">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="CALLSIGN" Width="96">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding CallsignLabel}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               VerticalAlignment="Center" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTemplateColumn Header="MEMBER" Width="*">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding TooltipText}"
+                                                               VerticalAlignment="Center" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+                            <TabItem AutomationProperties.Name="Friends">
+                                <TabItem.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="FRIENDS" />
+                                        <TextBlock Text="{Binding FriendCount, StringFormat='  {0}'}"
+                                                   Foreground="{DynamicResource AccentBrush}" />
+                                    </StackPanel>
+                                </TabItem.Header>
+                                <DataGrid ItemsSource="{Binding FriendsView}"
+                                          SelectedItem="{Binding SelectedFriend, Mode=TwoWay}"
+                                          AutomationProperties.Name="Friend list"
+                                          MouseDoubleClick="OnTrafficDoubleClick">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="CALLSIGN" Width="96"
+                                                            Binding="{Binding Callsign}" />
+                                        <DataGridTemplateColumn Header="MEMBER" Width="*">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <DockPanel ToolTip="{Binding TooltipText}">
+                                                        <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}"
+                                                                Width="20" Height="20" Padding="0"
+                                                                ToolTip="Remove this friend"
+                                                                AutomationProperties.Name="Remove friend"
+                                                                Command="{Binding DataContext.ToggleFriendCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                                CommandParameter="{Binding}">
+                                                            <!-- Drawn instead of typed: the icon-font glyph of the
+                                                                 first draft landed as an empty box on some machines. -->
+                                                            <Path Data="M 0.6,2.6 H 9.4 M 3.4,2.6 V 1.1 H 6.6 V 2.6 M 1.5,2.6 L 2.1,9.4 H 7.9 L 8.5,2.6"
+                                                                  Stroke="{DynamicResource MutedTextBrush}"
+                                                                  StrokeThickness="1.1"
+                                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                                  StrokeLineJoin="Round"
+                                                                  Width="10" Height="10" Stretch="None" />
+                                                        </Button>
+                                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center" />
+                                                    </DockPanel>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="STATE" Width="76"
+                                                            Binding="{Binding ActivityText}" />
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </TabItem>
@@ -807,8 +941,24 @@
                                         VerticalAlignment="Center">
                                     <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="13" />
                                 </Button>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}"
+                                        Height="20" Padding="8,0" FontSize="9" Margin="0,0,6,0"
+                                        VerticalAlignment="Center"
+                                        Content="{Binding FriendActionText}"
+                                        Command="{Binding ToggleFriendCommand}"
+                                        AutomationProperties.Name="Toggle friend"
+                                        ToolTip="Follow this member: their callsign carries a star in the lists and they are collected on the FRIENDS tab" />
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="SELECTION" Style="{StaticResource SectionTitle}" />
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="SELECTION" Style="{StaticResource SectionTitle}" />
+                                        <Border Style="{StaticResource AccentPill}"
+                                                Background="{DynamicResource SupervisorBrush}"
+                                                Visibility="{Binding IsSelectionSupervisor, Converter={StaticResource BoolToVisibility}}"
+                                                Margin="8,0,0,0">
+                                            <TextBlock Text="SUPERVISOR" FontSize="9" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource AccentTextBrush}" />
+                                        </Border>
+                                    </StackPanel>
                                     <TextBlock Text="Click a marker, sector or list row" Style="{StaticResource MutedText}"
                                                Margin="0,2,0,0" />
                                 </StackPanel>

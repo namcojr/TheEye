@@ -666,13 +666,13 @@
                         <Ellipse x:Name="Halo" Width="25" Height="25"
                                  Fill="{DynamicResource AccentBrush}" Opacity="0.28"
                                  Visibility="Collapsed" />
+                        <!-- The bundled icon set carries one frame per degree of
+                             heading, already rotated: the artwork is drawn as it
+                             is. Rotating it by the heading again doubled the
+                             angle, so a flight heading 227° pointed east. -->
                         <Image x:Name="Icon" Source="{Binding Icon}" Width="21" Height="21"
                                RenderOptions.BitmapScalingMode="HighQuality"
-                               RenderTransformOrigin="0.5,0.5">
-                            <Image.RenderTransform>
-                                <RotateTransform Angle="{Binding HeadingAngle}" />
-                            </Image.RenderTransform>
-                        </Image>
+                               RenderTransformOrigin="0.5,0.5" />
                     </Grid>
                     <ControlTemplate.Triggers>
                         <DataTrigger Binding="{Binding IsSelected}" Value="True">

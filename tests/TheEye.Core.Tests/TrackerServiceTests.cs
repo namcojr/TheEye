@@ -11,6 +11,9 @@ public sealed class TrackerServiceTests
     private const string PilotsPath = "/v2/tracker/now/pilots/summary";
     private const string AtcPath = "/v2/tracker/now/atc/summary";
     private const string StatsPath = "/v2/tracker/now/connections/stats";
+    private const string PilotIdentityPath = "/v2/tracker/now/pilots";
+    private const string AtcIdentityPath = "/v2/tracker/now/atc";
+    private const string SupervisorsPath = "/v2/tracker/now/supervisors";
 
     [Fact]
     public async Task RefreshAsync_FetchesAllEndpointsAndPublishesSnapshot()
@@ -41,6 +44,7 @@ public sealed class TrackerServiceTests
         Assert.Equal(3, published.Stats.Now.Total);
         Assert.Empty(published.Warnings);
         Assert.False(published.IsPartial);
+        Assert.Empty(published.Supervisors);
         Assert.Equal(1, updates);
         Assert.Same(published, service.LastSnapshot);
         Assert.Equal("TEST123", published.Pilots[0].Callsign);
@@ -55,6 +59,88 @@ public sealed class TrackerServiceTests
             Assert.Equal("https://test.origin", request.Origin);
             Assert.Equal("secret", request.ApiKey);
         });
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WhenIdentityIsIncluded_MergesMembersAndPublishesSupervisors()
+    {
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            PilotsPath => Json(Fixture("pilots-summary.json")),
+            AtcPath => Json(Fixture("atc-summary.json")),
+            StatsPath => Json(Fixture("stats.json")),
+            PilotIdentityPath => Json(Fixture("pilots-identity.json")),
+            AtcIdentityPath => Json(Fixture("atc-identity.json")),
+            SupervisorsPath => Json(Fixture("supervisors.json")),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+        using var service = new TrackerService(api) { IncludeIdentity = true };
+        TrackerSnapshot? published = null;
+        service.SnapshotUpdated += (_, snapshot) => published = snapshot;
+
+        await service.RefreshAsync();
+
+        Assert.NotNull(published);
+        Assert.Empty(published.Warnings);
+        Assert.False(published.IsPartial);
+
+        // The supervisors are their own list: they neither fly nor control, so
+        // they never show up among the traffic the summaries describe.
+        Assert.Equal(2, published.SupervisorCount);
+        var supervisor = published.Supervisors[0];
+        Assert.Equal("SUP601", supervisor.Callsign);
+        Assert.Equal("Maria Ferreira", supervisor.Name);
+        Assert.Equal("Observing", supervisor.ConnectionLabel);
+        Assert.Equal("Director (Portugal)", supervisor.StaffText);
+
+        // The identity feed layers the member onto the summary records, so a
+        // row can say who is behind a callsign.
+        Assert.Equal("Ana Silva", published.Pilots[0].MemberName);
+        Assert.Equal("Altitude", published.Pilots[0].SoftwareText);
+        Assert.Equal("MSFS", published.Pilots[0].SimulatorText);
+        Assert.Equal("WS1-EUW2", published.Pilots[0].ServerText);
+        Assert.Equal("Niels de Vries", published.Atc[0].MemberName);
+        Assert.Equal("Aurora", published.Atc[0].SoftwareText);
+
+        Assert.Equal(6, handler.Requests.Count);
+        Assert.Contains(handler.Requests, request => request.Path == PilotIdentityPath);
+        Assert.Contains(handler.Requests, request => request.Path == AtcIdentityPath);
+        Assert.Contains(handler.Requests, request => request.Path == SupervisorsPath);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WhenSupervisorFeedIsRefused_KeepsTrafficAndWarns()
+    {
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            PilotsPath => Json(Fixture("pilots-summary.json")),
+            AtcPath => Json(Fixture("atc-summary.json")),
+            StatsPath => Json(Fixture("stats.json")),
+            PilotIdentityPath => Json(Fixture("pilots-identity.json")),
+            AtcIdentityPath => Json(Fixture("atc-identity.json")),
+            SupervisorsPath => new HttpResponseMessage(HttpStatusCode.Unauthorized),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+        using var service = new TrackerService(api) { IncludeIdentity = true };
+        TrackerSnapshot? published = null;
+        service.SnapshotUpdated += (_, snapshot) => published = snapshot;
+
+        await service.RefreshAsync();
+
+        Assert.NotNull(published);
+        Assert.Empty(published.Supervisors);
+        var warning = Assert.Single(published.Warnings);
+        Assert.StartsWith("Supervisors:", warning, StringComparison.Ordinal);
+
+        // Only the list that failed is lost; the traffic and the member names
+        // from the feeds that did answer are still published.
+        Assert.Equal(2, published.PilotCount);
+        Assert.Equal("Ana Silva", published.Pilots[0].MemberName);
+        Assert.True(published.IsPartial);
     }
 
     [Fact]

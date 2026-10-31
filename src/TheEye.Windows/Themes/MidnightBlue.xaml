@@ -16,6 +16,7 @@
     <Color x:Key="SuccessColor">#34D399</Color>
     <Color x:Key="WarningColor">#FBBF24</Color>
     <Color x:Key="ErrorColor">#FB7185</Color>
+    <Color x:Key="SupervisorColor">#F472B6</Color>
     <Color x:Key="MapWaterColor">#061120</Color>
     <Color x:Key="MapLandColor">#10243D</Color>
     <Color x:Key="MapBorderColor">#3A5A7E</Color>

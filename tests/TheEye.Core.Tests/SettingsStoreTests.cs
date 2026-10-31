@@ -26,6 +26,34 @@ public sealed class SettingsStoreTests
     }
 
     [Fact]
+    public void SaveAndLoad_RoundTripsFriendIds()
+    {
+        using var temporary = new TemporaryDirectory();
+        var store = new SettingsStore(temporary.FilePath("settings.json"));
+        var settings = new TheEyeSettings();
+
+        Assert.True(settings.AddFriend(90210));
+        Assert.True(settings.AddFriend(12345));
+        Assert.False(settings.AddFriend(90210));
+        Assert.False(settings.AddFriend(0));
+        Assert.Equal([12345L, 90210L], settings.FriendIds);
+
+        store.Save(settings);
+        var loaded = store.Load();
+
+        Assert.Equal([12345L, 90210L], loaded.FriendIds);
+        Assert.True(loaded.IsFriend(12345));
+        Assert.False(loaded.IsFriend(54321));
+
+        // Toggling reports whether the member is followed afterwards, which is
+        // what the button in the traffic lists shows.
+        Assert.True(loaded.ToggleFriend(54321));
+        Assert.True(loaded.IsFriend(54321));
+        Assert.False(loaded.ToggleFriend(12345));
+        Assert.False(loaded.IsFriend(12345));
+    }
+
+    [Fact]
     public void SaveAndLoad_RoundTripsNormalizedSettings()
     {
         using var temporary = new TemporaryDirectory();

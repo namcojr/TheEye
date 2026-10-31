@@ -33,6 +33,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private readonly IImagePipeline _pipeline;
     private readonly Dictionary<long, PilotItem> _pilotsById = [];
     private readonly Dictionary<long, AtcItem> _atcById = [];
+    private IReadOnlySet<long> _supervisorUserIds = new HashSet<long>();
 
     private Map? _map;
     private MapPalette? _palette;
@@ -197,6 +198,24 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
         SyncPilots(snapshot.Pilots);
         SyncAtc(snapshot.Atc);
+
+        // The members with supervisor rights. The feed names the connection, so
+        // the station badges they occupy can be ringed and the traffic rows of the
+        // selection panel can say so; the list is rebuilt from every snapshot
+        // because a supervisor may sign off without the traffic changing.
+        _supervisorUserIds = snapshot.Supervisors
+            .Where(supervisor => supervisor.UserId > 0)
+            .Select(supervisor => supervisor.UserId)
+            .ToHashSet();
+        foreach (var pilot in Pilots)
+        {
+            pilot.IsSupervisor = _supervisorUserIds.Contains(pilot.UserId);
+        }
+
+        foreach (var item in Atc)
+        {
+            item.IsSupervisor = _supervisorUserIds.Contains(item.UserId);
+        }
 
         var atc = snapshot.Atc;
         _atc = atc;
@@ -630,13 +649,19 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Builds the station layer and keeps the placements used for hit testing in
-    /// sync with the badges that are actually drawn.
+    /// sync with the badges that are actually drawn. The badges of the members
+    /// connected with supervisor rights carry a ring, so the layer is rebuilt with
+    /// the current set on every change.
     /// </summary>
     private MemoryLayer CreateStationLayer(IEnumerable<IvaoAtc> atc)
     {
         _stationPlacements = IvaoMapLayers.CreateAtcStationPlacements(atc, _stationZoom);
         UpdateStationTargets();
-        return IvaoMapLayers.CreateAtcStations(_stationPlacements, _palette ?? DefaultPalette, _stationZoom);
+        return IvaoMapLayers.CreateAtcStations(
+            _stationPlacements,
+            _palette ?? DefaultPalette,
+            _stationZoom,
+            _supervisorUserIds);
     }
 
     /// <summary>

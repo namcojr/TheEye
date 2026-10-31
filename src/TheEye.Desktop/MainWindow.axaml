@@ -387,6 +387,18 @@
         </DataTemplate>
     </Window.Resources>
 
+    <Window.Styles>
+        <!-- The row of a member IVAO lists with supervisor rights carries the pink
+             wash of the ring the map draws around the badge, so the whole row says
+             who watches the network instead of a glyph beside the callsign. The
+             wash is the colour the row binds; a row nobody watches binds a
+             fully transparent one. -->
+        <Style Selector="ListBox.traffic ListBoxItem">
+            <Setter Property="Background"
+                    Value="{Binding RowTint, Converter={StaticResource HexToBrush}}" />
+        </Style>
+    </Window.Styles>
+
 
     <!-- The window frame: the same 46 / * / 28 rows the Windows chrome draws. -->
     <Panel>
@@ -542,7 +554,7 @@
                                         </StackPanel>
                                     </TabItem.Header>
                                     <Grid RowDefinitions="Auto,*">
-                                        <Grid ColumnDefinitions="96,*,76" Margin="14,8,14,6">
+                                        <Grid ColumnDefinitions="96,*,76,18" Margin="14,8,14,6">
                                             <TextBlock Grid.Column="0" Text="CALLSIGN"
                                                        Classes="detail-label" />
                                             <TextBlock Grid.Column="1" Text="ROUTE" Classes="detail-label" />
@@ -556,8 +568,8 @@
                                                  DoubleTapped="OnTrafficDoubleTapped">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Grid ColumnDefinitions="96,*,76" Margin="14,0">
-                                                        <TextBlock Grid.Column="0" Text="{Binding Callsign}"
+                                                    <Grid ColumnDefinitions="96,*,76,18" Margin="14,0">
+                                                        <TextBlock Grid.Column="0" Text="{Binding CallsignLabel}"
                                                                    Classes="mono" FontWeight="SemiBold"
                                                                    VerticalAlignment="Center"
                                                                    TextTrimming="CharacterEllipsis" />
@@ -570,6 +582,12 @@
                                                                    Foreground="{DynamicResource MutedTextBrush}"
                                                                    VerticalAlignment="Center"
                                                                    HorizontalAlignment="Right" />
+                                                        <TextBlock Grid.Column="3" Text="★"
+                                                                   Foreground="{DynamicResource SupervisorBrush}"
+                                                                   IsVisible="{Binding IsSupervisor}"
+                                                                   VerticalAlignment="Center"
+                                                                   HorizontalAlignment="Right"
+                                                                   ToolTip.Tip="This member holds supervisor rights" />
                                                     </Grid>
                                                 </DataTemplate>
                                             </ListBox.ItemTemplate>
@@ -585,7 +603,7 @@
                                         </StackPanel>
                                     </TabItem.Header>
                                     <Grid RowDefinitions="Auto,*">
-                                        <Grid ColumnDefinitions="96,*,76" Margin="14,8,14,6">
+                                        <Grid ColumnDefinitions="96,*,76,18" Margin="14,8,14,6">
                                             <TextBlock Grid.Column="0" Text="CALLSIGN"
                                                        Classes="detail-label" />
                                             <TextBlock Grid.Column="1" Text="FACILITY"
@@ -600,8 +618,8 @@
                                                  DoubleTapped="OnTrafficDoubleTapped">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Grid ColumnDefinitions="96,*,76" Margin="14,0">
-                                                        <TextBlock Grid.Column="0" Text="{Binding Callsign}"
+                                                    <Grid ColumnDefinitions="96,*,76,18" Margin="14,0">
+                                                        <TextBlock Grid.Column="0" Text="{Binding CallsignLabel}"
                                                                    Classes="mono" FontWeight="SemiBold"
                                                                    VerticalAlignment="Center"
                                                                    TextTrimming="CharacterEllipsis" />
@@ -615,6 +633,112 @@
                                                                    Foreground="{DynamicResource MutedTextBrush}"
                                                                    VerticalAlignment="Center"
                                                                    HorizontalAlignment="Right" />
+                                                        <TextBlock Grid.Column="3" Text="★"
+                                                                   Foreground="{DynamicResource SupervisorBrush}"
+                                                                   IsVisible="{Binding IsSupervisor}"
+                                                                   VerticalAlignment="Center"
+                                                                   HorizontalAlignment="Right"
+                                                                   ToolTip.Tip="This member holds supervisor rights" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </TabItem>
+                                <TabItem AutomationProperties.Name="Supervisors">
+                                    <TabItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="SUP" />
+                                            <TextBlock Text="{Binding SupervisorListCount}" Margin="6,0,0,0"
+                                                       Foreground="{DynamicResource SupervisorBrush}" />
+                                        </StackPanel>
+                                    </TabItem.Header>
+                                    <Grid RowDefinitions="Auto,*">
+                                        <Grid ColumnDefinitions="96,*" Margin="14,8,14,6">
+                                            <TextBlock Grid.Column="0" Text="CALLSIGN"
+                                                       Classes="detail-label" />
+                                            <TextBlock Grid.Column="1" Text="MEMBER"
+                                                       Classes="detail-label" />
+                                        </Grid>
+                                        <ListBox Grid.Row="1" Classes="traffic"
+                                                 ItemsSource="{Binding SupervisorsView}"
+                                                 SelectedItem="{Binding SelectedSupervisor, Mode=TwoWay}"
+                                                 AutomationProperties.Name="Supervisor list"
+                                                 DoubleTapped="OnTrafficDoubleTapped">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid ColumnDefinitions="96,*" Margin="14,0"
+                                                          ToolTip.Tip="{Binding TooltipText}">
+                                                        <TextBlock Grid.Column="0" Text="{Binding CallsignLabel}"
+                                                                   Classes="mono" FontWeight="SemiBold"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding Name}"
+                                                                   Classes="muted"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </TabItem>
+                                <TabItem AutomationProperties.Name="Friends">
+                                    <TabItem.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="FRIENDS" />
+                                            <TextBlock Text="{Binding FriendCount}" Margin="6,0,0,0"
+                                                       Foreground="{DynamicResource AccentBrush}" />
+                                        </StackPanel>
+                                    </TabItem.Header>
+                                    <Grid RowDefinitions="Auto,*">
+                                        <Grid ColumnDefinitions="96,*,70,20" Margin="14,8,14,6">
+                                            <TextBlock Grid.Column="0" Text="CALLSIGN"
+                                                       Classes="detail-label" />
+                                            <TextBlock Grid.Column="1" Text="MEMBER"
+                                                       Classes="detail-label" />
+                                            <TextBlock Grid.Column="2" Text="STATE"
+                                                       Classes="detail-label" />
+                                        </Grid>
+                                        <ListBox Grid.Row="1" Classes="traffic"
+                                                 ItemsSource="{Binding FriendsView}"
+                                                 SelectedItem="{Binding SelectedFriend, Mode=TwoWay}"
+                                                 AutomationProperties.Name="Friend list"
+                                                 DoubleTapped="OnTrafficDoubleTapped">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid ColumnDefinitions="96,*,70,20" Margin="14,0"
+                                                          ToolTip.Tip="{Binding TooltipText}">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Callsign}"
+                                                                   Classes="mono" FontWeight="SemiBold"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding Name}"
+                                                                   Classes="muted"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="2" Text="{Binding ActivityText}"
+                                                                   Classes="mono" FontSize="10"
+                                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <Button Grid.Column="3" Theme="{StaticResource IconButton}"
+                                                                Width="20" Height="20"
+                                                                VerticalAlignment="Center"
+                                                                Foreground="{DynamicResource MutedTextBrush}"
+                                                                ToolTip.Tip="Remove this friend"
+                                                                AutomationProperties.Name="Remove friend"
+                                                                Command="{Binding $parent[Window].DataContext.ToggleFriendCommand}"
+                                                                CommandParameter="{Binding}">
+                                                            <!-- Drawn instead of typed: a font glyph can land as
+                                                                 an empty box in the button. -->
+                                                            <Path Data="M 0.6,2.6 H 9.4 M 3.4,2.6 V 1.1 H 6.6 V 2.6 M 1.5,2.6 L 2.1,9.4 H 7.9 L 8.5,2.6"
+                                                                  StrokeThickness="1.1" Width="10" Height="10"
+                                                                  Stretch="None"
+                                                                  Stroke="{Binding $parent[Button].Foreground}"
+                                                                  HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center" />
+                                                        </Button>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ListBox.ItemTemplate>
@@ -751,8 +875,23 @@
                                               Stroke="{Binding $parent[Button].Foreground}"
                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Button>
+                                    <Button DockPanel.Dock="Right" Theme="{StaticResource GhostButton}"
+                                            Height="20" Padding="8,1" FontSize="9" Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            Content="{Binding FriendActionText}"
+                                            Command="{Binding ToggleFriendCommand}"
+                                            AutomationProperties.Name="Toggle friend"
+                                            ToolTip.Tip="Follow this member: their callsign carries a star in the lists and they are collected on the FRIENDS tab" />
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="SELECTION" Classes="section" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="SELECTION" Classes="section" />
+                                            <Border Classes="pill accent" Margin="8,0,0,0" Padding="6,1"
+                                                    Background="{DynamicResource SupervisorBrush}"
+                                                    IsVisible="{Binding IsSelectionSupervisor}">
+                                                <TextBlock Text="SUPERVISOR" FontSize="9" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource AccentTextBrush}" />
+                                            </Border>
+                                        </StackPanel>
                                         <TextBlock Text="Click a marker, sector or list row"
                                                    Classes="muted" Margin="0,2,0,0" />
                                     </StackPanel>

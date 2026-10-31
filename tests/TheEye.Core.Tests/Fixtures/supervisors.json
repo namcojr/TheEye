@@ -1,0 +1,60 @@
+[
+  {
+    "id": 501,
+    "userId": 601,
+    "callsign": "SUP601",
+    "serverId": "WS1-EUW2",
+    "connectionType": "OBS",
+    "createdAt": "2026-01-01T09:00:00Z",
+    "time": 600,
+    "hideSupervisor": false,
+    "user": {
+      "id": 601,
+      "firstName": "Maria",
+      "lastName": "Ferreira",
+      "divisionId": "PT",
+      "rating": {
+        "isAtc": true,
+        "isPilot": true,
+        "atcRating": {
+          "id": 12,
+          "name": "Supervisor",
+          "shortName": "SUP"
+        },
+        "networkRating": {
+          "id": 2,
+          "name": "Supervisor",
+          "description": "Network supervisor"
+        }
+      },
+      "staffPositions": [
+        {
+          "id": "PT-DIR",
+          "staffPositionId": "DIR",
+          "staffPosition": {
+            "id": "DIR",
+            "name": "Director",
+            "description": "Division director"
+          },
+          "division": {
+            "id": "PT",
+            "name": "Portugal"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": 502,
+    "userId": 602,
+    "callsign": "SUP602",
+    "connectionType": "ATC",
+    "createdAt": "2026-01-01T08:00:00Z",
+    "user": {
+      "id": 602,
+      "firstName": "Erik",
+      "lastName": "Johansson",
+      "divisionId": "SE"
+    }
+  }
+]

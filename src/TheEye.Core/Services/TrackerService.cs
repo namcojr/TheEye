@@ -233,7 +233,15 @@ public sealed class TrackerService : IDisposable
         }
         catch (Exception ex)
         {
-            warnings.Add($"{label}: {ex.Message}");
+            // The public feeds and the three identity feeds are fetched
+            // concurrently, so more than one of them can report a failure at
+            // the same moment. The list is guarded rather than appended to, so
+            // two warnings never race for the same slot.
+            lock (warnings)
+            {
+                warnings.Add($"{label}: {ex.Message}");
+            }
+
             return fallback;
         }
     }

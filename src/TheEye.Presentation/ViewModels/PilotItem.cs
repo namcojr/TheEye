@@ -3,11 +3,15 @@ using TheEye.Core.Models;
 using TheEye.Core.Reference;
 using TheEye.Core.Services;
 using TheEye.Presentation.Services;
+using TheEye.Presentation.Theming;
 
 namespace TheEye.Presentation.ViewModels;
 
 public sealed class PilotItem : ObservableObject
 {
+    /// <summary>The colour a row that carries no mark binds, i.e. "no wash".</summary>
+    private const string TransparentTint = "#00000000";
+
     private readonly IAircraftIconCache _icons;
     private readonly IImageCache _images;
     private IvaoPilot _pilot;
@@ -58,12 +62,6 @@ public sealed class PilotItem : ObservableObject
 
     public string Heading => _pilot.HeadingText;
 
-    /// <summary>
-    /// The same heading as a bearing in degrees, for the shells that rotate the
-    /// marker artwork instead of picking a different icon per heading.
-    /// </summary>
-    public double HeadingAngle => _pilot.LastTrack?.Heading ?? 0;
-
     public string State => _pilot.State;
 
     public string Transponder => _pilot.TransponderText;
@@ -84,14 +82,15 @@ public sealed class PilotItem : ObservableObject
     public long UserId => _detail?.UserId is { } id && id > 0 ? id : _pilot.UserId;
 
     /// <summary>
-    /// The member behind the callsign. The identity feed of the tracker names
-    /// every connected pilot, so the name is known before the card is opened;
-    /// the roster record of the selected session is preferred when it is there,
-    /// because it is the answer the card describes itself with. Empty means IVAO
-    /// sent no name, which is what a signed-out run looks like.
+    /// The member behind the callsign. The identity feed of the traffic list
+    /// names every connected pilot, so the name is known before the card is
+    /// opened; the roster record of the selected session is preferred when it
+    /// named the member, but it withholds the name for most sessions and must
+    /// not hide the one the list already has. Empty means IVAO named the member
+    /// nowhere, which is what a signed-out run looks like.
     /// </summary>
-    public string MemberName => _detail?.User?.FullName is { Length: > 0 } name
-        ? name
+    public string MemberName => _detail?.User is { HasName: true } detail
+        ? detail.FullName
         : _pilot.MemberName;
 
     public bool HasMemberName => MemberName.Length > 0;
@@ -118,13 +117,28 @@ public sealed class PilotItem : ObservableObject
 
     /// <summary>
     /// True when IVAO lists the member with supervisor rights. The traffic list
-    /// keeps the callsign of the position; the mark says who watches the network.
+    /// keeps the callsign of the position; the row carries the mark instead of a
+    /// glyph beside the callsign, so it reads at a glance.
     /// </summary>
     public bool IsSupervisor
     {
         get => _isSupervisor;
-        set => SetProperty(ref _isSupervisor, value);
+        set
+        {
+            if (SetProperty(ref _isSupervisor, value))
+            {
+                OnPropertyChanged(nameof(RowTint));
+            }
+        }
     }
+
+    /// <summary>
+    /// The wash the traffic list paints behind the whole row of a supervisor:
+    /// the pink of the ring the map draws around the badge, at a low opacity. A
+    /// row of a pilot nobody watches binds a fully transparent colour, so the
+    /// view needs no trigger to un-tint it.
+    /// </summary>
+    public string RowTint => IsSupervisor ? ThemeCatalog.SupervisorRowTint : TransparentTint;
 
     /// <summary>
     /// The callsign as the traffic list prints it. A star in front of the
@@ -229,7 +243,12 @@ public sealed class PilotItem : ObservableObject
     /// </summary>
     public bool HasProfile => _detail?.User is not null;
 
-    public string ProfileName => _detail?.User?.FullName ?? "—";
+    /// <summary>
+    /// The name of the card header. The record of the session may leave the name
+    /// out, so the one the traffic list already has is printed instead of the
+    /// placeholder the roster record would produce.
+    /// </summary>
+    public string ProfileName => MemberName is { Length: > 0 } name ? name : "—";
 
     /// <summary>The division the member flies for, spelled out from its ISO code.</summary>
     public string HomeText => _detail?.User?.DivisionName is { Length: > 0 } name ? name : "—";
@@ -410,6 +429,12 @@ public sealed class PilotItem : ObservableObject
         if (!ReferenceEquals(_detail, result.Session))
         {
             _detail = result.Session;
+
+            // The record of a single session names the member for a minority of
+            // sessions; the identity feed of the traffic list knows the name of
+            // every connection, so the header prints it instead of "IVAO member".
+            _detail?.User?.ApplyNameFrom(_pilot.User);
+
             RatingBadge = null;
             FlagImage = null;
 

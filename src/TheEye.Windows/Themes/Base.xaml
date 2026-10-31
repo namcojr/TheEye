@@ -36,6 +36,8 @@
                      options:Freeze="False" />
     <SolidColorBrush x:Key="ErrorBrush" Color="{DynamicResource ErrorColor}"
                      options:Freeze="False" />
+    <SolidColorBrush x:Key="SupervisorBrush" Color="{DynamicResource SupervisorColor}"
+                     options:Freeze="False" />
     <SolidColorBrush x:Key="MapWaterBrush" Color="{DynamicResource MapWaterColor}"
                      options:Freeze="False" />
     <SolidColorBrush x:Key="MapLandBrush" Color="{DynamicResource MapLandColor}"

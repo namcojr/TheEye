@@ -1,4 +1,5 @@
 using TheEye.Core.Models;
+using TheEye.Core.Reference;
 using TheEye.Core.Services;
 
 namespace TheEye.Presentation.ViewModels;
@@ -16,10 +17,9 @@ public sealed class SupervisorItem : ObservableObject
     private IvaoSupervisor _supervisor;
     private bool _isFriend;
 
-    public SupervisorItem(IvaoSupervisor supervisor, bool isFriend = false)
+    public SupervisorItem(IvaoSupervisor supervisor)
     {
         _supervisor = supervisor;
-        _isFriend = isFriend;
         SearchText = BuildSearchText();
     }
 
@@ -79,16 +79,17 @@ public sealed class SupervisorItem : ObservableObject
         {
             if (SetProperty(ref _isFriend, value))
             {
-                OnPropertyChanged(nameof(FriendMark));
-                OnPropertyChanged(nameof(FriendActionText));
+                OnPropertyChanged(nameof(CallsignLabel));
             }
         }
     }
 
-    /// <summary>The star of the friend button of the row: filled while followed.</summary>
-    public string FriendMark => IsFriend ? "★" : "☆";
-
-    public string FriendActionText => IsFriend ? "Remove from friends" : "Add to friends";
+    /// <summary>
+    /// The callsign as the list prints it. A star in front of the callsign marks
+    /// a friend, like the star of the traffic lists: the SUP list is about who
+    /// watches the network, so it offers no button to add one.
+    /// </summary>
+    public string CallsignLabel => IsFriend ? $"★ {Callsign}" : Callsign;
 
     public string SearchText { get; private set; }
 

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using TheEye.Core.Api;
@@ -25,6 +26,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly FilteredCollection<AtcItem> _atcView;
     private readonly AsyncRelayCommand _refreshCommand;
 
+    // The SUP and FRIENDS lists are not traffic: the supervisor feed is its own
+    // answer, and a friend is a VID that may be flying, controlling, supervising
+    // or not connected at all. Both rows are kept and updated in place, so a
+    // selection survives the poll.
+    private readonly ObservableCollection<SupervisorItem> _supervisors = [];
+    private readonly FilteredCollection<SupervisorItem> _supervisorsView;
+    private readonly ObservableCollection<FriendItem> _friends = [];
+    private readonly FilteredCollection<FriendItem> _friendsView;
+    private readonly Dictionary<long, SupervisorItem> _supervisorsById = [];
+    private readonly Dictionary<long, FriendItem> _friendsById = [];
+    private readonly RelayCommand _toggleFriendCommand;
+
     private IvaoApiClient? _api;
     private IvaoSession? _session;
     private TrackerService? _tracker;
@@ -32,6 +45,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private SessionDetailStore? _details;
     private SessionFlightPlanStore? _flightPlans;
     private IvaoConnectionCounts _stats = new();
+    private FriendItem? _selectedFriend;
+    private SupervisorItem? _selectedSupervisor;
     private bool _syncingSelection;
     private bool _started;
     private bool _disposed;
@@ -51,6 +66,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private int _totalCount;
     private int _observerCount;
     private int _supervisorCount;
+    private int _supervisorListCount;
+    private int _friendCount;
     private int _worldTourCount;
     private int _uniqueUsers24h;
 
@@ -67,9 +84,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _pilotsView = new FilteredCollection<PilotItem>(Map.Pilots, FilterPilot);
         _atcView = new FilteredCollection<AtcItem>(Map.Atc, FilterAtc);
 
+        // The SUP and FRIENDS tabs are narrowed by the same search box: the
+        // supervisor list in particular is long enough to need it.
+        _supervisorsView = new FilteredCollection<SupervisorItem>(_supervisors, FilterSupervisor);
+        _friendsView = new FilteredCollection<FriendItem>(_friends, FilterFriend);
+
         RefreshCommand = _refreshCommand = new AsyncRelayCommand(RefreshAsync, () => _tracker is not null);
         LocateSelectedCommand = new RelayCommand(LocateSelected, () => SelectedPilot is not null || SelectedAtc is not null);
         ClearSelectionCommand = new RelayCommand(() => Map.ClearSelection(), () => HasSelection);
+        ToggleFriendCommand = _toggleFriendCommand = new RelayCommand(ToggleFriend, parameter => ResolveUserId(parameter) > 0);
         ZoomInCommand = new RelayCommand(() => Map.ZoomIn());
         ZoomOutCommand = new RelayCommand(() => Map.ZoomOut());
         HomeCommand = new RelayCommand(() => Map.ResetView(new GeoCoordinate(45, 10), WorldMap.MaxZoomOutResolution));
@@ -84,7 +107,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public FilteredCollection<AtcItem> AtcView => _atcView;
 
+    /// <summary>The members connected with supervisor rights, narrowed by the search box.</summary>
+    public FilteredCollection<SupervisorItem> SupervisorsView => _supervisorsView;
+
+    /// <summary>The VIDs on the friend list, connected or not, narrowed by the search box.</summary>
+    public FilteredCollection<FriendItem> FriendsView => _friendsView;
+
     public AsyncRelayCommand RefreshCommand { get; }
+
+    /// <summary>
+    /// Adds or drops a friend. The parameter selects the member — a row of the
+    /// SUP or FRIENDS list — and a command without one acts on the selection, so
+    /// the button of the selection panel needs no binding of its own.
+    /// </summary>
+    public RelayCommand ToggleFriendCommand { get; }
 
     public RelayCommand LocateSelectedCommand { get; }
 
@@ -139,6 +175,84 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool HasSelection => SelectedPilot is not null || SelectedAtc is not null;
 
     /// <summary>
+    /// The row of the FRIENDS tab that was picked. Selecting a friend frames the
+    /// flight or the station behind it, exactly as picking the same aircraft or
+    /// controller in the traffic lists would, so the FRIENDS tab is a shortcut and
+    /// not a dead end. A friend that is not connected has nothing to frame.
+    /// </summary>
+    public FriendItem? SelectedFriend
+    {
+        get => _selectedFriend;
+        set
+        {
+            if (!SetProperty(ref _selectedFriend, value))
+            {
+                return;
+            }
+
+            if (value?.Pilot is { } pilot)
+            {
+                SelectedPilot = pilot;
+            }
+            else if (value?.Atc is { } station)
+            {
+                SelectedAtc = station;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The row of the SUP tab that was picked. A supervisor is connected as a
+    /// pilot, a controller or an observer, so a pick frames the aircraft or the
+    /// station the member occupies, exactly as selecting them in the traffic
+    /// lists would; an observer has no position to frame and clears the panel.
+    /// </summary>
+    public SupervisorItem? SelectedSupervisor
+    {
+        get => _selectedSupervisor;
+        set
+        {
+            if (!SetProperty(ref _selectedSupervisor, value) || value is null || value.UserId <= 0)
+            {
+                return;
+            }
+
+            if (Map.Pilots.FirstOrDefault(pilot => pilot.UserId == value.UserId) is { } flight)
+            {
+                SelectedPilot = flight;
+            }
+            else if (Map.Atc.FirstOrDefault(station => station.UserId == value.UserId) is { } position)
+            {
+                SelectedAtc = position;
+            }
+            else
+            {
+                // An observer is on the network without a position on the map, so
+                // the selection panel must not keep showing the previous flight.
+                SelectedPilot = null;
+                SelectedAtc = null;
+            }
+        }
+    }
+
+    /// <summary>True when the selection is a member IVAO lists with supervisor rights.</summary>
+    public bool IsSelectionSupervisor =>
+        (SelectedPilot?.IsSupervisor ?? false) || (SelectedAtc?.IsSupervisor ?? false);
+
+    /// <summary>True when the selected member is on the friend list.</summary>
+    public bool IsSelectionFriend
+    {
+        get
+        {
+            var userId = SelectedPilot?.UserId ?? SelectedAtc?.UserId ?? 0;
+            return _settings.IsFriend(userId);
+        }
+    }
+
+    /// <summary>The label of the star button of the selection panel.</summary>
+    public string FriendActionText => IsSelectionFriend ? "★ REMOVE FRIEND" : "★ ADD FRIEND";
+
+    /// <summary>
     /// Selection that came from a click on an aircraft marker. The centring
     /// follows the user's "centre the map when I click an aircraft or station"
     /// option, while <see cref="SelectedPilot"/> / <see cref="SelectedAtc"/> — the
@@ -190,6 +304,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 _pilotsView.Refresh();
                 _atcView.Refresh();
+                _supervisorsView.Refresh();
+                _friendsView.Refresh();
             }
         }
     }
@@ -293,6 +409,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _supervisorCount;
         private set => SetProperty(ref _supervisorCount, value);
+    }
+
+    /// <summary>
+    /// Rows of the SUP tab, which is the supervisor feed: it stays at zero while
+    /// the client cannot authenticate, because the feed answers 401.
+    /// </summary>
+    public int SupervisorListCount
+    {
+        get => _supervisorListCount;
+        private set => SetProperty(ref _supervisorListCount, value);
+    }
+
+    /// <summary>Rows of the FRIENDS tab, connected or not.</summary>
+    public int FriendCount
+    {
+        get => _friendCount;
+        private set => SetProperty(ref _friendCount, value);
     }
 
     public int WorldTourCount
@@ -482,6 +615,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         });
 
         _tracker = new TrackerService(_api, TimeSpan.FromSeconds(_settings.RefreshSeconds));
+
+        // The names, the divisions and the supervisor feed are authenticated, so
+        // the shell asks for them only while a credential is in place: a run
+        // without a sign-in or a key keeps the public summaries and an empty SUP
+        // list instead of collecting a 401 on every poll.
+        _tracker.IncludeIdentity = _api.CanAuthenticate && IsSignedIn;
         _tracker.SnapshotUpdated += OnSnapshotUpdated;
         _tracker.RefreshFailed += OnRefreshFailed;
         _tracker.Start();
@@ -572,6 +711,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         Map.UpdateTraffic(snapshot);
+
+        // The two lists that follow members rather than sessions. They are filled
+        // before the counts, because a FRIENDS row is assembled from the traffic
+        // the map has just taken in.
+        SyncSupervisors(snapshot.Supervisors);
+        SyncFriends();
+        SupervisorListCount = _supervisors.Count;
+        FriendCount = _friends.Count;
 
         // The trail ends on the live position, so it follows every refresh.
         _ = RefreshSelectionTracksAsync();
@@ -805,11 +952,211 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         null => "No recorded track for this session — the map shows the part of the route already flown."
     };
 
+    /// <summary>
+    /// Reconciles the SUP list with the supervisor feed. The rows are updated
+    /// instead of rebuilt, so a list that is scrolled to stays where it is while
+    /// the poll replaces the records.
+    /// </summary>
+    private void SyncSupervisors(IReadOnlyList<IvaoSupervisor> supervisors)
+    {
+        var incoming = new HashSet<long>();
+        foreach (var record in supervisors)
+        {
+            if (!incoming.Add(record.Id))
+            {
+                continue;
+            }
+
+            if (_supervisorsById.TryGetValue(record.Id, out var existing))
+            {
+                existing.Update(record);
+            }
+            else
+            {
+                var item = new SupervisorItem(record);
+                _supervisorsById.Add(record.Id, item);
+                _supervisors.Add(item);
+            }
+        }
+
+        foreach (var stale in _supervisors.Where(item => !incoming.Contains(item.Id)).ToList())
+        {
+            _supervisors.Remove(stale);
+            _supervisorsById.Remove(stale.Id);
+        }
+
+        // A supervisor that signed off takes the selection with it, like a flight
+        // that landed takes the traffic selection.
+        if (_selectedSupervisor is { } selected && !_supervisors.Contains(selected))
+        {
+            SelectedSupervisor = null;
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds the FRIENDS list from the VIDs of the settings: a friend that is
+    /// flying or controlling gets the row of the traffic list, a supervisor gets
+    /// the row of the supervisor feed, and a VID that is not connected keeps an
+    /// offline row, because a stale friend is dropped while it is offline.
+    /// </summary>
+    private void SyncFriends()
+    {
+        // Every row that follows a member carries the star, and a member that has
+        // just connected is not marked yet.
+        RefreshFriendMarks();
+
+        var byUser = new Dictionary<long, FriendItem>();
+
+        foreach (var pilot in Map.Pilots)
+        {
+            if (pilot.UserId > 0 && _settings.IsFriend(pilot.UserId))
+            {
+                var item = GetFriend(pilot.UserId);
+                item.ShowPilot(pilot);
+                byUser[pilot.UserId] = item;
+            }
+        }
+
+        foreach (var station in Map.Atc)
+        {
+            if (station.UserId > 0 && _settings.IsFriend(station.UserId))
+            {
+                var item = GetFriend(station.UserId);
+                item.ShowAtc(station);
+                byUser[station.UserId] = item;
+            }
+        }
+
+        foreach (var supervisor in _supervisors)
+        {
+            // A supervisor that is flying or controlling is already listed above
+            // with the traffic row, which carries more of the state than the feed.
+            if (supervisor.UserId > 0 &&
+                _settings.IsFriend(supervisor.UserId) &&
+                !byUser.ContainsKey(supervisor.UserId))
+            {
+                var item = GetFriend(supervisor.UserId);
+                item.ShowSupervisor(supervisor);
+                byUser[supervisor.UserId] = item;
+            }
+        }
+
+        // The rows follow the order of the friend list (a VID ascending), so the
+        // list does not reshuffle when a friend connects or disconnects.
+        var ordered = new List<FriendItem>(_settings.FriendIds.Count);
+        foreach (var userId in _settings.FriendIds)
+        {
+            if (!byUser.TryGetValue(userId, out var online))
+            {
+                online = GetFriend(userId);
+                online.ShowOffline();
+            }
+
+            ordered.Add(online);
+        }
+
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            var item = ordered[index];
+            var current = _friends.IndexOf(item);
+            if (current < 0)
+            {
+                _friends.Insert(index, item);
+            }
+            else if (current != index)
+            {
+                _friends.Move(current, index);
+            }
+        }
+
+        while (_friends.Count > ordered.Count)
+        {
+            _friends.RemoveAt(_friends.Count - 1);
+        }
+
+        foreach (var userId in _friendsById.Keys.Where(id => !_settings.IsFriend(id)).ToList())
+        {
+            _friendsById.Remove(userId);
+        }
+
+        if (_selectedFriend is { } selected && !_friends.Contains(selected))
+        {
+            SelectedFriend = null;
+        }
+    }
+
+    /// <summary>The row of a friend, created the first time the VID is seen.</summary>
+    private FriendItem GetFriend(long userId)
+    {
+        if (!_friendsById.TryGetValue(userId, out var item))
+        {
+            item = new FriendItem(userId);
+            _friendsById.Add(userId, item);
+        }
+
+        return item;
+    }
+
+    private void RefreshFriendMarks()
+    {
+        foreach (var pilot in Map.Pilots)
+        {
+            pilot.IsFriend = _settings.IsFriend(pilot.UserId);
+        }
+
+        foreach (var station in Map.Atc)
+        {
+            station.IsFriend = _settings.IsFriend(station.UserId);
+        }
+
+        foreach (var supervisor in _supervisors)
+        {
+            supervisor.IsFriend = _settings.IsFriend(supervisor.UserId);
+        }
+    }
+
+    private void ToggleFriend(object? parameter)
+    {
+        var userId = ResolveUserId(parameter);
+        if (userId <= 0)
+        {
+            return;
+        }
+
+        _settings.ToggleFriend(userId);
+        SaveSettings();
+
+        // The star sits on every row that follows the member, and the FRIENDS list
+        // gains or loses its row.
+        SyncFriends();
+        FriendCount = _friends.Count;
+        OnPropertyChanged(nameof(IsSelectionFriend));
+        OnPropertyChanged(nameof(FriendActionText));
+    }
+
+    /// <summary>
+    /// The member a command acts on: the row it was fired from, or the selection
+    /// when the button that fires it carries no parameter.
+    /// </summary>
+    private long ResolveUserId(object? parameter) => parameter switch
+    {
+        long userId => userId,
+        int userId => userId,
+        PilotItem pilot => pilot.UserId,
+        AtcItem station => station.UserId,
+        FriendItem friend => friend.UserId,
+        _ => SelectedPilot?.UserId ?? SelectedAtc?.UserId ?? 0
+    };
+
     private void RaiseSelectionDependentChanges()
     {
         OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(IsSelectionSupervisor));
+        OnPropertyChanged(nameof(IsSelectionFriend));
+        OnPropertyChanged(nameof(FriendActionText));
         LocateSelectedCommand.RaiseCanExecuteChanged();
         ClearSelectionCommand.RaiseCanExecuteChanged();
+        _toggleFriendCommand.RaiseCanExecuteChanged();
     }
 
     private bool FilterPilot(object item) =>
@@ -819,6 +1166,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool FilterAtc(object item) =>
         string.IsNullOrWhiteSpace(_searchText) ||
         item is AtcItem atc && atc.SearchText.Contains(_searchText.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private bool FilterSupervisor(object item) =>
+        string.IsNullOrWhiteSpace(_searchText) ||
+        item is SupervisorItem supervisor &&
+        supervisor.SearchText.Contains(_searchText.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private bool FilterFriend(object item) =>
+        string.IsNullOrWhiteSpace(_searchText) ||
+        item is FriendItem friend &&
+        friend.SearchText.Contains(_searchText.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private void LocateSelected()
     {

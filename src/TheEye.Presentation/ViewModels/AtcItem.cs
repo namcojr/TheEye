@@ -9,6 +9,9 @@ namespace TheEye.Presentation.ViewModels;
 
 public sealed class AtcItem : ObservableObject
 {
+    /// <summary>The colour a row that carries no mark binds, i.e. "no wash".</summary>
+    private const string TransparentTint = "#00000000";
+
     private readonly IImageCache _images;
     private IvaoAtc _atc;
     private IvaoSessionDetail? _detail;
@@ -84,13 +87,15 @@ public sealed class AtcItem : ObservableObject
     public long UserId => _detail?.UserId is { } id && id > 0 ? id : _atc.UserId;
 
     /// <summary>
-    /// The controller behind the station. The identity feed of the tracker names
-    /// every connected station, so the name is known before the card is opened;
-    /// the roster record of the selected session is preferred when it is there.
-    /// Empty means IVAO sent no name, which is what a signed-out run looks like.
+    /// The controller behind the station. The identity feed of the traffic list
+    /// names every connected station, so the name is known before the card is
+    /// opened; the roster record of the selected session is preferred when it
+    /// named the controller, but it withholds the name for most sessions and
+    /// must not hide the one the list already has. Empty means IVAO named the
+    /// member nowhere, which is what a signed-out run looks like.
     /// </summary>
-    public string MemberName => _detail?.User?.FullName is { Length: > 0 } name
-        ? name
+    public string MemberName => _detail?.User is { HasName: true } detail
+        ? detail.FullName
         : _atc.MemberName;
 
     public bool HasMemberName => MemberName.Length > 0;
@@ -117,13 +122,28 @@ public sealed class AtcItem : ObservableObject
 
     /// <summary>
     /// True when IVAO lists the controller with supervisor rights; the station
-    /// badge then carries the supervisor ring on the map.
+    /// badge then carries the supervisor ring on the map and the row of the list
+    /// the wash of a watched member.
     /// </summary>
     public bool IsSupervisor
     {
         get => _isSupervisor;
-        set => SetProperty(ref _isSupervisor, value);
+        set
+        {
+            if (SetProperty(ref _isSupervisor, value))
+            {
+                OnPropertyChanged(nameof(RowTint));
+            }
+        }
     }
+
+    /// <summary>
+    /// The wash the traffic list paints behind the whole row of a supervisor:
+    /// the pink of the ring the map draws around the badge, at a low opacity. A
+    /// station nobody watches binds a fully transparent colour, so the view
+    /// needs no trigger to un-tint it.
+    /// </summary>
+    public string RowTint => IsSupervisor ? ThemeCatalog.SupervisorRowTint : TransparentTint;
 
     /// <summary>
     /// The callsign as the traffic list prints it. A star in front of the
@@ -155,7 +175,12 @@ public sealed class AtcItem : ObservableObject
     /// </summary>
     public bool HasProfile => _detail?.User is not null;
 
-    public string ProfileName => _detail?.User?.FullName ?? "—";
+    /// <summary>
+    /// The name of the card header. The record of the session may leave the name
+    /// out, so the one the traffic list already has is printed instead of the
+    /// placeholder the roster record would produce.
+    /// </summary>
+    public string ProfileName => MemberName is { Length: > 0 } name ? name : "—";
 
     /// <summary>The division the controller belongs to, spelled out from its code.</summary>
     public string HomeText => _detail?.User?.DivisionName is { Length: > 0 } name ? name : "—";
@@ -296,6 +321,12 @@ public sealed class AtcItem : ObservableObject
         if (!ReferenceEquals(_detail, result.Session))
         {
             _detail = result.Session;
+
+            // The record of a single session names the member for a minority of
+            // sessions; the identity feed of the traffic list knows the name of
+            // every connection, so the header prints it instead of "IVAO member".
+            _detail?.User?.ApplyNameFrom(_atc.User);
+
             RatingBadge = null;
             FlagImage = null;
 

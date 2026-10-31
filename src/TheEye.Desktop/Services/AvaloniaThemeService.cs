@@ -57,6 +57,7 @@ public sealed class AvaloniaThemeService : IThemeService
             resources["SuccessBrush"] = Brush(palette.Success);
             resources["WarningBrush"] = Brush(palette.Warning);
             resources["ErrorBrush"] = Brush(palette.Error);
+            resources["SupervisorBrush"] = Brush(palette.Supervisor);
             resources["MapWaterBrush"] = Brush(palette.MapWater);
             resources["MapLandBrush"] = Brush(palette.MapLand);
             resources["MapBorderBrush"] = Brush(palette.MapBorder);

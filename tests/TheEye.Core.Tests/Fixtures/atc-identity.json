@@ -1,0 +1,29 @@
+[
+  {
+    "id": 301,
+    "userId": 401,
+    "callsign": "EHAM_TWR",
+    "connectionType": "ATC",
+    "serverId": "WS1-EUW2",
+    "createdAt": "2026-01-01T09:30:00Z",
+    "softwareType": {
+      "id": "aurora/win",
+      "name": "Aurora"
+    },
+    "user": {
+      "id": 401,
+      "firstName": "Niels",
+      "lastName": "de Vries",
+      "divisionId": "NL",
+      "rating": {
+        "isAtc": true,
+        "isPilot": true,
+        "atcRating": {
+          "id": 5,
+          "name": "Approach Controller",
+          "shortName": "APP"
+        }
+      }
+    }
+  }
+]

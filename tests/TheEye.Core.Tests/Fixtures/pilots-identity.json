@@ -1,0 +1,44 @@
+[
+  {
+    "id": 101,
+    "userId": 201,
+    "callsign": "TEST123",
+    "connectionType": "PILOT",
+    "serverId": "WS1-EUW2",
+    "createdAt": "2026-01-01T10:00:00Z",
+    "softwareType": {
+      "id": "altitude/win",
+      "name": "Altitude"
+    },
+    "pilotSession": {
+      "simulatorId": "MSFS"
+    },
+    "user": {
+      "id": 201,
+      "firstName": "Ana",
+      "lastName": "Silva",
+      "divisionId": "PT",
+      "rating": {
+        "isAtc": false,
+        "isPilot": true,
+        "pilotRating": {
+          "id": 6,
+          "name": "Senior Flight Officer",
+          "shortName": "FS3"
+        }
+      }
+    }
+  },
+  {
+    "id": 102,
+    "userId": 202,
+    "callsign": "TEST456",
+    "connectionType": "PILOT",
+    "user": {
+      "id": 202,
+      "firstName": "Tom",
+      "lastName": "Costa",
+      "divisionId": "BR"
+    }
+  }
+]

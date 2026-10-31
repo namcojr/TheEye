@@ -21,6 +21,7 @@
     <SolidColorBrush x:Key="SuccessBrush" Color="#34D399" />
     <SolidColorBrush x:Key="WarningBrush" Color="#FBBF24" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#F87171" />
+    <SolidColorBrush x:Key="SupervisorBrush" Color="#E84393" />
     <SolidColorBrush x:Key="MapWaterBrush" Color="#0B1721" />
     <SolidColorBrush x:Key="MapLandBrush" Color="#1B2A35" />
     <SolidColorBrush x:Key="MapBorderBrush" Color="#4A6070" />

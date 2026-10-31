@@ -168,6 +168,47 @@ public sealed class SessionDetailTests
     }
 
     [Fact]
+    public void ApplyNameFrom_TakesTheNameTheOtherRecordKnows()
+    {
+        // What api.ivao.aero answers for a session: the division and the ratings,
+        // but no name. The roster feed of the traffic list names the member.
+        var session = new IvaoSessionUser { Id = 781249, DivisionId = "US" };
+
+        session.ApplyNameFrom(new IvaoSessionUser
+        {
+            Id = 781249,
+            FirstName = "Drew",
+            LastName = "Sharp",
+            DivisionId = "US"
+        });
+
+        Assert.Equal("Drew Sharp", session.FullName);
+        Assert.Equal("US", session.DivisionId);
+    }
+
+    [Fact]
+    public void ApplyNameFrom_KeepsTheNameTheRecordAlreadyHas()
+    {
+        var session = new IvaoSessionUser { FirstName = "Ana", LastName = "Silva" };
+
+        session.ApplyNameFrom(new IvaoSessionUser { FirstName = "Someone", LastName = "Else" });
+
+        Assert.Equal("Ana Silva", session.FullName);
+    }
+
+    [Fact]
+    public void ApplyNameFrom_IgnoresAnAnswerWithoutAName()
+    {
+        var session = new IvaoSessionUser();
+
+        session.ApplyNameFrom(null);
+        session.ApplyNameFrom(session);
+        session.ApplyNameFrom(new IvaoSessionUser { FirstName = "  ", LastName = null });
+
+        Assert.False(session.HasName);
+    }
+
+    [Fact]
     public void DivisionName_IsEmptyWithoutADivision()
     {
         var user = new IvaoSessionUser();

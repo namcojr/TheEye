@@ -87,9 +87,9 @@ THINGS TO ADD / CORRECTIONS
 ===========================
 
 - New glyphs for aircraft types. Heavy, quad engine, super, heli, prop, t-prop
-- On linux, if we check/uncheck "ATC" on the map, the view only gets updated when we drag the map.
 - The zoom is a bit too aggressive, the steps are too big when we scroll the wheel. Each "step" should be
 one zoom level up or down
+- Add more detail to the maps: City delimiters, roads, detailed airport ground structure. Do we need Open StreetMap for this?
 
 
 ## IVAO SIGN-IN (implemented)
