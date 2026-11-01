@@ -128,9 +128,7 @@
         </Style>
     </ControlTheme>
 
-    <!-- The aircraft pin: the icon set carries one frame per degree of heading,
-         so the artwork is drawn as it is and the halo marks the selection,
-         mirroring the WPF marker template. -->
+    <!-- Rotate the vector artwork only; keep the halo and hit area stationary. -->
     <ControlTheme x:Key="PilotMarkerButton" TargetType="Button">
         <Setter Property="Width" Value="26" />
         <Setter Property="Height" Value="26" />
@@ -147,12 +145,18 @@
                     <Ellipse Name="Halo" Width="25" Height="25"
                              Fill="{DynamicResource AccentBrush}" Opacity="0.28"
                              IsVisible="{Binding IsSelected}" />
-                    <Image Name="Icon" Source="{Binding Icon}"
+                    <Viewbox Name="Icon"
                            Width="{Binding IsSelected, Converter={StaticResource BoolToDouble}, ConverterParameter='24,21'}"
                            Height="{Binding IsSelected, Converter={StaticResource BoolToDouble}, ConverterParameter='24,21'}"
                            Opacity="{Binding IsOnGround, Converter={StaticResource BoolToDouble}, ConverterParameter='0.72,1'}"
-                           RenderOptions.BitmapInterpolationMode="HighQuality"
-                           RenderTransformOrigin="50%,50%" />
+                           RenderTransformOrigin="50%,50%">
+                        <Viewbox.RenderTransform>
+                            <RotateTransform Angle="{Binding HeadingDegrees}" />
+                        </Viewbox.RenderTransform>
+                        <Canvas Width="64" Height="64">
+                            <Path Data="{Binding Icon}" Fill="{DynamicResource TextBrush}" />
+                        </Canvas>
+                    </Viewbox>
                 </Grid>
             </ControlTemplate>
         </Setter>

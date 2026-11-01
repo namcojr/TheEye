@@ -1,0 +1,201 @@
+using SkiaSharp;
+using TheEye.Core.Maps;
+using TheEye.Core.Models;
+using TheEye.Core.Services;
+using TheEye.Presentation.Services;
+using TheEye.Presentation.ViewModels;
+
+namespace TheEye.Core.Tests;
+
+public sealed class AircraftGlyphTests
+{
+    [Theory]
+    [InlineData("A332", AircraftGlyph.HeavyTwin)]
+    [InlineData("A35K", AircraftGlyph.HeavyTwin)]
+    [InlineData("B763", AircraftGlyph.HeavyTwin)]
+    [InlineData("B77W", AircraftGlyph.HeavyTwin)]
+    [InlineData("MD11", AircraftGlyph.HeavyTrijet)]
+    [InlineData("L101", AircraftGlyph.HeavyTrijet)]
+    [InlineData("DC10", AircraftGlyph.HeavyTrijet)]
+    [InlineData("D10T", AircraftGlyph.HeavyTrijet)]
+    [InlineData("D10F", AircraftGlyph.HeavyTrijet)]
+    [InlineData("B752", AircraftGlyph.LongMediumTwin)]
+    [InlineData("B753", AircraftGlyph.LongMediumTwin)]
+    [InlineData("B748", AircraftGlyph.HeavyQuad)]
+    [InlineData("A388", AircraftGlyph.HeavyQuad)]
+    [InlineData("A346", AircraftGlyph.HeavyQuad)]
+    [InlineData("B703", AircraftGlyph.ClassicQuad)]
+    [InlineData("DC87", AircraftGlyph.ClassicQuad)]
+    [InlineData("A20N", AircraftGlyph.MediumTwin)]
+    [InlineData("B738", AircraftGlyph.MediumTwin)]
+    [InlineData("E190", AircraftGlyph.MediumTwin)]
+    [InlineData("F100", AircraftGlyph.RegionalRearTwin)]
+    [InlineData("CRJX", AircraftGlyph.RegionalRearTwin)]
+    [InlineData("E145", AircraftGlyph.RegionalRearTwin)]
+    [InlineData("GLF6", AircraftGlyph.BusinessJet)]
+    [InlineData("E50P", AircraftGlyph.BusinessJet)]
+    [InlineData("C25C", AircraftGlyph.BusinessJet)]
+    [InlineData("PC12", AircraftGlyph.TurbopropSingle)]
+    [InlineData("C208", AircraftGlyph.TurbopropSingle)]
+    [InlineData("AT76", AircraftGlyph.TurbopropTwin)]
+    [InlineData("BE20", AircraftGlyph.TurbopropTwin)]
+    [InlineData("C172", AircraftGlyph.PistonSingle)]
+    [InlineData("SR22", AircraftGlyph.PistonSingle)]
+    [InlineData("DA42", AircraftGlyph.PistonTwin)]
+    [InlineData("BE58", AircraftGlyph.PistonTwin)]
+    [InlineData("EC45", AircraftGlyph.Helicopter)]
+    [InlineData("AS50", AircraftGlyph.Helicopter)]
+    [InlineData("R44", AircraftGlyph.Helicopter)]
+    [InlineData(" b738 ", AircraftGlyph.MediumTwin)]
+    [InlineData("ZZZZ", AircraftGlyph.MediumTwin)]
+    [InlineData("B738X", AircraftGlyph.MediumTwin)]
+    [InlineData("B722", AircraftGlyph.MediumTwin)]
+    [InlineData("DHC7", AircraftGlyph.MediumTwin)]
+    [InlineData("", AircraftGlyph.MediumTwin)]
+    [InlineData(null, AircraftGlyph.MediumTwin)]
+    public void ClassifiesNestedAndSummaryCodes(string? code, AircraftGlyph expected)
+    {
+        Assert.Equal(expected, AircraftIconCatalog.Classify(new IvaoFlightPlan { AircraftId = code }));
+        Assert.Equal(expected, AircraftIconCatalog.Classify(new IvaoFlightPlan
+        {
+            Aircraft = new IvaoAircraftSummary { IcaoCode = code }
+        }));
+    }
+
+    [Fact]
+    public void MetadataPriorityAndMediumTwinFallback()
+    {
+        Assert.Equal(AircraftGlyph.MediumTwin, AircraftIconCatalog.Classify(null));
+        var plan = new IvaoFlightPlan
+        {
+            AircraftId = "B738",
+            Aircraft = new IvaoAircraftSummary { IcaoCode = " ", WakeTurbulence = "H" }
+        };
+        Assert.Equal(AircraftGlyph.MediumTwin, AircraftIconCatalog.Classify(plan));
+        plan.Aircraft.IcaoCode = "A388";
+        Assert.Equal(AircraftGlyph.HeavyQuad, AircraftIconCatalog.Classify(plan));
+        plan.Aircraft.IcaoCode = "UNKN";
+        Assert.Equal(AircraftGlyph.MediumTwin, AircraftIconCatalog.Classify(plan));
+        plan.Aircraft.Description = " helicopter ";
+        Assert.Equal(AircraftGlyph.Helicopter, AircraftIconCatalog.Classify(plan));
+    }
+
+    [Theory]
+    [InlineData(null, 0)]
+    [InlineData(0, 0)]
+    [InlineData(90, 90)]
+    [InlineData(227, 227)]
+    [InlineData(360, 0)]
+    [InlineData(721, 1)]
+    [InlineData(-1, 359)]
+    [InlineData(-360, 0)]
+    public void NormalizesHeading(int? heading, int expected) =>
+        Assert.Equal(expected, AircraftIconCatalog.NormalizeHeading(heading));
+
+    [Fact]
+    public void EveryEmbeddedSvgParsesAndRemainsInsideRotationCircle()
+    {
+        Assert.DoesNotContain(typeof(AircraftIconCatalog).Assembly.GetManifestResourceNames(),
+            name => name.StartsWith("TheEye.Core.Resources.Aircraft.") && name.EndsWith(".png"));
+        foreach (var glyph in Enum.GetValues<AircraftGlyph>())
+        {
+            var data = AircraftIconCatalog.PathData(glyph);
+            using var path = SKPath.ParseSvgPathData(data);
+            Assert.NotNull(path);
+            Assert.False(path.IsEmpty);
+            for (var heading = 0; heading < 360; heading++)
+            {
+                using var rotated = new SKPath(path);
+                rotated.Transform(SKMatrix.CreateRotationDegrees(heading, 32, 32));
+                var bounds = rotated.TightBounds;
+                Assert.InRange(bounds.Left, 0, 64);
+                Assert.InRange(bounds.Top, 0, 64);
+                Assert.InRange(bounds.Right, 0, 64);
+                Assert.InRange(bounds.Bottom, 0, 64);
+            }
+        }
+        Assert.Throws<ArgumentOutOfRangeException>(() => AircraftIconCatalog.Open((AircraftGlyph)999));
+    }
+
+    [Fact]
+    public void LongMediumTwinIsLongerAndThinnerThanStandardMediumTwin()
+    {
+        using var standard = SKPath.ParseSvgPathData(AircraftIconCatalog.PathData(AircraftGlyph.MediumTwin));
+        using var slender = SKPath.ParseSvgPathData(AircraftIconCatalog.PathData(AircraftGlyph.LongMediumTwin));
+        Assert.True(slender.TightBounds.Height >= standard.TightBounds.Height + 8);
+        Assert.True(slender.TightBounds.Width < standard.TightBounds.Width);
+        Assert.True(standard.Contains(34.5f, 20));
+        Assert.False(slender.Contains(34.5f, 20));
+        Assert.True(slender.Contains(32, 20));
+    }
+
+    [Fact]
+    public void HeavyTrijetHasDistinctTailEngineBulge()
+    {
+        using var twin = SKPath.ParseSvgPathData(AircraftIconCatalog.PathData(AircraftGlyph.HeavyTwin));
+        using var trijet = SKPath.ParseSvgPathData(AircraftIconCatalog.PathData(AircraftGlyph.HeavyTrijet));
+        Assert.False(twin.Contains(36, 47));
+        Assert.True(trijet.Contains(36, 47));
+        Assert.True(trijet.Contains(28, 47));
+    }
+
+    [Fact]
+    public void HeadingChangesReuseGeometryAndTypeChangesRefreshIt()
+    {
+        var created = 0;
+        var icons = new AircraftIconCache<object>(_ => { created++; return new object(); });
+        using var images = new EmptyImages();
+        var pilot = new IvaoPilot
+        {
+            FlightPlan = new IvaoFlightPlan { AircraftId = "B738" },
+            LastTrack = new IvaoLastTrack { Heading = 90, OnGround = true }
+        };
+        var item = new PilotItem(pilot, icons, images) { IsSelected = true };
+        var first = item.Icon;
+        pilot.LastTrack.Heading = 227;
+        item.Update(pilot);
+        Assert.Same(first, item.Icon);
+        Assert.Equal(227, item.HeadingDegrees);
+        Assert.True(item.IsSelected);
+        Assert.True(item.IsOnGround);
+        Assert.Equal(1, created);
+        pilot.FlightPlan.AircraftId = "AT76";
+        item.Update(pilot);
+        Assert.NotSame(first, item.Icon);
+        Assert.Equal(AircraftGlyph.TurbopropTwin, item.Glyph);
+        Assert.Equal(2, created);
+        item.ApplyFlightPlan(new SessionFlightPlanResult(new IvaoFlightPlan { Route = "DCT" }, null, null));
+        Assert.Equal(AircraftGlyph.TurbopropTwin, item.Glyph);
+        Assert.Equal(2, created);
+        item.ApplyFlightPlan(new SessionFlightPlanResult(new IvaoFlightPlan { AircraftId = "EC45" }, null, null));
+        Assert.Equal(AircraftGlyph.Helicopter, item.Glyph);
+        Assert.Equal(3, created);
+        item.ApplyFlightPlan(new SessionFlightPlanResult(new IvaoFlightPlan { AircraftId = "ZZZZ" }, null, null));
+        Assert.Equal(AircraftGlyph.MediumTwin, item.Glyph);
+        Assert.Same(first, item.Icon);
+        Assert.Equal(3, created);
+    }
+
+    [Fact]
+    public void CacheCreatesEachCategoryOnlyOnceUnderConcurrentAccess()
+    {
+        var created = 0;
+        var cache = new AircraftIconCache<object>(_ =>
+        {
+            Interlocked.Increment(ref created);
+            return new object();
+        });
+        var icons = new object[100];
+        Parallel.For(0, icons.Length, index => icons[index] = cache.Get(AircraftGlyph.HeavyTwin));
+        Assert.Equal(1, created);
+        Assert.All(icons, icon => Assert.Same(icons[0], icon));
+    }
+
+    private sealed class EmptyImages : IImageCache
+    {
+        public object? TryGet(string? url) => null;
+        public Task<object?> GetAsync(string? url, CancellationToken cancellationToken = default) =>
+            Task.FromResult<object?>(null);
+        public void Dispose() { }
+    }
+}

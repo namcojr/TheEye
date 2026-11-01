@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="currentColor">
+  <title>Regional jet with two rear engines and T-tail</title>
+  <path d="M32 8C30 8 29.5 13 29.5 17V31L11 40V43L29.5 37V50L23 52V55L31 54L32 57L33 54L41 55V52L34.5 50V37L53 43V40L34.5 31V17C34.5 13 34 8 32 8Z"/>
+  <path d="M25 40C23.5 40 23 42 23 44V49H27V44C27 42 26.5 40 25 40ZM39 40C37.5 40 37 42 37 44V49H41V44C41 42 40.5 40 39 40Z"/>
+  <path d="M26 44H38V46H26Z"/>
+</svg>

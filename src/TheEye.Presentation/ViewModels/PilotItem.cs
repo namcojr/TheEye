@@ -16,7 +16,7 @@ public sealed class PilotItem : ObservableObject
     private readonly IImageCache _images;
     private IvaoPilot _pilot;
     private object? _icon;
-    private int? _iconHeading;
+    private AircraftGlyph? _iconGlyph;
     private IvaoSessionDetail? _detail;
     private int? _detailStatus;
     private string? _detailError;
@@ -61,6 +61,16 @@ public sealed class PilotItem : ObservableObject
     public string Speed => _pilot.SpeedText;
 
     public string Heading => _pilot.HeadingText;
+
+    public int HeadingDegrees => AircraftIconCatalog.NormalizeHeading(_pilot.LastTrack?.Heading);
+
+    public AircraftGlyph Glyph => AircraftIconCatalog.Classify(
+        _flightPlan is { } plan &&
+        (!string.IsNullOrWhiteSpace(plan.Aircraft?.IcaoCode) ||
+         !string.IsNullOrWhiteSpace(plan.AircraftId) ||
+         string.Equals(plan.Aircraft?.Description?.Trim(), "Helicopter", StringComparison.OrdinalIgnoreCase))
+            ? plan
+            : _pilot.FlightPlan);
 
     public string State => _pilot.State;
 
@@ -477,11 +487,11 @@ public sealed class PilotItem : ObservableObject
 
     private void Refresh()
     {
-        var heading = AircraftIconCatalog.NormalizeHeading(_pilot.LastTrack?.Heading);
-        if (_icon is null || _iconHeading != heading)
+        var glyph = Glyph;
+        if (_icon is null || _iconGlyph != glyph)
         {
-            _icon = _icons.Get(heading);
-            _iconHeading = heading;
+            _icon = _icons.Get(glyph);
+            _iconGlyph = glyph;
         }
 
         SearchText = string.Join(' ', new[]

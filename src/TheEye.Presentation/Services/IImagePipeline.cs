@@ -1,3 +1,5 @@
+using TheEye.Core.Maps;
+
 namespace TheEye.Presentation.Services;
 
 /// <summary>
@@ -15,10 +17,10 @@ public interface IImageCache : IDisposable
     Task<object?> GetAsync(string? url, CancellationToken cancellationToken = default);
 }
 
-/// <summary>The bundled aircraft icon for a heading, decoded once per heading.</summary>
+/// <summary>The native vector geometry, decoded once per aircraft category.</summary>
 public interface IAircraftIconCache
 {
-    object? Get(int? heading);
+    object Get(AircraftGlyph glyph);
 }
 
 /// <summary>

@@ -17,7 +17,7 @@ LANDMARKS / REQUISITES
 MAIN MAP CONTROLLERS PILOTS and STATISTICS should be implemented, the rest is not required. ivae_map shows
 the old map view, where every ATC position or pilot icon (not displayed here) is clickable, then a window
 will open with details regarding the position, either ATC or pilot.
-- Icons for the aircraft (all 360 positions for 360 angles) can be found on the same SAS Acars project in the parent folders inside resources inair (IVAO traffic) and inair2 (own aircraft) folders. After the project skeleton is working, i will provide more icons for different types of aircraft.
+- Aircraft now use original north-facing SVG glyphs, rotated by heading rather than one PNG per degree (see below).
 - I can also try to find the executable for the old ivae we are rebuilding here in case you need to fetch anything from it. I am not sure but IIRC this is a VBasic.NET x86 application
 
 - Check api.ivao.aero/docs and analyze the possibility of in-app login to process data without having an API
@@ -86,8 +86,42 @@ the public API.
 THINGS TO ADD / CORRECTIONS
 ===========================
 
-- New glyphs for aircraft types. Heavy, quad engine, super, heli, prop, t-prop
 - To add more detail to the maps: City delimiters, roads, detailed airport ground structures, do we need Open StreetMap or similar for this?
+
+
+## AIRCRAFT SVG GLYPHS (implemented)
+==================================
+
+`src/TheEye.Core/Resources/Aircraft` contains thirteen original monochrome SVG
+silhouettes. Each has a 64x64 viewBox,
+points north, and uses `currentColor`. Smaller classes occupy less of the same
+canvas; dimensions are symbolic rather than physically to scale.
+
+`AircraftIconCatalog.Classify` uses the filed ICAO code (nested `icaoCode`, or
+`aircraftId` when absent) and an offline type lookup. Payload descriptions
+explicitly identifying a `Helicopter` also select that glyph. The feed supplies
+model, wake category and heading, but not engine count, propulsion or placement.
+Wake category cannot distinguish silhouettes: B707/DC-8 use classic quad despite
+heavy wake; ATR72 uses twin turboprop. Business-jet classification describes the
+airframe, not its ownership.
+
+Heavy trijets (MD11, L101 and DC10/D10T/D10F) use two underwing engines and a
+visible tail-engine bulge. B752/B753 use a longer, thinner medium-twin silhouette.
+
+The lookup is intentionally not a complete ICAO database. Unknown, unfiled and
+unmapped types (including rear-engine trijets such as B722) use the Medium
+Underwing Twin Jet silhouette as the requested visual fallback, not as a claim
+about their actual engine layout. Extend the exact-code table in
+`src/TheEye.Core/Map/AircraftIconCatalog.cs` to add mappings.
+
+Both WPF and Avalonia parse bundled SVG path data into native vector geometry
+once per category. No SVG package or rasterization is needed. Bundled SVGs must
+use only untransformed filled paths and an optional title; unsupported geometry
+or missing resources raise an explicit error. Marker templates preserve the 64x64
+canvas in a Viewbox, rotate only the artwork clockwise by normalized heading,
+and use the theme's TextBrush. Selection halos, 26px click areas, 21/24px artwork
+and ground opacity remain unchanged. Heading updates reuse the same geometry;
+type changes and loaded flight plans refresh the category.
 
 
 ## MAP WHEEL ZOOM (implemented)

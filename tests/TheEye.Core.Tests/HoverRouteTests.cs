@@ -111,7 +111,7 @@ public sealed class HoverRouteTests
     {
         public IAircraftIconCache AircraftIcons => this;
         public IImageCache SessionImages => this;
-        public object? Get(int? heading) => null;
+        public object Get(AircraftGlyph glyph) => glyph;
         public object? TryGet(string? url) => null;
         public Task<object?> GetAsync(string? url, CancellationToken cancellationToken = default) =>
             Task.FromResult<object?>(null);
