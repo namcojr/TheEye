@@ -865,15 +865,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Loads the roster record of the selected flight or station, so the card can
-    /// name the member, the division and the ratings behind the callsign. Like the
-    /// tracks feed this endpoint is authenticated: a refusal is handed to the card,
-    /// which explains it, instead of being swallowed. A response for a selection
-    /// the user has already left is dropped.
+    /// Loads a roster record only when the authenticated live feed omitted the
+    /// member. Normally that feed already carries the card's identity details, so
+    /// selecting a live pilot or station does not need another request. A response
+    /// for a selection the user has already left is dropped.
     /// </summary>
     private async Task RefreshSelectionDetailAsync()
     {
-        if (_details is not { } details)
+        if (_details is not { } details || !IsSignedIn)
         {
             return;
         }
@@ -882,6 +881,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // the callsign, their ratings and the client they are connected with.
         var pilot = Map.SelectedPilot;
         var atc = Map.SelectedAtc;
+        if (pilot?.Pilot.User is not null || atc?.Atc.User is not null)
+        {
+            return;
+        }
+
         if ((pilot?.Id ?? atc?.Id) is not { } sessionId)
         {
             return;

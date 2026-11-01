@@ -62,6 +62,7 @@ public sealed class PilotItem : ObservableObject
         _icons = icons;
         _images = images;
         Refresh();
+        LoadImages(_pilot.User);
     }
 
     public IvaoPilot Pilot => _pilot;
@@ -295,7 +296,7 @@ public sealed class PilotItem : ObservableObject
     /// blank header with a flag slot would look like a failure rather than an
     /// answer that has not arrived.
     /// </summary>
-    public bool HasProfile => _detail?.User is not null || IsUnauthorized(_detailStatus);
+    public bool HasProfile => _detail?.User is not null || _pilot.User is not null || IsUnauthorized(_detailStatus);
 
     private string MissingProfileValue => IsUnauthorized(_detailStatus) ? "-" : "—";
 
@@ -309,14 +310,14 @@ public sealed class PilotItem : ObservableObject
     public string ProfileName => MemberName is { Length: > 0 } name ? name : MissingProfileValue;
 
     /// <summary>The division the member flies for, spelled out from its ISO code.</summary>
-    public string HomeText => _detail?.User?.DivisionName is { Length: > 0 } name ? name : MissingProfileValue;
+    public string HomeText => (_detail?.User ?? _pilot.User)?.DivisionName is { Length: > 0 } name ? name : MissingProfileValue;
 
     /// <summary>Pilot rating in short form ("FS3"), the level IVAO grants the member.</summary>
     public string RatingText
     {
         get
         {
-            var rating = _detail?.User?.Rating;
+            var rating = (_detail?.User ?? _pilot.User)?.Rating;
             if (!string.IsNullOrWhiteSpace(rating?.PilotRating?.ShortName))
             {
                 return rating.PilotRating.ShortName;
@@ -359,7 +360,7 @@ public sealed class PilotItem : ObservableObject
             ? DurationText.Format(online)
             : "—";
 
-    public string ConnectedText => _detail?.CreatedAt is { } connectedAt
+    public string ConnectedText => (_detail?.CreatedAt ?? _pilot.CreatedAt) is { } connectedAt
         ? connectedAt.ToLocalTime().ToString("HH:mm")
         : "—";
 
@@ -468,8 +469,13 @@ public sealed class PilotItem : ObservableObject
 
     public void Update(IvaoPilot pilot)
     {
+        var userChanged = _pilot.User?.Id != pilot.User?.Id;
         _pilot = pilot;
         Refresh();
+        if (userChanged)
+        {
+            LoadImages(_pilot.User);
+        }
     }
 
     /// <summary>
@@ -496,11 +502,7 @@ public sealed class PilotItem : ObservableObject
 
             RatingBadge = null;
             FlagImage = null;
-
-            if (_detail is { } detail)
-            {
-                LoadImages(detail);
-            }
+            LoadImages(_detail?.User ?? _pilot.User);
         }
 
         Refresh();
@@ -553,8 +555,8 @@ public sealed class PilotItem : ObservableObject
             Remarks,
             _pilot.UserId.ToString(),
             MemberName,
-            _detail?.User?.DivisionName,
-            _detail?.User?.StaffText,
+            (_detail?.User ?? _pilot.User)?.DivisionName,
+            (_detail?.User ?? _pilot.User)?.StaffText,
             _detail?.SoftwareText,
             _pilot.SoftwareText
         }).ToLowerInvariant();
@@ -567,10 +569,10 @@ public sealed class PilotItem : ObservableObject
     /// and whatever is not is fetched in the background and dropped in when it
     /// arrives, so an answer from IVAO never waits for a picture.
     /// </summary>
-    private void LoadImages(IvaoSessionDetail detail)
+    private void LoadImages(IvaoSessionUser? user)
     {
-        var badgeUrl = detail.User?.PilotBadgeUrl;
-        var flagUrl = detail.User?.FlagUrl;
+        var badgeUrl = user?.PilotBadgeUrl;
+        var flagUrl = user?.FlagUrl;
 
         RatingBadge = _images.TryGet(badgeUrl);
         FlagImage = _images.TryGet(flagUrl);

@@ -104,7 +104,9 @@ public sealed class TrackerServiceTests
         Assert.Equal("Niels de Vries", published.Atc[0].MemberName);
         Assert.Equal("Aurora", published.Atc[0].SoftwareText);
 
-        Assert.Equal(6, handler.Requests.Count);
+        Assert.Equal(4, handler.Requests.Count);
+        Assert.DoesNotContain(handler.Requests, request => request.Path == PilotsPath);
+        Assert.DoesNotContain(handler.Requests, request => request.Path == AtcPath);
         Assert.Contains(handler.Requests, request => request.Path == PilotIdentityPath);
         Assert.Contains(handler.Requests, request => request.Path == AtcIdentityPath);
         Assert.Contains(handler.Requests, request => request.Path == SupervisorsPath);

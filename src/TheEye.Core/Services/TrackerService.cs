@@ -5,8 +5,8 @@ namespace TheEye.Core.Services;
 
 /// <summary>
 /// Polls the IVAO tracker summary endpoints and exposes one consistent snapshot
-/// to the UI. The three public endpoints are fetched concurrently so one slow
-/// response does not hold up the others.
+/// to the UI. The traffic, statistics and optional supervisor feeds are fetched
+/// concurrently so one slow response does not hold up the others.
 /// </summary>
 public sealed class TrackerService : IDisposable
 {
@@ -129,41 +129,28 @@ public sealed class TrackerService : IDisposable
     private async Task FetchAndPublishAsync(CancellationToken cancellationToken)
     {
         var warnings = new List<string>();
-
-        var pilotsTask = FetchAsync(
-            () => _api.GetPilotSummariesAsync(cancellationToken),
-            Array.Empty<IvaoPilotSummary>(),
-            warnings,
-            "Pilots",
-            cancellationToken);
-
-        var atcTask = FetchAsync(
-            () => _api.GetAtcSummariesAsync(cancellationToken),
-            Array.Empty<IvaoAtcSummary>(),
-            warnings,
-            "ATC",
-            cancellationToken);
-
+        var pilotsTask = FetchPilotsAsync(warnings, cancellationToken);
+        var atcTask = FetchAtcAsync(warnings, cancellationToken);
         var statsTask = FetchAsync(
             () => _api.GetConnectionStatsAsync(cancellationToken),
             null,
             warnings,
             "Statistics",
             cancellationToken);
+        var supervisorsTask = IncludeIdentity
+            ? FetchAsync(
+                () => _api.GetSupervisorsAsync(cancellationToken),
+                (IReadOnlyList<IvaoSupervisor>)Array.Empty<IvaoSupervisor>(),
+                warnings,
+                "Supervisors",
+                cancellationToken)
+            : Task.FromResult<IReadOnlyList<IvaoSupervisor>>(Array.Empty<IvaoSupervisor>());
 
-        var identityTask = IncludeIdentity
-            ? FetchIdentitiesAsync(warnings, cancellationToken)
-            : Task.FromResult(IdentityFeeds.None);
+        await Task.WhenAll(pilotsTask, atcTask, statsTask, supervisorsTask);
 
-        await Task.WhenAll(pilotsTask, atcTask, statsTask);
-
-        var pilots = pilotsTask.Result.Select(p => p.ToPilot()).ToList();
-        var atc = atcTask.Result.Select(a => a.ToAtc()).ToList();
+        var pilots = pilotsTask.Result;
+        var atc = atcTask.Result;
         var stats = statsTask.Result ?? CreateFallbackStats(pilots, atc);
-
-        var identity = identityTask.IsCompleted ? identityTask.Result : await identityTask;
-        MergeMembers(pilots, identity.Pilots);
-        MergeStations(atc, identity.Atc);
 
         if (pilots.Count == 0 && atc.Count == 0 && statsTask.Result is null)
         {
@@ -176,7 +163,7 @@ public sealed class TrackerService : IDisposable
         var snapshot = new TrackerSnapshot(
             pilots,
             atc,
-            identity.Supervisors,
+            supervisorsTask.Result,
             stats,
             DateTimeOffset.UtcNow,
             warnings);
@@ -216,6 +203,54 @@ public sealed class TrackerService : IDisposable
         };
     }
 
+    private async Task<List<IvaoPilot>> FetchPilotsAsync(
+        List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+        if (IncludeIdentity)
+        {
+            var pilots = await FetchAsync(
+                () => _api.GetPilotsAsync(cancellationToken),
+                (IReadOnlyList<IvaoPilot>)Array.Empty<IvaoPilot>(),
+                warnings,
+                "Pilots",
+                cancellationToken);
+            return pilots.ToList();
+        }
+
+        var summaries = await FetchAsync(
+            () => _api.GetPilotSummariesAsync(cancellationToken),
+            (IReadOnlyList<IvaoPilotSummary>)Array.Empty<IvaoPilotSummary>(),
+            warnings,
+            "Pilots",
+            cancellationToken);
+        return summaries.Select(pilot => pilot.ToPilot()).ToList();
+    }
+
+    private async Task<List<IvaoAtc>> FetchAtcAsync(
+        List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+        if (IncludeIdentity)
+        {
+            var atc = await FetchAsync(
+                () => _api.GetAtcsAsync(cancellationToken),
+                (IReadOnlyList<IvaoAtc>)Array.Empty<IvaoAtc>(),
+                warnings,
+                "ATC",
+                cancellationToken);
+            return atc.ToList();
+        }
+
+        var summaries = await FetchAsync(
+            () => _api.GetAtcSummariesAsync(cancellationToken),
+            (IReadOnlyList<IvaoAtcSummary>)Array.Empty<IvaoAtcSummary>(),
+            warnings,
+            "ATC",
+            cancellationToken);
+        return summaries.Select(station => station.ToAtc()).ToList();
+    }
+
     private static async Task<T> FetchAsync<T>(
         Func<Task<T>> fetch,
         T fallback,
@@ -237,10 +272,8 @@ public sealed class TrackerService : IDisposable
         }
         catch (Exception ex)
         {
-            // The public feeds and the three identity feeds are fetched
-            // concurrently, so more than one of them can report a failure at
-            // the same moment. The list is guarded rather than appended to, so
-            // two warnings never race for the same slot.
+            // Tracker feeds are fetched concurrently, so more than one can
+            // report a failure at the same moment. Guard the shared warning list.
             lock (warnings)
             {
                 warnings.Add($"{label}: {ex.Message}");
@@ -250,98 +283,5 @@ public sealed class TrackerService : IDisposable
         }
     }
 
-    /// <summary>
-    /// The three authenticated feeds, fetched together. A failure leaves its
-    /// list empty and adds a warning: the names are a nicety, and the map is
-    /// still worth painting without them.
-    /// </summary>
-    private async Task<IdentityFeeds> FetchIdentitiesAsync(List<string> warnings, CancellationToken cancellationToken)
-    {
-        var pilotsTask = FetchAsync(
-            () => _api.GetPilotsAsync(cancellationToken),
-            (IReadOnlyList<IvaoPilot>)Array.Empty<IvaoPilot>(),
-            warnings,
-            "Member names",
-            cancellationToken);
-
-        var atcTask = FetchAsync(
-            () => _api.GetAtcsAsync(cancellationToken),
-            (IReadOnlyList<IvaoAtc>)Array.Empty<IvaoAtc>(),
-            warnings,
-            "Controller names",
-            cancellationToken);
-
-        var supervisorsTask = FetchAsync(
-            () => _api.GetSupervisorsAsync(cancellationToken),
-            (IReadOnlyList<IvaoSupervisor>)Array.Empty<IvaoSupervisor>(),
-            warnings,
-            "Supervisors",
-            cancellationToken);
-
-        await Task.WhenAll(pilotsTask, atcTask, supervisorsTask);
-
-        return new IdentityFeeds(pilotsTask.Result, atcTask.Result, supervisorsTask.Result);
-    }
-
-    /// <summary>
-    /// Copies the member details of the identity feed onto the summary records,
-    /// matched by session id (the summaries and the full feeds describe the
-    /// same connection).
-    /// </summary>
-    private static void MergeMembers(List<IvaoPilot> pilots, IReadOnlyList<IvaoPilot> identities)
-    {
-        if (pilots.Count == 0 || identities.Count == 0)
-        {
-            return;
-        }
-
-        var bySession = new Dictionary<long, IvaoPilot>(identities.Count);
-        foreach (var identity in identities)
-        {
-            bySession[identity.Id] = identity;
-        }
-
-        foreach (var pilot in pilots)
-        {
-            if (bySession.TryGetValue(pilot.Id, out var identity))
-            {
-                pilot.ApplyMember(identity);
-            }
-        }
-    }
-
-    /// <summary>Same as <see cref="MergeMembers"/>, for the ATC stations.</summary>
-    private static void MergeStations(List<IvaoAtc> atc, IReadOnlyList<IvaoAtc> identities)
-    {
-        if (atc.Count == 0 || identities.Count == 0)
-        {
-            return;
-        }
-
-        var bySession = new Dictionary<long, IvaoAtc>(identities.Count);
-        foreach (var identity in identities)
-        {
-            bySession[identity.Id] = identity;
-        }
-
-        foreach (var station in atc)
-        {
-            if (bySession.TryGetValue(station.Id, out var identity))
-            {
-                station.ApplyMember(identity);
-            }
-        }
-    }
-
-    private sealed record IdentityFeeds(
-        IReadOnlyList<IvaoPilot> Pilots,
-        IReadOnlyList<IvaoAtc> Atc,
-        IReadOnlyList<IvaoSupervisor> Supervisors)
-    {
-        public static IdentityFeeds None { get; } = new(
-            Array.Empty<IvaoPilot>(),
-            Array.Empty<IvaoAtc>(),
-            Array.Empty<IvaoSupervisor>());
-    }
 }
 

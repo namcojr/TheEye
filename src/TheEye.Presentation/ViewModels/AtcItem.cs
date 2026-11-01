@@ -29,6 +29,7 @@ public sealed class AtcItem : ObservableObject
         _atc = atc;
         _images = images;
         Refresh();
+        LoadImages(_atc.User);
     }
 
     public IvaoAtc Atc => _atc;
@@ -173,7 +174,7 @@ public sealed class AtcItem : ObservableObject
     /// with a badge slot would look like a failure rather than an answer that has
     /// not arrived.
     /// </summary>
-    public bool HasProfile => _detail?.User is not null || IsUnauthorized(_detailStatus);
+    public bool HasProfile => _detail?.User is not null || _atc.User is not null || IsUnauthorized(_detailStatus);
 
     private string MissingProfileValue => IsUnauthorized(_detailStatus) ? "-" : "—";
 
@@ -185,14 +186,14 @@ public sealed class AtcItem : ObservableObject
     public string ProfileName => MemberName is { Length: > 0 } name ? name : MissingProfileValue;
 
     /// <summary>The division the controller belongs to, spelled out from its code.</summary>
-    public string HomeText => _detail?.User?.DivisionName is { Length: > 0 } name ? name : MissingProfileValue;
+    public string HomeText => (_detail?.User ?? _atc.User)?.DivisionName is { Length: > 0 } name ? name : MissingProfileValue;
 
     /// <summary>Controller rating in short form ("AS3"), the level IVAO grants.</summary>
     public string RatingText
     {
         get
         {
-            var rating = _detail?.User?.Rating;
+            var rating = (_detail?.User ?? _atc.User)?.Rating;
             if (!string.IsNullOrWhiteSpace(rating?.AtcRating?.ShortName))
             {
                 return rating.AtcRating.ShortName;
@@ -208,7 +209,7 @@ public sealed class AtcItem : ObservableObject
     }
 
     /// <summary>The rating spelled out ("Advanced ATC Trainee"), shown on hover.</summary>
-    public string RatingName => _detail?.User?.Rating?.AtcRating?.Name is { Length: > 0 } name ? name : MissingProfileValue;
+    public string RatingName => (_detail?.User ?? _atc.User)?.Rating?.AtcRating?.Name is { Length: > 0 } name ? name : MissingProfileValue;
 
     /// <summary>
     /// "Aurora/mac 1.0.38b", the client the controller is connected with. The
@@ -235,7 +236,7 @@ public sealed class AtcItem : ObservableObject
             ? DurationText.Format(online)
             : "—";
 
-    public string ConnectedText => _detail?.CreatedAt is { } connectedAt
+    public string ConnectedText => (_detail?.CreatedAt ?? _atc.CreatedAt) is { } connectedAt
         ? connectedAt.ToLocalTime().ToString("HH:mm")
         : "—";
 
@@ -304,8 +305,13 @@ public sealed class AtcItem : ObservableObject
 
     public void Update(IvaoAtc atc)
     {
+        var userChanged = _atc.User?.Id != atc.User?.Id;
         _atc = atc;
         Refresh();
+        if (userChanged)
+        {
+            LoadImages(_atc.User);
+        }
     }
 
     /// <summary>
@@ -332,11 +338,7 @@ public sealed class AtcItem : ObservableObject
 
             RatingBadge = null;
             FlagImage = null;
-
-            if (_detail is { } detail)
-            {
-                LoadImages(detail);
-            }
+            LoadImages(_detail?.User ?? _atc.User);
         }
 
         Refresh();
@@ -361,8 +363,8 @@ public sealed class AtcItem : ObservableObject
             Scope,
             ControllerId,
             MemberName,
-            _detail?.User?.DivisionName,
-            _detail?.User?.StaffText,
+            (_detail?.User ?? _atc.User)?.DivisionName,
+            (_detail?.User ?? _atc.User)?.StaffText,
             _detail?.SoftwareText,
             _atc.SoftwareText
         }).ToLowerInvariant();
@@ -375,10 +377,10 @@ public sealed class AtcItem : ObservableObject
     /// decoded is set at once, and whatever is not is fetched in the background
     /// and dropped in when it arrives.
     /// </summary>
-    private void LoadImages(IvaoSessionDetail detail)
+    private void LoadImages(IvaoSessionUser? user)
     {
-        var badgeUrl = detail.User?.AtcBadgeUrl;
-        var flagUrl = detail.User?.FlagUrl;
+        var badgeUrl = user?.AtcBadgeUrl;
+        var flagUrl = user?.FlagUrl;
 
         RatingBadge = _images.TryGet(badgeUrl);
         FlagImage = _images.TryGet(flagUrl);
