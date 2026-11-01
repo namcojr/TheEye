@@ -1,0 +1,120 @@
+using Mapsui.Layers;
+using Mapsui.Styles;
+using TheEye.Core.Maps;
+using TheEye.Core.Models;
+using TheEye.Core.Services;
+using TheEye.Presentation.Services;
+using TheEye.Presentation.ViewModels;
+
+namespace TheEye.Core.Tests;
+
+public sealed class HoverRouteTests
+{
+    private static readonly MapPalette Palette = new(
+        "#16324F", "#1B2A35", "#2F4858", "#6FE3F5", "#4CC9F0", true);
+
+    [Fact]
+    public void Hover_LeavesSelectionAndSelectedRouteUntouchedAndClearsOnLeave()
+    {
+        using var model = CreateModel();
+        model.SelectPilot(model.Pilots[0], center: false);
+        model.SetSelectionTracks([]);
+        var selectedRoute = Layer(model, IvaoMapLayers.RouteLayerName);
+
+        model.SetHoveredPilot(model.Pilots[1]);
+        Assert.Equal(2, Hover(model).Features.Count());
+        Assert.Same(model.Pilots[0], model.SelectedPilot);
+        Assert.Same(selectedRoute, Layer(model, IvaoMapLayers.RouteLayerName));
+
+        model.SetHoveredPilot(null);
+        Assert.Empty(Hover(model).Features);
+        Assert.Same(selectedRoute, Layer(model, IvaoMapLayers.RouteLayerName));
+    }
+
+    [Fact]
+    public void Selection_ClearsPreviewAndSuppressesHoverOfSelectedAircraft()
+    {
+        using var model = CreateModel();
+        var pilot = model.Pilots[0];
+        model.SetHoveredPilot(pilot);
+        model.SelectPilot(pilot, center: false);
+        Assert.Empty(Hover(model).Features);
+        model.SetHoveredPilot(pilot);
+        Assert.Empty(Hover(model).Features);
+        Assert.NotEmpty(Layer(model, IvaoMapLayers.RouteLayerName).Features);
+    }
+
+    [Fact]
+    public void HidingAircraft_ClearsAndDisablesHover()
+    {
+        using var model = CreateModel();
+        model.SetHoveredPilot(model.Pilots[0]);
+        model.ShowPilots = false;
+        Assert.Empty(Hover(model).Features);
+        model.SetHoveredPilot(model.Pilots[0]);
+        Assert.Empty(Hover(model).Features);
+        model.ShowPilots = true;
+        Assert.Empty(Hover(model).Features);
+    }
+
+    [Fact]
+    public void Hover_FollowsTrafficAndThemeChangesAndClearsWhenPilotDisconnects()
+    {
+        using var model = CreateModel();
+        model.SetHoveredPilot(model.Pilots[0]);
+        var initial = Hover(model);
+        model.UpdateTraffic(Snapshot([Pilot(1, longitude: 5)]));
+        Assert.NotSame(initial, Hover(model));
+        var updated = Hover(model).Features.First().Extent!;
+        var position = WorldMap.Project(new GeoCoordinate(52.5, 5));
+        Assert.InRange(position.X, updated.MinX, updated.MaxX);
+
+        var theme = Palette with { Accent = "#FF8800" };
+        model.ApplyTheme(theme);
+        Assert.All(Hover(model).Features, feature =>
+            Assert.Equal(WorldMap.Parse(theme.Accent),
+                feature.Styles.OfType<VectorStyle>().Single().Line!.Color));
+
+        model.UpdateTraffic(Snapshot([]));
+        Assert.Empty(Hover(model).Features);
+    }
+
+    private static MapViewModel CreateModel()
+    {
+        var model = new MapViewModel(new Images());
+        model.Initialize(Palette, new GeoCoordinate(50, 0), 10000);
+        model.UpdateTraffic(Snapshot([Pilot(1), Pilot(2)]));
+        return model;
+    }
+
+    private static MemoryLayer Hover(MapViewModel model) => Layer(model, IvaoMapLayers.HoverRouteLayerName);
+
+    private static MemoryLayer Layer(MapViewModel model, string name) =>
+        Assert.IsType<MemoryLayer>(model.Map!.Layers.Single(layer => layer.Name == name));
+
+    private static TrackerSnapshot Snapshot(IReadOnlyList<IvaoPilot> pilots) =>
+        new(pilots, [], [], new IvaoConnectionStats(), DateTimeOffset.UtcNow, []);
+
+    private static IvaoPilot Pilot(long id, double longitude = 4.5) => new()
+    {
+        Id = id,
+        Callsign = $"TEST{id}",
+        LastTrack = new IvaoLastTrack { Latitude = 52.5, Longitude = longitude },
+        FlightPlan = new IvaoFlightPlan
+        {
+            Departure = new IvaoAirport { Icao = "EHAM", Latitude = 52.3105, Longitude = 4.7683 },
+            Arrival = new IvaoAirport { Icao = "EGLL", Latitude = 51.4706, Longitude = -0.4619 }
+        }
+    };
+
+    private sealed class Images : IImagePipeline, IAircraftIconCache, IImageCache
+    {
+        public IAircraftIconCache AircraftIcons => this;
+        public IImageCache SessionImages => this;
+        public object? Get(int? heading) => null;
+        public object? TryGet(string? url) => null;
+        public Task<object?> GetAsync(string? url, CancellationToken cancellationToken = default) =>
+            Task.FromResult<object?>(null);
+        public void Dispose() { }
+    }
+}

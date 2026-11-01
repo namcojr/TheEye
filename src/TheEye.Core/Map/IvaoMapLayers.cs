@@ -2,7 +2,9 @@ using Mapsui;
 using Mapsui.Layers;
 using Mapsui.Nts;
 using Mapsui.Styles;
+using Mapsui.Styles.Thematics;
 using NetTopologySuite.Geometries;
+using NetTopologySuite.Geometries.Utilities;
 using TheEye.Core.Models;
 using TheEye.Core.Reference;
 
@@ -14,6 +16,7 @@ public static class IvaoMapLayers
     public const string AtcLabelsLayerName = "IVAO sector labels";
     public const string AtcStationsLayerName = "IVAO ATC stations";
     public const string RouteLayerName = "Route";
+    public const string HoverRouteLayerName = "Hover route";
     public const string SelectedAtcLayerName = "Selected ATC";
     public const string AirportsLayerName = "Airports";
 
@@ -91,19 +94,30 @@ public static class IvaoMapLayers
             }
 
             var color = WorldMap.Parse(FacilityPalette.ForFacility(station.Facility));
-            var feature = new PointFeature(WorldMap.Project(coordinate));
-            feature["Callsign"] = station.Callsign;
-            feature.Styles.Add(new LabelStyle
+            var labelPoint = WorldMap.Project(coordinate);
+            var geometry = CreatePolygon(station);
+            var worldWidth = 2 * WorldMap.Project(0, 180).X;
+            var labelPoints = geometry is MultiPolygon wrapped
+                ? wrapped.Geometries.Select(part => new MPoint(
+                    labelPoint.X + worldWidth * Math.Round((part.Centroid.X - labelPoint.X) / worldWidth),
+                    labelPoint.Y)).ToArray()
+                : new[] { labelPoint };
+            foreach (var point in labelPoints)
             {
-                LabelColumn = "Callsign",
-                Font = new Font { FontFamily = "Segoe UI", Size = 10, Bold = true },
-                ForeColor = color,
-                BackColor = null,
-                Halo = new Pen(WorldMap.Parse(palette.Land), 2.5),
-                CollisionDetection = true,
-                MaxVisible = 14000
-            });
-            features.Add(feature);
+                var feature = new PointFeature(point);
+                feature["Callsign"] = station.Callsign;
+                feature.Styles.Add(new LabelStyle
+                {
+                    LabelColumn = "Callsign",
+                    Font = new Font { FontFamily = "Segoe UI", Size = 10, Bold = true },
+                    ForeColor = color,
+                    BackColor = null,
+                    Halo = new Pen(WorldMap.Parse(palette.Land), 2.5),
+                    CollisionDetection = true,
+                    MaxVisible = 14000
+                });
+                features.Add(feature);
+            }
         }
 
         return new MemoryLayer(AtcLabelsLayerName)
@@ -134,48 +148,64 @@ public static class IvaoMapLayers
         IReadOnlySet<long>? supervisors = null)
     {
         var features = new List<IFeature>();
-        foreach (var placement in placements)
+        var stacks = placements.GroupBy(placement =>
+            (X: Math.Round(placement.Point.X), Y: Math.Round(placement.Point.Y)));
+        foreach (var stack in stacks)
         {
-            // The badges are concentric, so the labels only move down; the
-            // stacked line of the station decides how far.
-            var labelOffsetY = placement.LabelOffsetY;
-            var labelAlignment = AtcMarkerStyles.LabelAlignment((0d, labelOffsetY));
-
-            var feature = new PointFeature(placement.Point);
-            feature["Callsign"] = placement.Station.Callsign;
-            feature["Frequency"] = placement.Station.FrequencyText;
-            feature.Styles.Add(AtcMarkerStyles.CreateImageStyle(placement.Marker));
-
-            // The glyph stays the one of the position the member controls: the
-            // ring is what says the member watches the network. It is drawn
-            // after the glyph so it sits on top of the empty middle, and before
-            // the label so the callsign keeps the last word.
-            if (supervisors is not null && supervisors.Contains(placement.Station.UserId))
+            var members = stack.ToArray();
+            for (var index = 0; index < members.Length; index++)
             {
-                feature.Styles.Add(AtcMarkerStyles.CreateRingStyle(
-                    placement.Marker,
-                    FacilityPalette.Supervisor));
-            }
+                var placement = members[index];
+                // The badges are concentric, so the labels only move down; the
+                // stacked line of the station decides how far.
+                var labelOffsetY = placement.LabelOffsetY;
+                var labelAlignment = AtcMarkerStyles.LabelAlignment((0d, labelOffsetY));
 
-            feature.Styles.Add(new LabelStyle
-            {
-                LabelColumn = "Callsign",
-                Font = new Font
+                var feature = new PointFeature(placement.Point);
+                feature["Callsign"] = placement.Station.Callsign;
+                feature["Frequency"] = placement.Station.FrequencyText;
+                feature.Styles.Add(new AtcGlyphStyle(placement.Station.Facility, placement.Station.Callsign));
+
+                // The glyph stays the one of the position the member controls: the
+                // ring is what says the member watches the network. It is drawn
+                // after the glyph so it sits on top of the empty middle, and before
+                // the label so the callsign keeps the last word.
+                if (supervisors is not null && supervisors.Contains(placement.Station.UserId))
                 {
-                    FontFamily = "Segoe UI",
-                    Size = AtcMarkerStyles.LabelFontSize(zoom),
-                    Bold = true
-                },
-                ForeColor = WorldMap.Parse(FacilityPalette.ForFacility(placement.Station.Facility)),
-                BackColor = null,
-                Halo = new Pen(WorldMap.Parse(palette.Land), 2.5),
-                Offset = new Offset(0, labelOffsetY),
-                HorizontalAlignment = labelAlignment.Horizontal,
-                VerticalAlignment = labelAlignment.Vertical,
-                CollisionDetection = true,
-                MaxVisible = 3200
-            });
-            features.Add(feature);
+                    feature.Styles.Add(new AtcGlyphStyle(
+                        placement.Station.Facility, placement.Station.Callsign,
+                        FacilityPalette.Supervisor));
+                }
+
+                var label = new LabelStyle
+                {
+                    LabelColumn = "Callsign",
+                    Font = new Font
+                    {
+                        FontFamily = "Segoe UI",
+                        Size = AtcMarkerStyles.LabelFontSize(),
+                        Bold = true
+                    },
+                    ForeColor = WorldMap.Parse(FacilityPalette.ForFacility(placement.Station.Facility)),
+                    BackColor = null,
+                    Halo = new Pen(WorldMap.Parse(palette.Land), 2.5),
+                    Offset = new Offset(0, labelOffsetY),
+                    HorizontalAlignment = labelAlignment.Horizontal,
+                    VerticalAlignment = labelAlignment.Vertical,
+                    CollisionDetection = true,
+                    MaxVisible = 3200
+                };
+                var line = index;
+                feature.Styles.Add(new ThemeStyle((_, viewport) =>
+                {
+                    var currentZoom = AtcMarkerStyles.ZoomScale(viewport.Resolution);
+                    var widestScale = members.Max(member =>
+                        AtcMarkerStyles.For(member.Station.Facility, member.Station.Callsign, currentZoom).Scale);
+                    label.Offset = new Offset(0, AtcMarkerStyles.StackedLabelOffset(widestScale, line).Y);
+                    return label;
+                }));
+                features.Add(feature);
+            }
         }
 
         return new MemoryLayer(AtcStationsLayerName)
@@ -230,7 +260,7 @@ public static class IvaoMapLayers
                 placements.Add(new AtcStationPlacement(
                     member.Station,
                     member.Point,
-                    AtcMarkerStyles.StackedLabelOffset(widestScale, index, zoom).Y,
+                    AtcMarkerStyles.StackedLabelOffset(widestScale, index).Y,
                     member.Marker));
             }
         }
@@ -292,6 +322,34 @@ public static class IvaoMapLayers
             Features = features,
             Style = null
         };
+    }
+
+    public static MemoryLayer CreateHoverRoute(IvaoPilot? pilot, MapPalette palette)
+    {
+        var features = new List<IFeature>();
+        if (pilot?.LastTrack?.Position is { } position)
+        {
+            var color = WorldMap.Parse(palette.Accent);
+            if (pilot.FlightPlan?.Departure?.Position is { } departure)
+            {
+                AddLeg(departure, position);
+            }
+
+            if (pilot.FlightPlan?.Arrival?.Position is { } arrival)
+            {
+                AddLeg(position, arrival);
+            }
+
+            void AddLeg(GeoCoordinate start, GeoCoordinate end)
+            {
+                foreach (var line in RouteBuilder.BuildLines(start, end))
+                {
+                    features.Add(CreateTrailFeature(line.Select(ToCoordinate).ToArray(), color));
+                }
+            }
+        }
+
+        return new MemoryLayer(HoverRouteLayerName) { Features = features, Style = null };
     }
 
     /// <summary>
@@ -416,8 +474,8 @@ public static class IvaoMapLayers
         else if (atc.Position is { } position && position.IsValid)
         {
             var feature = new PointFeature(WorldMap.Project(position));
-            feature.Styles.Add(AtcMarkerStyles.CreateRingStyle(
-                AtcMarkerStyles.For(atc.Facility, atc.Callsign, zoom),
+            feature.Styles.Add(new AtcGlyphStyle(
+                atc.Facility, atc.Callsign,
                 palette.Accent));
             features.Add(feature);
         }
@@ -432,7 +490,7 @@ public static class IvaoMapLayers
     public static IReadOnlyList<GeoCoordinate> GetGeoPoints(IvaoAtc atc) =>
         GeoPolygon.DistinctConsecutive(atc.PolygonPoints.Select(point => point.ToGeoCoordinate()));
 
-    public static Polygon? CreatePolygon(IvaoAtc atc)
+    public static Geometry? CreatePolygon(IvaoAtc atc)
     {
         var points = GetGeoPoints(atc);
         if (points.Count < 3)
@@ -440,7 +498,7 @@ public static class IvaoMapLayers
             return null;
         }
 
-        var coordinates = points
+        var coordinates = GeoPolygon.Unwrap(points)
             .Select(point => WorldMap.Project(point))
             .Select(point => new Coordinate(point.X, point.Y))
             .ToList();
@@ -455,7 +513,19 @@ public static class IvaoMapLayers
             return null;
         }
 
-        return new Polygon(new LinearRing(coordinates.ToArray()));
+        var polygon = new Polygon(new LinearRing(coordinates.ToArray()));
+        var extent = polygon.EnvelopeInternal;
+        var halfWorld = WorldMap.Project(0, 180).X;
+        if (extent.MaxX > halfWorld || extent.MinX < -halfWorld)
+        {
+            // Draw a complete copy on both edges of the map, rather than a
+            // false closing edge down the date line or across the whole world.
+            var shift = extent.MaxX > halfWorld ? -2 * halfWorld : 2 * halfWorld;
+            var copy = (Polygon)AffineTransformation.TranslationInstance(shift, 0).Transform(polygon);
+            return new MultiPolygon([polygon, copy]);
+        }
+
+        return polygon;
     }
 
     /// <summary>

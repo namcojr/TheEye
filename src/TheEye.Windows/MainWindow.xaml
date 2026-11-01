@@ -850,6 +850,8 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Button Style="{StaticResource PilotMarkerButton}"
+                                        MouseEnter="OnPilotMarkerEnter"
+                                        MouseLeave="OnPilotMarkerLeave"
                                         Click="OnPilotMarkerClick" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -1022,4 +1024,3 @@
         </Grid>
     </Border>
 </Window>
-

@@ -64,6 +64,21 @@ public sealed class GeoPolygonTests
     }
 
     [Fact]
+    public void DateLinePolygon_CentroidAndHitTestingUseTheShortLongitudeSpan()
+    {
+        GeoCoordinate[] polygon = [new(-10, 170), new(-10, -170), new(-20, -170), new(-20, 170)];
+
+        var centroid = GeoPolygon.Centroid(polygon)!.Value;
+
+        Assert.Equal(-15, centroid.Latitude, 6);
+        Assert.Equal(180, Math.Abs(centroid.Longitude), 6);
+        Assert.True(GeoPolygon.Contains(polygon, new GeoCoordinate(-15, 179)));
+        Assert.True(GeoPolygon.Contains(polygon, new GeoCoordinate(-15, -179)));
+        Assert.False(GeoPolygon.Contains(polygon, new GeoCoordinate(-15, 0)));
+        Assert.Equal(new GeoCoordinate(-15, -175), new IvaoCoordinate(-15, 185).ToGeoCoordinate());
+    }
+
+    [Fact]
     public void Centroid_FallsBackToAverageForDegeneratePolygon()
     {
         var centroid = GeoPolygon.Centroid(

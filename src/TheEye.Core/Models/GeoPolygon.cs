@@ -26,6 +26,28 @@ public readonly record struct GeoBounds(double MinLatitude, double MinLongitude,
 /// </summary>
 public static class GeoPolygon
 {
+    /// <summary>Accepts polygon longitudes in either [-180, 180] or [0, 360] notation.</summary>
+    public static double NormalizeLongitude(double longitude) =>
+        longitude is >= -180 and <= 180 ? longitude : ((longitude + 180) % 360 + 360) % 360 - 180;
+
+    /// <summary>Keeps adjacent vertices on the same side of the date line for geometry calculations.</summary>
+    public static IReadOnlyList<GeoCoordinate> Unwrap(IReadOnlyList<GeoCoordinate> points)
+    {
+        var result = new List<GeoCoordinate>(points.Count);
+        foreach (var point in points)
+        {
+            var longitude = point.Longitude;
+            if (result.Count > 0)
+            {
+                longitude += 360 * Math.Round((result[^1].Longitude - longitude) / 360);
+            }
+
+            result.Add(new GeoCoordinate(point.Latitude, longitude));
+        }
+
+        return result;
+    }
+
     public static IReadOnlyList<GeoCoordinate> DistinctConsecutive(IEnumerable<GeoCoordinate> points)
     {
         var result = new List<GeoCoordinate>();
@@ -52,6 +74,11 @@ public static class GeoPolygon
             return false;
         }
 
+        polygon = Unwrap(polygon);
+        point = point with
+        {
+            Longitude = point.Longitude + 360 * Math.Round((polygon[0].Longitude - point.Longitude) / 360)
+        };
         var inside = false;
         for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
         {
@@ -81,6 +108,7 @@ public static class GeoPolygon
             return null;
         }
 
+        points = Unwrap(points);
         double twiceArea = 0;
         double x = 0;
         double y = 0;
@@ -96,10 +124,10 @@ public static class GeoPolygon
 
         if (Math.Abs(twiceArea) < 1e-12)
         {
-            return new GeoCoordinate(points.Average(p => p.Latitude), points.Average(p => p.Longitude));
+            return new GeoCoordinate(points.Average(p => p.Latitude), NormalizeLongitude(points.Average(p => p.Longitude)));
         }
 
-        return new GeoCoordinate(y / (3 * twiceArea), x / (3 * twiceArea));
+        return new GeoCoordinate(y / (3 * twiceArea), NormalizeLongitude(x / (3 * twiceArea)));
     }
 
     public static GeoBounds Bounds(IEnumerable<GeoCoordinate> points)

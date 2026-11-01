@@ -30,7 +30,10 @@ public sealed class AtcRegionIndex
             }
         }
 
-        return new AtcRegionIndex(regions.OrderBy(region => region.Geometry.Area).ToList());
+        return new AtcRegionIndex(regions.OrderBy(region =>
+            region.Geometry is MultiPolygon wrapped
+                ? wrapped.GetGeometryN(0).Area
+                : region.Geometry.Area).ToList());
     }
 
     public IvaoAtc? FindAt(MPoint point)

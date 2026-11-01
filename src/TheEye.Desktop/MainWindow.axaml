@@ -777,6 +777,8 @@
                                 <DataTemplate>
                                     <Button Theme="{StaticResource PilotMarkerButton}"
                                             ToolTip.Tip="{Binding Tooltip}"
+                                            PointerEntered="OnPilotMarkerEnter"
+                                            PointerExited="OnPilotMarkerLeave"
                                             Click="OnPilotMarkerClick" />
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

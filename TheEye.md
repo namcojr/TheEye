@@ -220,42 +220,45 @@ wraps the one before it:
 
 - Shapes: `_DEL` and `_GND` are four point stars — `_DEL` is rotated 45° so the
   two read differently — `_TWR` is the red disc around them, `_DEP`/`_APP` the
-  wider blue disc around the tower, and `_CTR`/`_FSS`/unknown keep their own
-  smaller discs. The contours are one pixel wide at the full facility colour;
+  wider blue disc around the tower, `_OBS` is white, and `_CTR`/`_FSS`/unknown
+  keep their own discs. The contours are one pixel wide at the full facility colour;
   only the fill is see-through.
 - Sizes: `DeliveryDiameter`, `GroundDiameter`, `TowerDiameter`,
   `ApproachDiameter`, `ControlDiameter`, `InformationDiameter`,
-  `DefaultDiameter`, `OutlineWidth` and `CircleFillAlpha` are the tuning
+  `ObserverDiameter`, `DefaultDiameter`, `OutlineWidth` and `CircleFillAlpha` are the tuning
   variables at the top of `src/TheEye.Core/Map/AtcMarkerStyles.cs`.
-- Zoom limits: `WorldMap.MinZoomLevel` (default 4) is the most zoomed out level
+- Zoom limits: `WorldMap.MinZoomLevel` (default 3) is the most zoomed out level
   the navigator offers. `WorldMap.Create` builds `OverrideResolutions` from that
   level down to `DeepestZoomLevel` and sets `OverrideZoomBounds` to
   `MinResolution … MaxZoomOutResolution`, so no gesture, button or restored
-  setting can reach levels 0–3 any more. `MaxZoomOutResolution` is derived from
+  setting can reach levels 0–2 any more. `MaxZoomOutResolution` is derived from
   the level (`MaxResolution / 2^MinZoomLevel`), so changing the level is enough.
   The home view and the default `MapResolution` of the settings use that same
   resolution.
-- Badge zoom: `AtcMarkerStyles.ZoomScale(resolution)` is driven by the **zoom
-  level** of the map, not by the raw resolution. `MinZoomLevel` is
-  `WorldMap.MinZoomLevel`, the widest view the user can reach, and there the
-  badges use `MinZoomScale` (default 1, the tuned size); `MaxZoomLevel`
-  (`WorldMap.DeepestZoomLevel`, 17) uses `MaxZoomScale` (default 2), and the
-  multiplier rises evenly on the levels in between. `MaxZoomScale` is therefore
-  the single number that controls how much the glyphs enlarge while the map is
-  zoomed in; with the current diameters and `1 → 2` the tower ring goes from
-  45 px to 90 px and the ground star from 27 px to 54 px. `AtcMarkerStyles.For`
-  draws each badge as one SVG and scales the whole artwork with it, so circles,
-  stars, the selection ring and the hit radius grow together. The callsign font
-  is capped at `MaxLabelZoom` (1.6, i.e. 9 → 14.4 px) so the labels stay in
-  proportion instead of printing across the map. An empty viewport (resolution 0
-  or NaN) falls back to `MinZoomScale`. The result is quantised, and
-  `MapViewModel.UpdateStationZoom` rebuilds the station layer only when the
-  quantised multiplier changes.
+- Badge zoom: `AtcMarkerStyles.ZoomScale(resolution)` uses inverse viewport
+  resolution, so sizes track map geometry continuously (doubling per zoom level).
+  `ReferenceZoomLevel` (6) sets the level where the configured facility diameters
+  apply. `MinStarDiameter`/`MaxStarDiameter` and
+  `MinCircleDiameter`/`MaxCircleDiameter` set the shared screen-size limits.
+  Each shape group clamps its multiplier together, preserving the different
+  facility sizes instead of collapsing concentric circles to identical sizes.
+  Sizes stop changing outside those limits; move `ReferenceZoomLevel` to change
+  where growth happens. The shared `AtcGlyphRenderer` is registered in both
+  shells and draws vectors on every frame, without SVG loading or layer rebuilds.
+  Glyph contours remain `OutlineWidth` (1) screen pixel; selection/supervisor
+  contours remain twice that. Callsigns stay at 9 pixels, with constant line
+  spacing and a live offset below the widest badge. Hit radii use the same
+  current viewport resolution.
+- Date-line sectors: IVAO polygon longitudes in 0–360 notation are normalized
+  without losing vertices. Adjacent vertices are unwrapped before projection;
+  crossing sectors have complete translated copies at both world edges.
+  Labels, centroids, selection outlines and click geometry use the same
+  date-line-aware calculations, avoiding false edges across the world.
 - Clicks: `AtcStationHitTest` picks the smallest ring the pointer is inside, so
   the star wins in the middle and the approach ring at the rim. Clicking the same
   airport again walks outwards through the stack, and
   `IvaoMapLayers.CreateSelectedAtc` draws an accent ring around the badge that is
-  selected — `SelectionRingScale` sizes it.
+  selected — `RingScale` sizes it.
 - Labels: the callsigns cannot fan out sideways any more, so they are stacked
   below the widest badge of the airport, one line per facility, smallest first
   (`AtcMarkerStyles.StackedLabelOffset`).
@@ -296,3 +299,50 @@ user profile, so the launcher picks it up without touching any system directory:
 script after UI changes to ship a new build. Settings keep living in
 `~/.config/TheEyeIVAO/settings.json` and crashes in `~/.config/TheEyeIVAO/crash.log`,
 independently of where the payload was installed.
+
+
+## LISBON OFFLINE VECTOR SAMPLE (evaluation only)
+================================================
+
+`tools/sample-lisbon-map.py` queries only major roads in a Lisbon bounding box,
+the Lisboa municipal boundary (Portugal's `admin_level=7`), and mapped structures
+inside the LPPT aerodrome areas. It does not download a country extract and does
+not change the application's map. Python's standard library is sufficient:
+
+```powershell
+python tools\sample-lisbon-map.py --target .scratch\lisbon-vector-sample
+python tools\sample-lisbon-map.py --target .scratch\lisbon-vector-sample --reuse
+python -B -m unittest discover -s tools -p test_sample_lisbon_map.py
+```
+
+The second command rebuilds the sample entirely offline. Open `preview.html` in
+the output directory to switch between city/airport views and the Dark/Light map
+colours from `ThemeCatalog`. Both themes use identical geometry; changing colour
+requires no new map download. These SVGs demonstrate theming, not Mapsui runtime
+rendering. Relations are preserved as member outlines, not filled multipolygons.
+
+Measured on 2026-11-01, without geometry simplification:
+
+- Actual successful HTTP response body: 892,548 bytes, gzip encoded (~872 KiB).
+  This is the Overpass response, not the smaller final GeoJSON. Headers/TLS and
+  earlier unsuccessful evaluation requests are not included.
+- Complete compressed GeoJSON: ~284 KiB; uncompressed: ~1.58 MiB.
+- Major roads: 4,559 OSM features, ~242 KiB compressed as a separate layer.
+- Airport features: 404 features, ~23 KiB compressed; buildings: 107, ~8 KiB.
+- Municipal boundary: one Lisboa relation, ~7 KiB compressed.
+- Airport detail includes 130 taxiway features, 18 aprons, 13 terminal features,
+  12 hangars, gates and parking positions. Counts represent OSM features, not
+  distinct physical objects: runway areas, centre lines and thresholds overlap.
+
+The small final airport/boundary layers suit locally themed overlays. Roads
+dominate this sample and should be generalized by zoom for a streaming solution.
+Public Overpass had timeouts during evaluation and is not a production tile
+service. An initial broad query hit the tool's 8 MiB response cap and was stopped;
+building selection was then restricted to the airport area. No completeness or
+navigation-accuracy guarantee applies. OSM attribution and ODbL compliance are
+required. `analysis.json` records the source timestamp, sizes and limitations.
+
+Production direction remains undecided: streamed raster tiles with temporary
+caching use provider-supplied colours; streamed vector tiles or targeted vector
+overlays can use the application's local palettes. This experiment persists its
+requested sample outputs only; it does not add a persistent runtime tile cache.

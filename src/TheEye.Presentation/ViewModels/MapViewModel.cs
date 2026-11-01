@@ -42,6 +42,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private ILayer? _atcLabelsLayer;
     private ILayer? _atcStationsLayer;
     private ILayer? _routeLayer;
+    private ILayer? _hoverRouteLayer;
+    private PilotItem? _hoveredPilot;
     private ILayer? _selectedAtcLayer;
     private ILayer? _airportLayer;
     private PilotItem? _selectedPilot;
@@ -97,7 +99,10 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         get => _showPilots;
         set
         {
-            SetProperty(ref _showPilots, value);
+            if (SetProperty(ref _showPilots, value) && !value)
+            {
+                SetHoveredPilot(null);
+            }
         }
     }
 
@@ -134,6 +139,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         _atcLabelsLayer = IvaoMapLayers.CreateAtcLabels([], palette);
         _atcStationsLayer = CreateStationLayer([]);
         _routeLayer = new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };
+        _hoverRouteLayer = IvaoMapLayers.CreateHoverRoute(null, palette);
         _selectedAtcLayer = IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), palette);
 
         // Added first, so the runway pavement sits under the sectors, the trail
@@ -145,6 +151,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         map.Layers.Add(_atcLabelsLayer);
         map.Layers.Add(_atcStationsLayer);
         map.Layers.Add(_routeLayer);
+        map.Layers.Add(_hoverRouteLayer);
         map.Layers.Add(_selectedAtcLayer);
 
         SetLayerEnabled(_atcRegionsLayer, _showAtc);
@@ -177,6 +184,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         // Repaints the route with the new palette colours; the recorded track of
         // the selection is kept, so a theme switch does not drop the trail.
         RebuildRouteLayer();
+        RebuildHoverRouteLayer();
 
         // The airport pavement derives its colour from the palette, so it is
         // rebuilt even when the viewport is looking at the same airports.
@@ -228,7 +236,21 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
         _regionIndex = AtcRegionIndex.Build(atc);
         UpdatePilotPositions();
+        RebuildHoverRouteLayer();
         Map.Refresh();
+    }
+
+    public void SetHoveredPilot(PilotItem? pilot)
+    {
+        pilot = _showPilots && !ReferenceEquals(pilot, SelectedPilot) ? pilot : null;
+        if (ReferenceEquals(_hoveredPilot, pilot))
+        {
+            return;
+        }
+
+        _hoveredPilot = pilot;
+        RebuildHoverRouteLayer();
+        Map?.Refresh();
     }
 
     public void SelectPilot(PilotItem? pilot) => SelectPilot(pilot, center: true);
@@ -241,6 +263,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     /// </summary>
     public void SelectPilot(PilotItem? pilot, bool center)
     {
+        SetHoveredPilot(null);
         if (ReferenceEquals(SelectedPilot, pilot))
         {
             return;
@@ -566,6 +589,11 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
         foreach (var stale in Pilots.Where(item => !incoming.Contains(item.Id)).ToList())
         {
+            if (ReferenceEquals(stale, _hoveredPilot))
+            {
+                SetHoveredPilot(null);
+            }
+
             if (ReferenceEquals(stale, SelectedPilot))
             {
                 SelectPilot(null);
@@ -690,16 +718,16 @@ public sealed class MapViewModel : ObservableObject, IDisposable
                 placement.Station,
                 screen.X,
                 screen.Y,
-                AtcMarkerStyles.HitRadius(placement.Marker),
+                AtcMarkerStyles.HitRadius(AtcMarkerStyles.For(
+                    placement.Station.Facility, placement.Station.Callsign,
+                    AtcMarkerStyles.ZoomScale(viewport.Resolution))),
                 AtcMarkerStyles.SortOrder(placement.Station.Facility, placement.Station.Callsign)));
         }
     }
 
     /// <summary>
-    /// Rebuilds the station layer when the zoom multiplier changes so the badges
-    /// grow and shrink with the map instead of keeping one pixel size on every
-    /// zoom level. <see cref="AtcMarkerStyles.ZoomScale"/> quantises the
-    /// multiplier, so this only runs when the glyphs visibly change size.
+    /// Keeps the scale used to build placements in sync. Glyphs and label offsets
+    /// resolve the current resolution at render time, without rebuilding layers.
     /// </summary>
     private void UpdateStationZoom()
     {
@@ -709,23 +737,12 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         var zoom = AtcMarkerStyles.ZoomScale(map.Navigator.Viewport.Resolution);
-        if (Math.Abs(zoom - _stationZoom) < 0.001)
+        if (Math.Abs(zoom - _stationZoom) < 0.000001)
         {
             return;
         }
 
         _stationZoom = zoom;
-        ReplaceLayer(ref _atcStationsLayer, CreateStationLayer(_atc));
-        SetLayerEnabled(_atcStationsLayer, _showAtc);
-
-        // The ring around the selected badge is drawn at the size of the glyph,
-        // so it has to follow the new zoom as well.
-        if (SelectedAtc is { } selected)
-        {
-            ReplaceLayer(ref _selectedAtcLayer, IvaoMapLayers.CreateSelectedAtc(selected.Atc, _palette, zoom));
-        }
-
-        map.Refresh();
     }
 
     /// <summary>
@@ -803,6 +820,10 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             Math.Max(topLeft.Latitude, bottomRight.Latitude),
             Math.Max(topLeft.Longitude, bottomRight.Longitude));
     }
+
+    private void RebuildHoverRouteLayer() =>
+        ReplaceLayer(ref _hoverRouteLayer,
+            IvaoMapLayers.CreateHoverRoute(_hoveredPilot?.Pilot, _palette ?? DefaultPalette));
 
     /// <summary>
     /// Paints the trail of the selected aircraft, or an empty layer when nothing

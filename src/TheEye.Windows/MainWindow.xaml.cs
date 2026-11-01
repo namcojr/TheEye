@@ -16,6 +16,7 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        TheEye.Rendering.AtcGlyphRenderer.Register();
         InitializeComponent();
         StateChanged += (_, _) => UpdateMaximizeButton();
         ThemeService.ThemeChanged += OnThemeChanged;
@@ -91,6 +92,17 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnPilotMarkerEnter(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (sender is Button { DataContext: PilotItem pilot })
+        {
+            ViewModel?.Map.SetHoveredPilot(pilot);
+        }
+    }
+
+    private void OnPilotMarkerLeave(object sender, System.Windows.Input.MouseEventArgs e) =>
+        ViewModel?.Map.SetHoveredPilot(null);
+
     private void OnPilotMarkerClick(object sender, RoutedEventArgs e)
     {
         if (ViewModel is not { } viewModel || sender is not Button { DataContext: PilotItem pilot })
@@ -98,6 +110,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        viewModel.Map.SetHoveredPilot(null);
         if (ReferenceEquals(viewModel.SelectedPilot, pilot))
         {
             // Clicking the marker that is already selected should still bring the

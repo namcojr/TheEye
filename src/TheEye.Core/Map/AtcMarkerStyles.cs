@@ -30,13 +30,12 @@ public sealed record AtcMarkerStyle(AtcMarkerShape Shape, string Fill, double Sc
 /// Builds the fallback glyphs for ATC positions that report a coordinate but no
 /// polygon (every ground position, most towers and the odd approach sector).
 /// Ground gets a four pointed star, delivery the same star turned by 45
-/// degrees, tower a red disc and approach/departure/arrival a wider blue disc,
-/// mirroring the legend of the IVAO web map. Because every position of an
-/// airport is placed on the airport coordinate, the glyphs are concentric: the
-/// stars sit inside the tower disc and the tower disc inside the approach one,
-/// so all of them stay visible at the same spot and a click walks through them.
-/// The glyphs are inline SVG images, so Mapsui draws them as vectors at any
-/// zoom level without extra asset files.
+/// degrees, tower a red disc, observer a white disc and approach/departure/arrival
+/// a wider blue disc, mirroring the legend of the IVAO web map. Because every
+/// position of an airport is placed on the airport coordinate, the glyphs are
+/// concentric and a click walks through them.
+/// The live map draws screen-space vectors on each frame, with a fixed-width
+/// contour. Inline SVG is also available for standalone glyph previews.
 /// </summary>
 public static class AtcMarkerStyles
 {
@@ -45,15 +44,14 @@ public static class AtcMarkerStyles
     public const string ApproachFill = "#3B82F6";
     public const string ControlFill = "#3498DB";
     public const string InformationFill = "#9B59B6";
+    public const string ObserverFill = "#FFFFFF";
     public const string DefaultFill = "#95A5A6";
 
     // ----------------------------------------------------------------------
-    // Glyph sizes. Every diameter is in device independent pixels at zoom 1,
-    // i.e. on the default continental view, and every glyph grows together
-    // with its zoom multiplier. The badges of one airport are concentric: the
-    // delivery and ground stars sit in the middle, the tower circle encloses
-    // them and the approach circle encloses the tower one. Only these seven
-    // numbers have to change to make a ring wider or narrower.
+    // Glyph sizes. Diameters are device-independent screen pixels at the
+    // reference zoom. Each facility retains its own size while the map scale
+    // changes; the star and circle limits keep the glyphs within a useful
+    // screen size at the extremes.
     // ----------------------------------------------------------------------
 
     /// <summary>Diameter of the delivery star (<c>_DEL</c>), the smallest glyph.</summary>
@@ -81,10 +79,27 @@ public static class AtcMarkerStyles
     /// <summary>Diameter of the disc drawn when the facility cannot be resolved.</summary>
     public const double DefaultDiameter = 41;
 
+    /// <summary>Diameter of the disc of an observer position (<c>_OBS</c>).</summary>
+    public const double ObserverDiameter = 46;
+
+    /// <summary>Smallest allowed screen diameter for either airport-position star.</summary>
+    public const double MinStarDiameter = 12;
+
+    /// <summary>Largest allowed screen diameter for either airport-position star.</summary>
+    public const double MaxStarDiameter = 550;
+
+    /// <summary>Smallest allowed screen diameter for an airport-position circle.</summary>
+    public const double MinCircleDiameter = 16;
+
+    /// <summary>Largest allowed screen diameter for an airport-position circle.</summary>
+    public const double MaxCircleDiameter = 580;
+
+    /// <summary>Zoom level at which the facility diameters above are drawn at their configured size.</summary>
+    public const int ReferenceZoomLevel = 6;
+
     /// <summary>
-    /// Width in screen pixels of every glyph contour. One pixel at any zoom, like
-    /// the outline of the sector polygons, and never transparent: only the fill
-    /// of the discs is see-through.
+    /// Width in screen pixels of every glyph contour at every zoom.
+    /// Only the fill of discs is see-through.
     /// </summary>
     public const double OutlineWidth = 1;
 
@@ -96,42 +111,14 @@ public static class AtcMarkerStyles
     public const int CircleFillAlpha = 56;
 
     /// <summary>
-    /// Zoom level at which the badges start to grow, i.e. the level at which they
-    /// show their smallest size. It is the zoomed-out limit of the map
-    /// (<see cref="WorldMap.MinZoomLevel"/>), so the badges are smallest on the
-    /// widest view the user can reach.
-    /// </summary>
-    public const double MinZoomLevel = WorldMap.MinZoomLevel;
-
-    /// <summary>
-    /// Zoom level at which the badges reach their largest size. It is the deepest
-    /// level of the map, 17; every view that is zoomed in further keeps that size.
-    /// </summary>
-    public const double MaxZoomLevel = WorldMap.DeepestZoomLevel;
-
-    /// <summary>
-    /// Multiplier of every diameter at <see cref="MinZoomLevel"/> and on every
-    /// level zoomed further out — the smallest size the badges can have. It scales
-    /// all of the diameters above, so <c>1</c> shows them at their tuned size.
-    /// </summary>
-    public const double MinZoomScale = 1.0;
-
-    /// <summary>
-    /// Multiplier of every diameter at <see cref="MaxZoomLevel"/> and on every
-    /// level zoomed in further — the largest size the badges can have.
-    /// </summary>
-    public const double MaxZoomScale = 5.0;
-
-    /// <summary>
     /// Multiplier of a ring drawn around a badge: the selection ring, and the
     /// supervisor ring the station layer draws. The ring is a little wider than
     /// the glyph itself so it shows all around it instead of cutting into it.
     /// </summary>
-    public const double RingScale = 1.2;
+    public const double RingScale = 1.0;
 
-    private const double ZoomQuantisation = 20;
     private const double BaseLabelFontSize = 9;
-    private const double MaxLabelZoom = 1.6;
+    private const double ReferenceResolution = WorldMap.MaxResolution / (1 << ReferenceZoomLevel);
 
     /// <summary>Side of the inline SVG viewBox; a unit is one pixel of the artwork.</summary>
     private const double ArtworkSize = 32;
@@ -143,7 +130,8 @@ public static class AtcMarkerStyles
     private const double GlyphBox = 30;
 
     private const string SvgSourcePrefix = "svg-content://";
-    private const string StarPath =
+    /// <summary>The four-point star outline in the 32-unit artwork coordinate system.</summary>
+    public const string StarPathData =
         "M16 0C17.5 9 23 14.5 32 16C23 17.5 17.5 23 16 32C14.5 23 9 17.5 0 16C9 14.5 14.5 9 16 0Z";
 
     private static readonly ConcurrentDictionary<string, Image> Images = new(StringComparer.Ordinal);
@@ -152,56 +140,40 @@ public static class AtcMarkerStyles
     /// Resolves the glyph for a station. The facility reported by the API is
     /// preferred; when it is missing or generic the callsign suffix
     /// (<c>EDDB_GND</c>) is used instead. <paramref name="zoom"/> is the
-    /// multiplier from <see cref="ZoomScale"/>, so the badges grow with the map.
+    /// continuous scale factor from <see cref="ZoomScale"/>.
     /// </summary>
     public static AtcMarkerStyle For(string? facility, string? callsign, double zoom = 1)
     {
         var (shape, fill, diameter) = ResolveGlyph(facility, callsign);
 
         // The glyph fills GlyphBox units of the artwork, so this draws it at
-        // exactly `diameter` screen pixels, contour included, at zoom 1.
-        var scale = Math.Round(diameter / GlyphBox * NormalizeZoom(zoom), 3);
-        return new AtcMarkerStyle(shape, fill, scale, CreateSvg(shape, fill, scale));
+        // exactly `diameter` screen pixels, contour included, at the reference zoom.
+        var scale = diameter / GlyphBox * NormalizeZoom(zoom, shape);
+        // Keep the SVG source stable as the map zooms, so image caching remains
+        // bounded; the symbol scale carries the continuous zoom change.
+        return new AtcMarkerStyle(shape, fill, scale, CreateSvg(shape, fill));
     }
 
     /// <summary>
-    /// Multiplies the badge geometry for a viewport resolution. The multiplier
-    /// follows the <em>zoom level</em> of the map, not the raw resolution: it stays
-    /// at <see cref="MinZoomScale"/> from the whole-world view down to
-    /// <see cref="MinZoomLevel"/>, rises evenly on every level in between and
-    /// stays at <see cref="MaxZoomScale"/> from <see cref="MaxZoomLevel"/> inwards.
-    /// The badges therefore shrink while the map is zoomed out and grow while it is
-    /// zoomed in, and they never change direction. The result is quantised so
-    /// callers rebuild the station layer only when the glyphs visibly change size.
+    /// Raw multiplier that makes the badges follow the map's world scale. It
+    /// doubles for every map zoom level; <see cref="For"/> clamps the resulting
+    /// screen size per marker shape.
     /// </summary>
     public static double ZoomScale(double resolution)
     {
-        if (double.IsNaN(resolution) || resolution <= 0)
+        if (!double.IsFinite(resolution) || resolution <= 0)
         {
-            return Quantise(MinZoomScale);
+            return 1;
         }
 
-        // Mapsui zooms in powers of two, so the viewport resolution maps one to one
-        // onto the zoom level of the map: 0 puts the whole world in the window and
-        // DeepestZoomLevel puts one pixel on the apron.
-        var level = Math.Log2(WorldMap.MaxResolution / resolution);
-        var span = Math.Max(MaxZoomLevel - MinZoomLevel, 0.001);
-        var progress = Math.Clamp((level - MinZoomLevel) / span, 0, 1);
-
-        return Quantise(MinZoomScale + ((MaxZoomScale - MinZoomScale) * progress));
+        return ReferenceResolution / resolution;
     }
 
-    /// <summary>Rounds a multiplier to the step the station layer reacts to.</summary>
-    private static double Quantise(double scale) =>
-        Math.Round(scale * ZoomQuantisation) / ZoomQuantisation;
-
     /// <summary>
-    /// Callsign font size that keeps the labels in proportion to the badges. The
-    /// text grows much slower than the glyphs do, otherwise one airport would
-    /// print its callsigns across half the map.
+    /// Callsign font size in screen pixels. Labels deliberately remain the same
+    /// size as the map zooms, even though their badges follow the map scale.
     /// </summary>
-    public static double LabelFontSize(double zoom) =>
-        Math.Round(BaseLabelFontSize * Math.Clamp(NormalizeZoom(zoom), 1, MaxLabelZoom), 1);
+    public static double LabelFontSize() => BaseLabelFontSize;
 
     /// <summary>
     /// Creates the Mapsui style for a marker, sharing the decoded image. The
@@ -232,8 +204,8 @@ public static class AtcMarkerStyles
     /// </summary>
     public static ImageStyle CreateRingStyle(AtcMarkerStyle marker, string accent)
     {
-        var scale = Math.Round(marker.Scale * RingScale, 3);
-        var source = CreateRingSvg(accent, scale);
+        var scale = marker.Scale * RingScale;
+        var source = CreateRingSvg(accent, 1);
         return new ImageStyle
         {
             Image = ImageFor(source),
@@ -262,11 +234,10 @@ public static class AtcMarkerStyles
     /// </summary>
     /// <param name="widestScale">Scale of the widest glyph of the stack.</param>
     /// <param name="line">Position of the station inside the stack, smallest facility first.</param>
-    /// <param name="zoom">Zoom multiplier the labels are drawn with.</param>
-    public static (double X, double Y) StackedLabelOffset(double widestScale, int line, double zoom = 1)
+    public static (double X, double Y) StackedLabelOffset(double widestScale, int line)
     {
         var reach = (16 * widestScale) + 4;
-        var lineHeight = LabelFontSize(zoom) + 3;
+        var lineHeight = BaseLabelFontSize + 3;
         return (0d, Math.Round(reach + (line * lineHeight), 1));
     }
 
@@ -301,16 +272,17 @@ public static class AtcMarkerStyles
         {
             AtcMarkerFamily.Ground => 0,
             AtcMarkerFamily.Tower => 1,
-            AtcMarkerFamily.Approach => 2,
-            AtcMarkerFamily.Control => 3,
-            AtcMarkerFamily.Information => 4,
-            _ => 5
+            AtcMarkerFamily.Observer => 2,
+            AtcMarkerFamily.Approach => 3,
+            AtcMarkerFamily.Control => 4,
+            AtcMarkerFamily.Information => 5,
+            _ => 6
         };
 
     /// <summary>
     /// Builds the inline SVG of a glyph. <paramref name="scale"/> is the
-    /// multiplier Mapsui draws the artwork with, so the contour can be kept at
-    /// <see cref="OutlineWidth"/> screen pixels however large the badge gets.
+    /// multiplier Mapsui draws the artwork with, so the contour is
+    /// <see cref="OutlineWidth"/> screen pixels at that scale.
     /// </summary>
     public static string CreateSvg(AtcMarkerShape shape, string fill, double scale = 1) =>
         $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"32\" viewBox=\"0 0 32 32\">{CreateBody(shape, fill, scale)}</svg>";
@@ -338,7 +310,7 @@ public static class AtcMarkerStyles
 
             // The group scale multiplies the stroke width too, so it is divided
             // by the inset to still come out as one screen pixel.
-            return $"<g transform=\"{transform}\"><path d=\"{StarPath}\" fill=\"{fill}\" stroke=\"{fill}\" "
+            return $"<g transform=\"{transform}\"><path d=\"{StarPathData}\" fill=\"{fill}\" stroke=\"{fill}\" "
                 + $"fill-opacity=\"{Number(CircleFillAlpha / 255d)}\" "
                 + $"stroke-width=\"{Number(contour / inset)}\" stroke-linejoin=\"round\"/></g>";
         }
@@ -353,8 +325,8 @@ public static class AtcMarkerStyles
     private static string Number(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// Empty ring of the selection marker: a two pixel contour around the whole
-    /// artwork, i.e. just outside the widest glyph, with nothing painted inside.
+    /// Empty ring of the selection marker: a two pixel contour at the supplied
+    /// scale around the whole artwork, with nothing painted inside.
     /// </summary>
     private static string CreateRingSvg(string color, double scale)
     {
@@ -365,9 +337,33 @@ public static class AtcMarkerStyles
             + $"stroke-width=\"{Number(contour)}\"/></svg>";
     }
 
-    /// <summary>Keeps a caller supplied multiplier inside the supported zoom range.</summary>
-    private static double NormalizeZoom(double zoom) =>
-        double.IsNaN(zoom) ? 1 : Math.Clamp(zoom, MinZoomScale, MaxZoomScale);
+    /// <summary>Clamps the continuous map scale to the limits for the marker shape.</summary>
+    private static double NormalizeZoom(double zoom, AtcMarkerShape shape)
+    {
+        if (double.IsNaN(zoom))
+        {
+            zoom = 1;
+        }
+
+        var minimumBaseDiameter = shape is AtcMarkerShape.Star or AtcMarkerShape.RotatedStar
+            ? Math.Min(DeliveryDiameter, GroundDiameter)
+            : Math.Min(
+                DefaultDiameter,
+                Math.Min(ObserverDiameter, Math.Min(InformationDiameter, Math.Min(TowerDiameter, Math.Min(ApproachDiameter, ControlDiameter)))));
+        var maximumBaseDiameter = shape is AtcMarkerShape.Star or AtcMarkerShape.RotatedStar
+            ? Math.Max(DeliveryDiameter, GroundDiameter)
+            : Math.Max(
+                DefaultDiameter,
+                Math.Max(ObserverDiameter, Math.Max(InformationDiameter, Math.Max(TowerDiameter, Math.Max(ApproachDiameter, ControlDiameter)))));
+        var minimumDiameter = shape is AtcMarkerShape.Star or AtcMarkerShape.RotatedStar
+            ? MinStarDiameter
+            : MinCircleDiameter;
+        var maximumDiameter = shape is AtcMarkerShape.Star or AtcMarkerShape.RotatedStar
+            ? MaxStarDiameter
+            : MaxCircleDiameter;
+
+        return Math.Clamp(zoom, minimumDiameter / minimumBaseDiameter, maximumDiameter / maximumBaseDiameter);
+    }
 
     private static (AtcMarkerShape Shape, string Fill, double Diameter) ResolveGlyph(string? facility, string? callsign)
     {
@@ -381,6 +377,7 @@ public static class AtcMarkerStyles
             AtcMarkerFamily.Approach => (AtcMarkerShape.Circle, ApproachFill, ApproachDiameter),
             AtcMarkerFamily.Control => (AtcMarkerShape.Circle, ControlFill, ControlDiameter),
             AtcMarkerFamily.Information => (AtcMarkerShape.Circle, InformationFill, InformationDiameter),
+            AtcMarkerFamily.Observer => (AtcMarkerShape.Circle, ObserverFill, ObserverDiameter),
             _ => (AtcMarkerShape.Circle, DefaultFill, DefaultDiameter)
         };
     }
@@ -426,6 +423,7 @@ public static class AtcMarkerStyles
         "APP" or "DEP" or "ARR" => AtcMarkerFamily.Approach,
         "CTR" or "FSS" or "CEN" => AtcMarkerFamily.Control,
         "INFO" => AtcMarkerFamily.Information,
+        "OBS" => AtcMarkerFamily.Observer,
         _ => null
     };
 
@@ -436,6 +434,7 @@ public static class AtcMarkerStyles
         Tower,
         Approach,
         Control,
-        Information
+        Information,
+        Observer
     }
 }

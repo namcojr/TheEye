@@ -153,6 +153,76 @@ public sealed class RouteLayerTests
         Assert.Empty(layer.Features);
     }
 
+    [Fact]
+    public void CreateHoverRoute_ConnectsDepartureThroughCurrentPositionToArrival()
+    {
+        var pilot = Pilot();
+        var layer = IvaoMapLayers.CreateHoverRoute(pilot, Palette);
+        var lines = TrailLines(layer);
+        Assert.Equal(2, lines.Count);
+        Assert.Equal(2, layer.Features.Count());
+        AssertEndpoint(lines[0], pilot.FlightPlan!.Departure!.Position!.Value, first: true);
+        AssertEndpoint(lines[0], pilot.LastTrack!.Position!.Value, first: false);
+        AssertEndpoint(lines[1], pilot.LastTrack.Position.Value, first: true);
+        AssertEndpoint(lines[1], pilot.FlightPlan.Arrival!.Position!.Value, first: false);
+        Assert.All(lines, line => Assert.Equal(WorldMap.Parse(Palette.Accent), PenColor(line)));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CreateHoverRoute_DrawsOnlyTheKnownAirportLeg(bool missingDeparture)
+    {
+        var pilot = Pilot();
+        if (missingDeparture)
+            pilot.FlightPlan!.Departure = null;
+        else
+            pilot.FlightPlan!.Arrival = null;
+
+        Assert.Single(TrailLines(IvaoMapLayers.CreateHoverRoute(pilot, Palette)));
+    }
+
+    [Fact]
+    public void CreateHoverRoute_DrawsNothingWithoutPositionOrAirports()
+    {
+        Assert.Empty(IvaoMapLayers.CreateHoverRoute(null, Palette).Features);
+        var pilot = Pilot();
+        pilot.LastTrack = null;
+        Assert.Empty(IvaoMapLayers.CreateHoverRoute(pilot, Palette).Features);
+        pilot = Pilot();
+        pilot.FlightPlan = null;
+        Assert.Empty(IvaoMapLayers.CreateHoverRoute(pilot, Palette).Features);
+    }
+
+    [Fact]
+    public void CreateHoverRoute_SplitsBothLegsAtTheAntimeridian()
+    {
+        var pilot = Pilot();
+        pilot.LastTrack!.Latitude = 0;
+        pilot.LastTrack.Longitude = -179;
+        pilot.FlightPlan!.Departure = new IvaoAirport { Latitude = 0, Longitude = 179 };
+        pilot.FlightPlan.Arrival = new IvaoAirport { Latitude = 0, Longitude = 178 };
+
+        var lines = TrailLines(IvaoMapLayers.CreateHoverRoute(pilot, Palette));
+
+        Assert.Equal(4, lines.Count);
+        Assert.All(lines, line =>
+        {
+            var coordinates = line.Geometry!.Coordinates;
+            for (var i = 1; i < coordinates.Length; i++)
+                Assert.True(Math.Abs(coordinates[i].X - coordinates[i - 1].X) < 20037508.34);
+        });
+    }
+
+    private static void AssertEndpoint(GeometryFeature line, GeoCoordinate expected, bool first)
+    {
+        var point = WorldMap.Project(expected);
+        var coordinates = line.Geometry!.Coordinates;
+        var actual = first ? coordinates[0] : coordinates[^1];
+        Assert.Equal(point.X, actual.X, 5);
+        Assert.Equal(point.Y, actual.Y, 5);
+    }
+
     private static List<GeometryFeature> TrailLines(MemoryLayer layer) =>
         layer.Features
             .OfType<GeometryFeature>()

@@ -6,5 +6,5 @@ namespace TheEye.Core.Models;
 /// </summary>
 public readonly record struct IvaoCoordinate(double Latitude, double Longitude)
 {
-    public GeoCoordinate ToGeoCoordinate() => new(Latitude, Longitude);
+    public GeoCoordinate ToGeoCoordinate() => new(Latitude, GeoPolygon.NormalizeLongitude(Longitude));
 }

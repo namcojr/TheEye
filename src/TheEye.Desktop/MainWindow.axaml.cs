@@ -30,6 +30,7 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        TheEye.Rendering.AtcGlyphRenderer.Register();
         InitializeComponent();
         MapHost.AddHandler(PointerWheelChangedEvent, OnMapWheel, RoutingStrategies.Tunnel);
     }
@@ -160,6 +161,17 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnPilotMarkerEnter(object? sender, PointerEventArgs e)
+    {
+        if (sender is Button { DataContext: PilotItem pilot })
+        {
+            ViewModel?.Map.SetHoveredPilot(pilot);
+        }
+    }
+
+    private void OnPilotMarkerLeave(object? sender, PointerEventArgs e) =>
+        ViewModel?.Map.SetHoveredPilot(null);
+
     private void OnPilotMarkerClick(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is not { } viewModel || sender is not Button { DataContext: PilotItem pilot })
@@ -167,6 +179,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        viewModel.Map.SetHoveredPilot(null);
         if (ReferenceEquals(viewModel.SelectedPilot, pilot))
         {
             // Clicking the marker that is already selected should still bring the

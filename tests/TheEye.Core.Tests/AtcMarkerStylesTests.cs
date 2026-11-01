@@ -1,5 +1,7 @@
+using Mapsui;
 using Mapsui.Layers;
 using Mapsui.Styles;
+using Mapsui.Styles.Thematics;
 using TheEye.Core.Maps;
 using TheEye.Core.Models;
 
@@ -32,6 +34,16 @@ public sealed class AtcMarkerStylesTests
 
         Assert.Equal(AtcMarkerShape.Circle, marker.Shape);
         Assert.Equal(AtcMarkerStyles.TowerFill, marker.Fill);
+        Assert.Contains("<circle", marker.SvgSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void For_ObserverPosition_DrawsWhiteDisc()
+    {
+        var marker = AtcMarkerStyles.For("OBS", "EDDB_OBS");
+
+        Assert.Equal(AtcMarkerShape.Circle, marker.Shape);
+        Assert.Equal(AtcMarkerStyles.ObserverFill, marker.Fill);
         Assert.Contains("<circle", marker.SvgSource, StringComparison.Ordinal);
     }
 
@@ -87,10 +99,10 @@ public sealed class AtcMarkerStylesTests
         var layer = IvaoMapLayers.CreateAtcStations([CreateAirportAtc("EDDB_GND", "GND")], Palette);
 
         var feature = Assert.Single(layer.Features);
-        var image = Assert.Single(feature.Styles.OfType<ImageStyle>());
-        var label = Assert.Single(feature.Styles.OfType<LabelStyle>());
+        var glyph = Assert.Single(feature.Styles.OfType<AtcGlyphStyle>());
+        var label = LabelFor(feature);
 
-        Assert.Contains("<path", image.Image!.Source?.ToString(), StringComparison.Ordinal);
+        Assert.Equal(AtcMarkerShape.Star, glyph.MarkerAtResolution(ReferenceResolution).Shape);
         Assert.Equal("Callsign", label.LabelColumn);
         Assert.True(label.Offset.Y > 0);
     }
@@ -113,7 +125,7 @@ public sealed class AtcMarkerStylesTests
             Palette);
 
         var sources = layer.Features
-            .Select(feature => feature.Styles.OfType<ImageStyle>().Single().Image!.Source?.ToString())
+            .Select(feature => feature.Styles.OfType<AtcGlyphStyle>().Single().MarkerAtResolution(ReferenceResolution).Fill)
             .ToList();
 
         Assert.Equal(2, sources.Count);
@@ -201,14 +213,21 @@ public sealed class AtcMarkerStylesTests
     [Fact]
     public void SortOrder_KeepsTheFacilityOrderInsideACluster()
     {
-        var facilities = new[] { ("CTR", "EDDB_CTR"), ("APP", "EDDB_APP"), ("GND", "EDDB_GND"), ("TWR", "EDDB_TWR") };
+        var facilities = new[]
+        {
+            ("CTR", "EDDB_CTR"),
+            ("APP", "EDDB_APP"),
+            ("OBS", "EDDB_OBS"),
+            ("GND", "EDDB_GND"),
+            ("TWR", "EDDB_TWR")
+        };
 
         var ordered = facilities
             .OrderBy(item => AtcMarkerStyles.SortOrder(item.Item1, item.Item2))
             .Select(item => item.Item1)
             .ToList();
 
-        Assert.Equal(new[] { "GND", "TWR", "APP", "CTR" }, ordered);
+        Assert.Equal(new[] { "GND", "TWR", "OBS", "APP", "CTR" }, ordered);
     }
 
     [Fact]
@@ -227,19 +246,16 @@ public sealed class AtcMarkerStylesTests
         // The badges are concentric rings around the airport, so they share the
         // point and the image offset; only the callsigns move to their own line.
         Assert.Single(layer.Features.Cast<PointFeature>().Select(feature => feature.Point).Distinct());
-        Assert.Single(layer.Features
-            .Select(feature => feature.Styles.OfType<ImageStyle>().Single().Offset)
-            .Select(offset => (offset.X, offset.Y))
-            .Distinct());
+        Assert.All(layer.Features, feature => Assert.Single(feature.Styles.OfType<AtcGlyphStyle>()));
         Assert.Equal(
             3,
             layer.Features
-                .Select(feature => feature.Styles.OfType<LabelStyle>().Single().Offset)
+                .Select(feature => LabelFor(feature).Offset)
                 .Select(offset => (offset.X, offset.Y))
                 .Distinct()
                 .Count());
         Assert.All(
-            layer.Features.Select(feature => feature.Styles.OfType<LabelStyle>().Single()),
+            layer.Features.Select(feature => LabelFor(feature)),
             style => Assert.Equal(LabelStyle.VerticalAlignmentEnum.Top, style.VerticalAlignment));
     }
 
@@ -247,18 +263,18 @@ public sealed class AtcMarkerStylesTests
     public void For_ZoomedMarker_KeepsTheGlyphAndGrowsIt()
     {
         var marker = AtcMarkerStyles.For("TWR", "EDDB_TWR");
-        var zoomed = AtcMarkerStyles.For("TWR", "EDDB_TWR", 2);
+        var zoomed = AtcMarkerStyles.For("TWR", "EDDB_TWR", 1.2);
 
         Assert.Equal(marker.Shape, zoomed.Shape);
         Assert.Equal(marker.Fill, zoomed.Fill);
-        Assert.Equal(Math.Round(marker.Scale * 2, 3), zoomed.Scale, 6);
+        Assert.Equal(marker.Scale * 1.2, zoomed.Scale, 6);
     }
 
     [Theory]
-    [InlineData(WorldMap.MaxResolution, AtcMarkerStyles.MinZoomScale)]
-    [InlineData(25000, AtcMarkerStyles.MinZoomScale)]
-    [InlineData(WorldMap.MinResolution, AtcMarkerStyles.MaxZoomScale)]
-    public void ZoomScale_IsClampedToTheSupportedRange(double resolution, double expected)
+    [InlineData(WorldMap.MaxResolution / (1 << AtcMarkerStyles.ReferenceZoomLevel), 1)]
+    [InlineData(WorldMap.MaxResolution / (1 << (AtcMarkerStyles.ReferenceZoomLevel + 1)), 2)]
+    [InlineData(WorldMap.MaxResolution / (1 << (AtcMarkerStyles.ReferenceZoomLevel - 1)), 0.5)]
+    public void ZoomScale_FollowsTheMapScale(double resolution, double expected)
     {
         Assert.Equal(expected, AtcMarkerStyles.ZoomScale(resolution), 6);
     }
@@ -275,56 +291,91 @@ public sealed class AtcMarkerStylesTests
     }
 
     [Fact]
-    public void ZoomScale_FallsBackToTheSmallestSizeForAnEmptyViewport()
+    public void ZoomScale_FallsBackToTheReferenceScaleForAnEmptyViewport()
     {
-        Assert.Equal(AtcMarkerStyles.MinZoomScale, AtcMarkerStyles.ZoomScale(0));
-        Assert.Equal(AtcMarkerStyles.MinZoomScale, AtcMarkerStyles.ZoomScale(double.NaN));
+        Assert.Equal(1, AtcMarkerStyles.ZoomScale(0));
+        Assert.Equal(1, AtcMarkerStyles.ZoomScale(double.NaN));
     }
 
     [Fact]
-    public void LabelFontSize_GrowsWithTheZoomButStaysReadable()
+    public void LabelFontSize_RemainsConstantWhenTheMapZooms()
     {
-        Assert.Equal(9, AtcMarkerStyles.LabelFontSize(1));
-        Assert.True(AtcMarkerStyles.LabelFontSize(2) > 9);
-        Assert.Equal(14.4, AtcMarkerStyles.LabelFontSize(AtcMarkerStyles.MaxZoomScale), 6);
+        Assert.Equal(9, AtcMarkerStyles.LabelFontSize());
     }
 
     [Fact]
-    public void StackedLabelOffset_SpacesTheLinesWithTheLabelSize()
+    public void StackedLabelOffset_KeepsLabelSpacingConstantWhenTheMapZooms()
     {
         var first = AtcMarkerStyles.StackedLabelOffset(1.2, 0);
         var second = AtcMarkerStyles.StackedLabelOffset(1.2, 1);
-        var zoomed = AtcMarkerStyles.StackedLabelOffset(1.2, 1, 2);
-
-        Assert.Equal(AtcMarkerStyles.LabelFontSize(1) + 3, second.Y - first.Y, 6);
-        Assert.True(zoomed.Y > second.Y);
+        Assert.Equal(AtcMarkerStyles.LabelFontSize() + 3, second.Y - first.Y, 6);
     }
 
     [Fact]
-    public void CreateAtcStations_ScalesTheGlyphsAndLabelsWithTheZoom()
+    public void CreateAtcStations_ScalesTheGlyphsButKeepsLabelsConstant()
     {
         var layer = IvaoMapLayers.CreateAtcStations(
             [CreateAirportAtc("EDDB_TWR", "TWR")],
             Palette,
             zoom: 2);
 
-        var image = Assert.Single(layer.Features.SelectMany(feature => feature.Styles.OfType<ImageStyle>()));
-        var label = Assert.Single(layer.Features.SelectMany(feature => feature.Styles.OfType<LabelStyle>()));
+        var glyph = Assert.Single(layer.Features.SelectMany(feature => feature.Styles.OfType<AtcGlyphStyle>()));
+        var label = LabelFor(Assert.Single(layer.Features), ReferenceResolution / 2);
 
-        Assert.Equal(AtcMarkerStyles.For("TWR", "EDDB_TWR", 2).Scale, image.SymbolScale, 6);
-        Assert.True(label.Font.Size > 9);
+        Assert.Equal(AtcMarkerStyles.For("TWR", "EDDB_TWR", 2).Scale, glyph.MarkerAtResolution(ReferenceResolution / 2).Scale, 6);
+        Assert.Equal(9, label.Font.Size);
     }
 
     [Fact]
-    public void HitRadius_GrowsWithTheZoomButStaysClickable()
+    public void SameStationLayer_TracksLiveMarkerSizeAndLabelOffsetWithoutRebuilding()
     {
-        var tower = AtcMarkerStyles.For("TWR", "EDDB_TWR");
-        var zoomed = AtcMarkerStyles.For("TWR", "EDDB_TWR", AtcMarkerStyles.MaxZoomScale);
-        var ground = AtcMarkerStyles.For("GND", "EDDB_GND", AtcMarkerStyles.MinZoomScale);
+        var layer = IvaoMapLayers.CreateAtcStations(
+            [CreateAirportAtc("EDDB_GND", "GND"), CreateAirportAtc("EDDB_TWR", "TWR")], Palette);
+        var tower = layer.Features.Single(feature => Equals(feature["Callsign"], "EDDB_TWR"));
+        var glyph = Assert.Single(tower.Styles.OfType<AtcGlyphStyle>());
+        var firstLabel = LabelFor(tower, ReferenceResolution);
+        var firstOffset = firstLabel.Offset.Y;
+        var firstScale = glyph.MarkerAtResolution(ReferenceResolution).Scale;
+        var nextLabel = LabelFor(tower, ReferenceResolution / 1.25);
+        var nextScale = glyph.MarkerAtResolution(ReferenceResolution / 1.25).Scale;
 
-        Assert.Equal((16 * tower.Scale) + 4, AtcMarkerStyles.HitRadius(tower), 6);
-        Assert.True(AtcMarkerStyles.HitRadius(zoomed) > AtcMarkerStyles.HitRadius(tower));
-        Assert.True(AtcMarkerStyles.HitRadius(ground) >= 10);
+        Assert.Equal(firstScale * 1.25, nextScale, 6);
+        Assert.True(nextLabel.Offset.Y > firstOffset);
+        Assert.Equal(9, nextLabel.Font.Size);
+        Assert.Equal(2, layer.Features.Count());
+    }
+
+    [Fact]
+    public void For_ClampsStarsAndCirclesToTheirConfiguredScreenSizes()
+    {
+        var ground = AtcMarkerStyles.For("GND", "EDDB_GND");
+        var smallestStar = AtcMarkerStyles.For("GND", "EDDB_GND", 0);
+        var largestStar = AtcMarkerStyles.For("GND", "EDDB_GND", double.PositiveInfinity);
+        var defaultCircle = AtcMarkerStyles.For(null, "BIRD");
+        var smallestCircle = AtcMarkerStyles.For(null, "BIRD", 0);
+        var controlCircle = AtcMarkerStyles.For("CTR", "EDDB_CTR");
+        var largestCircle = AtcMarkerStyles.For("CTR", "EDDB_CTR", double.PositiveInfinity);
+
+        Assert.Equal(
+            AtcMarkerStyles.MinStarDiameter,
+            smallestStar.Scale / ground.Scale * AtcMarkerStyles.GroundDiameter,
+            6);
+        Assert.Equal(
+            AtcMarkerStyles.MaxStarDiameter,
+            largestStar.Scale / ground.Scale * AtcMarkerStyles.GroundDiameter,
+            6);
+        Assert.Equal(
+            AtcMarkerStyles.MinCircleDiameter,
+            smallestCircle.Scale / defaultCircle.Scale * AtcMarkerStyles.DefaultDiameter,
+            6);
+        Assert.Equal(
+            AtcMarkerStyles.MaxCircleDiameter,
+            largestCircle.Scale / controlCircle.Scale * AtcMarkerStyles.ControlDiameter,
+            6);
+
+        Assert.Equal((16 * controlCircle.Scale) + 4, AtcMarkerStyles.HitRadius(controlCircle), 6);
+        Assert.True(AtcMarkerStyles.HitRadius(largestCircle) > AtcMarkerStyles.HitRadius(controlCircle));
+        Assert.True(AtcMarkerStyles.HitRadius(smallestStar) >= 10);
     }
 
     [Fact]
@@ -400,14 +451,14 @@ public sealed class AtcMarkerStylesTests
 
         // The station keeps the glyph and colour of what it controls; the ring
         // marks the member, it does not turn the station into a new facility.
-        var images = ringed.Styles.OfType<ImageStyle>().ToList();
+        var images = ringed.Styles.OfType<AtcGlyphStyle>().ToList();
         Assert.Equal(2, images.Count);
-        Assert.Contains(FacilityPalette.Supervisor, images[1].Image!.Source?.ToString(), StringComparison.Ordinal);
-        Assert.Single(other.Styles.OfType<ImageStyle>());
+        Assert.Equal(FacilityPalette.Supervisor, images[1].RingColor);
+        Assert.Single(other.Styles.OfType<AtcGlyphStyle>());
 
         // The ring is drawn over the glyph and under the callsign.
-        Assert.IsType<ImageStyle>(ringed.Styles.ElementAt(1));
-        Assert.IsType<LabelStyle>(ringed.Styles.Last());
+        Assert.IsType<AtcGlyphStyle>(ringed.Styles.ElementAt(1));
+        Assert.IsType<ThemeStyle>(ringed.Styles.Last());
     }
 
     [Fact]
@@ -418,8 +469,14 @@ public sealed class AtcMarkerStylesTests
 
         var layer = IvaoMapLayers.CreateAtcStations([tower], Palette);
 
-        Assert.Single(Assert.Single(layer.Features).Styles.OfType<ImageStyle>());
+        Assert.Single(Assert.Single(layer.Features).Styles.OfType<AtcGlyphStyle>());
     }
+
+    private const double ReferenceResolution = WorldMap.MaxResolution / (1 << AtcMarkerStyles.ReferenceZoomLevel);
+
+    private static LabelStyle LabelFor(IFeature feature, double resolution = ReferenceResolution) =>
+        Assert.IsType<LabelStyle>(Assert.Single(feature.Styles.OfType<ThemeStyle>())
+            .GetStyle(feature, new Viewport { Resolution = resolution }));
 
     private static IvaoAtc CreateAirportAtc(string callsign, string facility) =>
         new()
