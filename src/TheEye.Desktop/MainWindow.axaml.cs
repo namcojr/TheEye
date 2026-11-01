@@ -9,6 +9,7 @@ using Avalonia.VisualTree;
 using Mapsui;
 using Mapsui.Manipulations;
 using Mapsui.UI.Avalonia;
+using TheEye.Core.Maps;
 using TheEye.Core.Settings;
 using TheEye.Desktop.Dialogs;
 using TheEye.Presentation.Services;
@@ -25,9 +26,12 @@ namespace TheEye.Desktop;
 /// </summary>
 public partial class MainWindow : Window
 {
+    private readonly MapWheelZoom _mapWheelZoom = new();
+
     public MainWindow()
     {
         InitializeComponent();
+        MapHost.AddHandler(PointerWheelChangedEvent, OnMapWheel, RoutingStrategies.Tunnel);
     }
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
@@ -188,10 +192,9 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// The aircraft pins and the map overlays sit above the Mapsui control, so a
-    /// wheel turned over them never reaches it. Avalonia has no tunnelling wheel
-    /// event, so this handler listens on the host instead: the map handles its
-    /// own wheel first and marks it handled, which leaves only the wheels that
-    /// started on an overlay for the forward below.
+    /// wheel turned over them never reaches it. Handle the tunnelling event on
+    /// the host so the map and overlays share one accumulator and Mapsui does
+    /// not also process the same wheel event.
     /// </summary>
     private void OnMapWheel(object? sender, PointerWheelEventArgs e)
     {
@@ -202,8 +205,9 @@ public partial class MainWindow : Window
 
         var position = e.GetPosition(MapView);
         e.Handled = true;
-        map.Navigator.MouseWheelZoom(
-            (int)Math.Round(e.Delta.Y * 120),
+        _mapWheelZoom.Zoom(
+            map.Navigator,
+            e.Delta.Y,
             new ScreenPosition(position.X, position.Y));
     }
 }

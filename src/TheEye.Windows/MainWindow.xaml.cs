@@ -3,6 +3,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using Mapsui;
 using Mapsui.Manipulations;
+using TheEye.Core.Maps;
 using TheEye.Presentation.Services;
 using TheEye.Windows.Services;
 using TheEye.Presentation.ViewModels;
@@ -11,6 +12,8 @@ namespace TheEye.Windows;
 
 public partial class MainWindow : Window
 {
+    private readonly MapWheelZoom _mapWheelZoom = new();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -133,7 +136,7 @@ public partial class MainWindow : Window
 
         var position = e.GetPosition(MapControl);
         e.Handled = true;
-        map.Navigator.MouseWheelZoom(e.Delta, new ScreenPosition(position.X, position.Y));
+        _mapWheelZoom.Zoom(map.Navigator, e.Delta / 120.0, new ScreenPosition(position.X, position.Y));
     }
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;

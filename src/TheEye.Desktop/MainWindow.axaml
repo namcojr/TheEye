@@ -752,8 +752,7 @@
 
 
                     <!-- Offline world map with the aircraft pins layered on top -->
-                    <Grid Grid.Column="1" Background="{DynamicResource MapWaterBrush}" ClipToBounds="True"
-                          PointerWheelChanged="OnMapWheel">
+                    <Grid x:Name="MapHost" Grid.Column="1" Background="{DynamicResource MapWaterBrush}" ClipToBounds="True">
                         <mapsui:MapControl x:Name="MapView" Map="{Binding Map.Map}"
                                            MapTapped="OnMapTapped" />
 

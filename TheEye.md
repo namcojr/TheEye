@@ -87,9 +87,18 @@ THINGS TO ADD / CORRECTIONS
 ===========================
 
 - New glyphs for aircraft types. Heavy, quad engine, super, heli, prop, t-prop
-- The zoom is a bit too aggressive, the steps are too big when we scroll the wheel. Each "step" should be
-one zoom level up or down
-- Add more detail to the maps: City delimiters, roads, detailed airport ground structure. Do we need Open StreetMap for this?
+- To add more detail to the maps: City delimiters, roads, detailed airport ground structures, do we need Open StreetMap or similar for this?
+
+
+## MAP WHEEL ZOOM (implemented)
+==============================
+
+Each full wheel notch moves one zoom level up or down on Windows and Linux with
+a short, eased 200 ms transition. Rapid notches accumulate toward the next target
+level rather than restarting from the partially zoomed view.
+Partial/high-resolution wheel events accumulate into full notches. Scrolling
+over aircraft or map overlays uses the same behaviour as scrolling over the map,
+and the location under the pointer stays anchored while zooming.
 
 
 ## IVAO SIGN-IN (implemented)

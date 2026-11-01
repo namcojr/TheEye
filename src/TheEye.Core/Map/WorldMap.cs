@@ -51,6 +51,8 @@ public static class WorldMap
         var map = new Map { CRS = "EPSG:3857" };
         map.Widgets.Clear();
         map.Navigator.RotationLock = true;
+        map.Navigator.MouseWheelAnimation.UseContinuousMouseWheelZoom = false;
+        map.Navigator.MouseWheelAnimation.Duration = 200;
         map.Navigator.OverrideResolutions = Enumerable.Range(MinZoomLevel, DeepestZoomLevel - MinZoomLevel + 1)
             .Select(level => MaxResolution / Math.Pow(2, level))
             .ToArray();
