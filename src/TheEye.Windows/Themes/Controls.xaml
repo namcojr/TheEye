@@ -689,10 +689,6 @@
                         </Viewbox>
                     </Grid>
                     <ControlTemplate.Triggers>
-                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                            <Setter TargetName="Halo" Property="Visibility" Value="Visible" />
-                            <Setter TargetName="Halo" Property="Opacity" Value="0.55" />
-                        </DataTrigger>
                         <DataTrigger Binding="{Binding IsOnGround}" Value="True">
                             <Setter TargetName="Icon" Property="Opacity" Value="0.72" />
                         </DataTrigger>

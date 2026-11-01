@@ -146,7 +146,7 @@
                 <Grid Width="{Binding MarkerSize}" Height="{Binding MarkerSize}" Background="#01000000">
                     <Ellipse Name="Halo" Width="{Binding HaloSize}" Height="{Binding HaloSize}"
                              Fill="{DynamicResource AccentBrush}" Opacity="0.28"
-                             IsVisible="{Binding IsSelected}" />
+                             IsVisible="False" />
                     <Viewbox Name="Icon"
                            Width="{Binding DisplayGlyphSize}"
                            Height="{Binding DisplayGlyphSize}"
