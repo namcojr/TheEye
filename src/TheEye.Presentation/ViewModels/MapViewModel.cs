@@ -32,6 +32,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private readonly IAircraftIconCache _icons;
     private readonly IImageCache _images;
     private readonly IImagePipeline _pipeline;
+    private readonly TimeProvider _clock;
+    private GeoCoordinate? _hoverRoutePosition;
     private readonly Dictionary<long, PilotItem> _pilotsById = [];
     private readonly Dictionary<long, AtcItem> _atcById = [];
     private IReadOnlySet<long> _supervisorUserIds = new HashSet<long>();
@@ -76,11 +78,12 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
     }
 
-    public MapViewModel(IImagePipeline images)
+    public MapViewModel(IImagePipeline images, TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(images);
 
         _pipeline = images;
+        _clock = timeProvider ?? TimeProvider.System;
         _icons = images.AircraftIcons;
         _images = images.SessionImages;
         Pilots = [];
@@ -530,7 +533,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     /// </summary>
     public void CenterOnPilot(PilotItem pilot)
     {
-        if (Map is not { } map || pilot.Pilot.LastTrack?.Position is not { } position)
+        if (Map is not { } map || pilot.MapPosition is not { } position)
         {
             return;
         }
@@ -642,7 +645,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             }
             else
             {
-                var item = new PilotItem(pilot, _icons, _images) { GlyphSize = AircraftGlyphSize };
+                var item = new PilotItem(pilot, _icons, _images, _clock) { GlyphSize = AircraftGlyphSize };
                 _pilotsById.Add(pilot.Id, item);
                 Pilots.Add(item);
             }
@@ -699,6 +702,17 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
     }
 
+    public void AdvanceAircraft()
+    {
+        if (_disposed || !_showPilots) return;
+        UpdatePilotPositions();
+        if (_hoveredPilot is { } pilot && pilot.MapPosition != _hoverRoutePosition)
+        {
+            RebuildHoverRouteLayer();
+            Map?.Refresh();
+        }
+    }
+
     private void UpdatePilotPositions()
     {
         if (Map is not { } map)
@@ -716,7 +730,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
         foreach (var item in Pilots)
         {
-            if (item.Pilot.LastTrack?.Position is not { } position)
+            if (item.MapPosition is not { } position)
             {
                 item.SetScreenPosition(0, 0, false);
                 continue;
@@ -884,9 +898,12 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             Math.Max(topLeft.Longitude, bottomRight.Longitude));
     }
 
-    private void RebuildHoverRouteLayer() =>
+    private void RebuildHoverRouteLayer()
+    {
+        _hoverRoutePosition = _hoveredPilot?.MapPosition;
         ReplaceLayer(ref _hoverRouteLayer,
-            IvaoMapLayers.CreateHoverRoute(_hoveredPilot?.Pilot, _palette ?? DefaultPalette));
+            IvaoMapLayers.CreateHoverRoute(_hoveredPilot?.Pilot, _palette ?? DefaultPalette, _hoverRoutePosition));
+    }
 
     /// <summary>
     /// Paints the trail of the selected aircraft, or an empty layer when nothing

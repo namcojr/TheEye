@@ -134,6 +134,24 @@ unchanged. Heading updates reuse the same geometry;
 type changes and loaded flight plans refresh the category.
 
 
+## AIRCRAFT MOVEMENT BETWEEN UPDATES (implemented)
+=================================================
+
+Both native shells update aircraft marker positions approximately 30 times per
+second using the latest API ground speed (knots) and heading. Movement follows a
+great circle, including at high latitudes and across the date line. This is a
+display estimate, not simulator telemetry: turns, acceleration and wind-driven
+track differences cannot be known until the next update.
+
+Prediction stops at 60 seconds from the track timestamp (or receipt when no
+timestamp is supplied). Cached/identical tracks do not restart that limit, and
+older timestamped tracks cannot roll back the estimate. Missing heading or
+missing/non-positive speed leaves the reported position stationary; moving
+ground aircraft are predicted too. New positions are corrected smoothly over
+one second. Map clicks, centring and hover routes follow the estimated marker.
+Reported coordinates, speed, altitude and recorded flight trails remain API
+data. Animation pauses while minimized and timers stop when the window closes.
+
 ## MAP WHEEL ZOOM (implemented)
 ==============================
 

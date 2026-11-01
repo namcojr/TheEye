@@ -315,10 +315,10 @@ public static class IvaoMapLayers
         };
     }
 
-    public static MemoryLayer CreateHoverRoute(IvaoPilot? pilot, MapPalette palette)
+    public static MemoryLayer CreateHoverRoute(IvaoPilot? pilot, MapPalette palette, GeoCoordinate? displayPosition = null)
     {
         var features = new List<IFeature>();
-        if (pilot?.LastTrack?.Position is { } position)
+        if (pilot is not null && (displayPosition ?? pilot.LastTrack?.Position) is { } position)
         {
             var color = WorldMap.Parse(palette.Accent);
             if (pilot.FlightPlan?.Departure?.Position is { } departure)

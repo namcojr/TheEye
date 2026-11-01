@@ -15,6 +15,7 @@ public sealed class PilotItem : ObservableObject
 
     private readonly IAircraftIconCache _icons;
     private readonly IImageCache _images;
+    private readonly AircraftMotion _motion;
     private IvaoPilot _pilot;
     private object? _icon;
     private AircraftGlyph? _iconGlyph;
@@ -56,16 +57,20 @@ public sealed class PilotItem : ObservableObject
 
     public int HaloSize => MarkerSize - 1;
 
-    public PilotItem(IvaoPilot pilot, IAircraftIconCache icons, IImageCache images)
+    public PilotItem(IvaoPilot pilot, IAircraftIconCache icons, IImageCache images, TimeProvider? timeProvider = null)
     {
         _pilot = pilot;
         _icons = icons;
         _images = images;
+        _motion = new AircraftMotion(timeProvider);
+        _motion.Update(pilot.LastTrack);
         Refresh();
         LoadImages(_pilot.User);
     }
 
     public IvaoPilot Pilot => _pilot;
+
+    public GeoCoordinate? MapPosition => _motion.Position;
 
     public long Id => _pilot.Id;
 
@@ -470,6 +475,7 @@ public sealed class PilotItem : ObservableObject
     public void Update(IvaoPilot pilot)
     {
         var userChanged = _pilot.User?.Id != pilot.User?.Id;
+        _motion.Update(pilot.LastTrack);
         _pilot = pilot;
         Refresh();
         if (userChanged)

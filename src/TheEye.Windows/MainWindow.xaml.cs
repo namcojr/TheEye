@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Mapsui;
 using Mapsui.Manipulations;
 using TheEye.Core.Maps;
@@ -13,6 +14,7 @@ namespace TheEye.Windows;
 public partial class MainWindow : Window
 {
     private readonly MapWheelZoom _mapWheelZoom = new();
+    private readonly DispatcherTimer _aircraftTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
 
     public MainWindow()
     {
@@ -20,6 +22,8 @@ public partial class MainWindow : Window
         InitializeComponent();
         StateChanged += (_, _) => UpdateMaximizeButton();
         ThemeService.ThemeChanged += OnThemeChanged;
+        _aircraftTimer.Tick += OnAircraftTick;
+        Loaded += (_, _) => _aircraftTimer.Start();
     }
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
@@ -33,8 +37,15 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _aircraftTimer.Stop();
+        _aircraftTimer.Tick -= OnAircraftTick;
         ThemeService.ThemeChanged -= OnThemeChanged;
         base.OnClosed(e);
+    }
+
+    private void OnAircraftTick(object? sender, EventArgs e)
+    {
+        if (WindowState != WindowState.Minimized) ViewModel?.Map.AdvanceAircraft();
     }
 
     private void OnThemeChanged(object? sender, EventArgs e)

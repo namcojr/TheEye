@@ -119,10 +119,13 @@ public sealed class HoverRouteTests
     [Fact]
     public void Hover_FollowsTrafficAndThemeChangesAndClearsWhenPilotDisconnects()
     {
-        using var model = CreateModel();
+        var clock = new Clock();
+        using var model = CreateModel(clock);
         model.SetHoveredPilot(model.Pilots[0]);
         var initial = Hover(model);
         model.UpdateTraffic(Snapshot([Pilot(1, longitude: 5)]));
+        clock.Advance();
+        model.AdvanceAircraft();
         Assert.NotSame(initial, Hover(model));
         var updated = Hover(model).Features.First().Extent!;
         var position = WorldMap.Project(new GeoCoordinate(52.5, 5));
@@ -141,9 +144,9 @@ public sealed class HoverRouteTests
         Assert.Empty(Hover(model).Features);
     }
 
-    private static MapViewModel CreateModel()
+    private static MapViewModel CreateModel(TimeProvider? clock = null)
     {
-        var model = new MapViewModel(new Images());
+        var model = new MapViewModel(new Images(), clock);
         model.Initialize(Palette, new GeoCoordinate(50, 0), 10000);
         model.UpdateTraffic(Snapshot([Pilot(1), Pilot(2)]));
         return model;
@@ -178,5 +181,13 @@ public sealed class HoverRouteTests
         public Task<object?> GetAsync(string? url, CancellationToken cancellationToken = default) =>
             Task.FromResult<object?>(null);
         public void Dispose() { }
+    }
+
+    private sealed class Clock : TimeProvider
+    {
+        private long _ticks;
+        public override long GetTimestamp() => _ticks;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public void Advance() => _ticks += TimeSpan.TicksPerSecond;
     }
 }

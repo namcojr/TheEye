@@ -5,6 +5,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mapsui;
 using Mapsui.Manipulations;
@@ -27,12 +28,25 @@ namespace TheEye.Desktop;
 public partial class MainWindow : Window
 {
     private readonly MapWheelZoom _mapWheelZoom = new();
+    private readonly DispatcherTimer _aircraftTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
 
     public MainWindow()
     {
         TheEye.Rendering.AtcGlyphRenderer.Register();
         InitializeComponent();
         MapHost.AddHandler(PointerWheelChangedEvent, OnMapWheel, RoutingStrategies.Tunnel);
+        _aircraftTimer.Tick += OnAircraftTick;
+        Opened += (_, _) => _aircraftTimer.Start();
+        Closed += (_, _) =>
+        {
+            _aircraftTimer.Stop();
+            _aircraftTimer.Tick -= OnAircraftTick;
+        };
+    }
+
+    private void OnAircraftTick(object? sender, EventArgs e)
+    {
+        if (WindowState != WindowState.Minimized) ViewModel?.Map.AdvanceAircraft();
     }
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
