@@ -2,6 +2,7 @@ using TheEye.Core.Maps;
 using TheEye.Core.Models;
 using TheEye.Core.Reference;
 using TheEye.Core.Services;
+using TheEye.Core.Settings;
 using TheEye.Presentation.Services;
 using TheEye.Presentation.Theming;
 
@@ -33,6 +34,26 @@ public sealed class PilotItem : ObservableObject
     private bool _isSelected;
     private bool _isFriend;
     private bool _isSupervisor;
+    private int _glyphSize = TheEyeSettings.DefaultAircraftGlyphSize;
+
+    public int GlyphSize
+    {
+        get => _glyphSize;
+        set
+        {
+            if (!SetProperty(ref _glyphSize, Math.Clamp(value,
+                TheEyeSettings.MinAircraftGlyphSize, TheEyeSettings.MaxAircraftGlyphSize))) return;
+            OnPropertyChanged(nameof(DisplayGlyphSize));
+            OnPropertyChanged(nameof(MarkerSize));
+            OnPropertyChanged(nameof(HaloSize));
+        }
+    }
+
+    public int DisplayGlyphSize => GlyphSize + (IsSelected ? 3 : 0);
+
+    public int MarkerSize => Math.Max(26, GlyphSize + 5);
+
+    public int HaloSize => MarkerSize - 1;
 
     public PilotItem(IvaoPilot pilot, IAircraftIconCache icons, IImageCache images)
     {
@@ -411,7 +432,10 @@ public sealed class PilotItem : ObservableObject
     public bool IsSelected
     {
         get => _isSelected;
-        set => SetProperty(ref _isSelected, value);
+        set
+        {
+            if (SetProperty(ref _isSelected, value)) OnPropertyChanged(nameof(DisplayGlyphSize));
+        }
     }
 
     public string Tooltip =>

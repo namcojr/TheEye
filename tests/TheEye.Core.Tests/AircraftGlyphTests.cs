@@ -130,6 +130,50 @@ public sealed class AircraftGlyphTests
     }
 
     [Fact]
+    public void HeavyTrijetHasLargerMoreSweptWingsThanHeavyTwin()
+    {
+        using var twin = SKPath.ParseSvgPathData(AircraftIconCatalog.PathData(AircraftGlyph.HeavyTwin));
+        using var trijet = SKPath.ParseSvgPathData(AircraftIconCatalog.PathData(AircraftGlyph.HeavyTrijet));
+        Assert.True(trijet.TightBounds.Width >= twin.TightBounds.Width + 4);
+        Assert.True(twin.Contains(12, 37));
+        Assert.False(trijet.Contains(12, 37));
+        Assert.False(twin.Contains(6, 45));
+        Assert.True(trijet.Contains(6, 45));
+        Assert.True(trijet.Contains(58, 45));
+        var twinWingArea = 0;
+        var trijetWingArea = 0;
+        for (var x = 0; x < 28; x++)
+        {
+            for (var y = 24; y < 49; y++)
+            {
+                if (twin.Contains(x + 0.5f, y + 0.5f)) twinWingArea++;
+                if (trijet.Contains(x + 0.5f, y + 0.5f)) trijetWingArea++;
+            }
+        }
+        Assert.True(trijetWingArea >= twinWingArea * 1.3);
+    }
+
+    [Fact]
+    public void HeavyTrijetUnderwingEnginesProjectAheadOfWingLeadingEdges()
+    {
+        using var stream = AircraftIconCatalog.Open(AircraftGlyph.HeavyTrijet);
+        var svg = System.Xml.Linq.XDocument.Load(stream);
+        System.Xml.Linq.XNamespace ns = "http://www.w3.org/2000/svg";
+        var paths = svg.Root!.Elements(ns + "path").ToArray();
+        using var airframe = SKPath.ParseSvgPathData((string)paths[0].Attribute("d")!);
+        using var engines = SKPath.ParseSvgPathData((string)paths[1].Attribute("d")!);
+        foreach (var x in new[] { 20f, 44f })
+        {
+            Assert.False(airframe.Contains(x, 29));
+            Assert.True(engines.Contains(x, 29));
+            Assert.False(airframe.Contains(x, 31));
+            Assert.True(engines.Contains(x, 31));
+            Assert.True(airframe.Contains(x, 36));
+            Assert.True(engines.Contains(x, 36));
+        }
+    }
+
+    [Fact]
     public void HeavyTrijetHasDistinctTailEngineBulge()
     {
         using var twin = SKPath.ParseSvgPathData(AircraftIconCatalog.PathData(AircraftGlyph.HeavyTwin));

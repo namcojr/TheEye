@@ -39,7 +39,7 @@ public static class WorldMap
     /// Deepest zoom level. Level 17 puts one pixel at roughly 1.2 m, which is
     /// close enough to tell parked aircraft on an apron apart.
     /// </summary>
-    public const int DeepestZoomLevel = 17;
+    public const int DeepestZoomLevel = 15;
 
     /// <summary>Resolution of <see cref="DeepestZoomLevel"/>.</summary>
     public const double MinResolution = MaxResolution / (1 << DeepestZoomLevel);

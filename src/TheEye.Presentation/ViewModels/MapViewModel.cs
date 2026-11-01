@@ -7,6 +7,7 @@ using TheEye.Core.Maps;
 using TheEye.Core.Models;
 using TheEye.Core.Reference;
 using TheEye.Core.Services;
+using TheEye.Core.Settings;
 using TheEye.Presentation.Services;
 
 namespace TheEye.Presentation.ViewModels;
@@ -58,6 +59,19 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private double _stationZoom = 1;
     private string _airportsKey = string.Empty;
     private bool _disposed;
+    private int _aircraftGlyphSize = TheEyeSettings.DefaultAircraftGlyphSize;
+
+    public int AircraftGlyphSize
+    {
+        get => _aircraftGlyphSize;
+        set
+        {
+            var size = Math.Clamp(value, TheEyeSettings.MinAircraftGlyphSize, TheEyeSettings.MaxAircraftGlyphSize);
+            if (!SetProperty(ref _aircraftGlyphSize, size)) return;
+            foreach (var pilot in Pilots) pilot.GlyphSize = size;
+            UpdatePilotPositions();
+        }
+    }
 
     public MapViewModel(IImagePipeline images)
     {
@@ -434,8 +448,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
                 continue;
             }
 
-            var dx = pilot.X + 13 - position.X;
-            var dy = pilot.Y + 13 - position.Y;
+            var dx = pilot.X + pilot.MarkerSize / 2d - position.X;
+            var dy = pilot.Y + pilot.MarkerSize / 2d - position.Y;
             var distanceSquared = dx * dx + dy * dy;
             if (distanceSquared <= bestDistanceSquared)
             {
@@ -581,7 +595,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             }
             else
             {
-                var item = new PilotItem(pilot, _icons, _images);
+                var item = new PilotItem(pilot, _icons, _images) { GlyphSize = AircraftGlyphSize };
                 _pilotsById.Add(pilot.Id, item);
                 Pilots.Add(item);
             }
@@ -662,8 +676,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             }
 
             var screen = viewport.WorldToScreen(WorldMap.Project(position));
-            var visible = screen.X >= -26 && screen.Y >= -26 && screen.X <= width + 26 && screen.Y <= height + 26;
-            item.SetScreenPosition(screen.X - 13, screen.Y - 13, visible);
+            var size = item.MarkerSize;
+            var visible = screen.X >= -size && screen.Y >= -size && screen.X <= width + size && screen.Y <= height + size;
+            item.SetScreenPosition(screen.X - size / 2d, screen.Y - size / 2d, visible);
         }
     }
 

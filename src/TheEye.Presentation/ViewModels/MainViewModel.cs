@@ -469,6 +469,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Map.ShowPilots = _settings.ShowPilots;
         Map.ShowAtc = _settings.ShowAtc;
         Map.CenterOnMapClick = _settings.CenterOnMapClick;
+        Map.AircraftGlyphSize = _settings.AircraftGlyphSize;
     }
 
     public async Task StartAsync()
@@ -541,6 +542,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Map.ShowPilots = _settings.ShowPilots;
         Map.ShowAtc = _settings.ShowAtc;
         Map.CenterOnMapClick = _settings.CenterOnMapClick;
+        Map.AircraftGlyphSize = _settings.AircraftGlyphSize;
         OnPropertyChanged(nameof(ShowPilots));
         OnPropertyChanged(nameof(ShowAtc));
         OnPropertyChanged(nameof(HasApiKey));

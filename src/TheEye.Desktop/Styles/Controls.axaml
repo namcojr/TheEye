@@ -130,8 +130,8 @@
 
     <!-- Rotate the vector artwork only; keep the halo and hit area stationary. -->
     <ControlTheme x:Key="PilotMarkerButton" TargetType="Button">
-        <Setter Property="Width" Value="26" />
-        <Setter Property="Height" Value="26" />
+        <Setter Property="Width" Value="{Binding MarkerSize}" />
+        <Setter Property="Height" Value="{Binding MarkerSize}" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
@@ -139,15 +139,15 @@
         <Setter Property="Focusable" Value="False" />
         <Setter Property="Template">
             <ControlTemplate>
-                <!-- The near-transparent fill keeps the whole 26x26 pin clickable
+                <!-- The near-transparent fill keeps the whole pin clickable
                      on Avalonia, which only hit-tests what a control draws. -->
-                <Grid Width="26" Height="26" Background="#01000000">
-                    <Ellipse Name="Halo" Width="25" Height="25"
+                <Grid Width="{Binding MarkerSize}" Height="{Binding MarkerSize}" Background="#01000000">
+                    <Ellipse Name="Halo" Width="{Binding HaloSize}" Height="{Binding HaloSize}"
                              Fill="{DynamicResource AccentBrush}" Opacity="0.28"
                              IsVisible="{Binding IsSelected}" />
                     <Viewbox Name="Icon"
-                           Width="{Binding IsSelected, Converter={StaticResource BoolToDouble}, ConverterParameter='24,21'}"
-                           Height="{Binding IsSelected, Converter={StaticResource BoolToDouble}, ConverterParameter='24,21'}"
+                           Width="{Binding DisplayGlyphSize}"
+                           Height="{Binding DisplayGlyphSize}"
                            Opacity="{Binding IsOnGround, Converter={StaticResource BoolToDouble}, ConverterParameter='0.72,1'}"
                            RenderTransformOrigin="50%,50%">
                         <Viewbox.RenderTransform>

@@ -16,6 +16,7 @@ public sealed class SettingsStoreTests
         Assert.Equal(string.Empty, settings.ApiKey);
         Assert.Equal(TheEyeThemes.Dark, settings.Theme);
         Assert.Equal(30, settings.RefreshSeconds);
+        Assert.Equal(21, settings.AircraftGlyphSize);
         Assert.True(settings.ShowPilots);
         Assert.True(settings.ShowAtc);
         Assert.True(settings.CenterOnMapClick);
@@ -63,6 +64,7 @@ public sealed class SettingsStoreTests
             ApiKey = "  test-key  ",
             Theme = "forest",
             RefreshSeconds = 120,
+            AircraftGlyphSize = 30,
             ShowPilots = false,
             ShowAtc = false,
             CenterOnMapClick = false,
@@ -77,6 +79,7 @@ public sealed class SettingsStoreTests
         Assert.Equal("test-key", loaded.ApiKey);
         Assert.Equal(TheEyeThemes.Forest, loaded.Theme);
         Assert.Equal(120, loaded.RefreshSeconds);
+        Assert.Equal(30, loaded.AircraftGlyphSize);
         Assert.False(loaded.ShowPilots);
         Assert.False(loaded.ShowAtc);
         Assert.False(loaded.CenterOnMapClick);
@@ -112,6 +115,7 @@ public sealed class SettingsStoreTests
         var settings = store.Load();
 
         Assert.True(settings.CenterOnMapClick);
+        Assert.Equal(21, settings.AircraftGlyphSize);
     }
 
     [Fact]

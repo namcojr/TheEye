@@ -217,9 +217,9 @@
 
                 <TextBlock Text="ROUTE" Style="{StaticResource DetailLabel}" />
                 <TextBlock Text="{Binding RouteText}" Style="{StaticResource DetailValueMono}" Margin="0,3,0,0"
-                           TextWrapping="Wrap" MaxHeight="88" />
+                           TextWrapping="Wrap" MaxHeight="128" />
 
-                <Grid Margin="0,12,0,0">
+                <!-- <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />
@@ -232,7 +232,7 @@
                         <TextBlock Text="LAST SEEN" Style="{StaticResource DetailLabel}" />
                         <TextBlock Text="{Binding LastSeenText}" Style="{StaticResource DetailValueMono}" />
                     </StackPanel>
-                </Grid>
+                </Grid> -->
 
                 <!-- Filed plan: the cruise figures, the times and the equipment and
                      surveillance codes the tracker summary leaves out, from the

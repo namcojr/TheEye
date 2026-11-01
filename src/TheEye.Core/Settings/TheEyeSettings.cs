@@ -36,6 +36,12 @@ public static class TheEyeThemes
 /// </summary>
 public sealed class TheEyeSettings
 {
+    public const int MinAircraftGlyphSize = 20;
+    public const int MaxAircraftGlyphSize = 30;
+    public const int DefaultAircraftGlyphSize = 21;
+
+    public int AircraftGlyphSize { get; set; } = DefaultAircraftGlyphSize;
+
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>
@@ -159,6 +165,7 @@ public sealed class TheEyeSettings
         OAuthAccount = OAuthAccount,
         Theme = Theme,
         RefreshSeconds = RefreshSeconds,
+        AircraftGlyphSize = AircraftGlyphSize,
         ShowPilots = ShowPilots,
         ShowAtc = ShowAtc,
         CenterOnMapClick = CenterOnMapClick,
@@ -181,6 +188,7 @@ public sealed class TheEyeSettings
         OAuthAccount = other.OAuthAccount;
         Theme = other.Theme;
         RefreshSeconds = other.RefreshSeconds;
+        AircraftGlyphSize = other.AircraftGlyphSize;
         ShowPilots = other.ShowPilots;
         ShowAtc = other.ShowAtc;
         CenterOnMapClick = other.CenterOnMapClick;
@@ -206,6 +214,7 @@ public sealed class TheEyeSettings
         OAuthExpiresAt = OAuthExpiresAt?.Trim() ?? string.Empty;
         OAuthAccount = OAuthAccount?.Trim() ?? string.Empty;
         Theme = TheEyeThemes.Normalize(Theme);
+        AircraftGlyphSize = Math.Clamp(AircraftGlyphSize, MinAircraftGlyphSize, MaxAircraftGlyphSize);
 
         if (RefreshSeconds is < 10 or > 600)
         {

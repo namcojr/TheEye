@@ -66,6 +66,21 @@ public sealed class SettingsViewModel : ObservableObject
 
     public TheEyeSettings Draft { get; }
 
+    public int AircraftGlyphSize
+    {
+        get => Draft.AircraftGlyphSize;
+        set
+        {
+            var size = Math.Clamp(value, TheEyeSettings.MinAircraftGlyphSize, TheEyeSettings.MaxAircraftGlyphSize);
+            if (Draft.AircraftGlyphSize == size) return;
+            Draft.AircraftGlyphSize = size;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(AircraftGlyphSizeLabel));
+        }
+    }
+
+    public string AircraftGlyphSizeLabel => $"{AircraftGlyphSize} px";
+
     public IReadOnlyList<ThemeOption> ThemeOptions { get; }
 
     public IReadOnlyList<IntervalOption> IntervalOptions { get; }

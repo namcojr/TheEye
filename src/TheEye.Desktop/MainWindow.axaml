@@ -173,9 +173,9 @@
 
                 <TextBlock Text="ROUTE" Classes="detail-label" />
                 <TextBlock Text="{Binding RouteText}" Classes="mono value" Margin="0,3,0,0"
-                           TextWrapping="Wrap" MaxHeight="88" />
+                           TextWrapping="Wrap" MaxHeight="128" />
 
-                <Grid Margin="0,12,0,0" ColumnDefinitions="*,*">
+                <!-- <Grid Margin="0,12,0,0" ColumnDefinitions="*,*">
                     <StackPanel>
                         <TextBlock Text="POSITION" Classes="detail-label" />
                         <TextBlock Text="{Binding PositionText}" Classes="mono value" />
@@ -184,7 +184,7 @@
                         <TextBlock Text="LAST SEEN" Classes="detail-label" />
                         <TextBlock Text="{Binding LastSeenText}" Classes="mono value" />
                     </StackPanel>
-                </Grid>
+                </Grid> -->
 
                 <!-- The filed plan: only there once the detail feed described it -->
                 <Border Classes="divider" Margin="0,3,0,12"

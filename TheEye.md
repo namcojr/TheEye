@@ -106,7 +106,10 @@ heavy wake; ATR72 uses twin turboprop. Business-jet classification describes the
 airframe, not its ownership.
 
 Heavy trijets (MD11, L101 and DC10/D10T/D10F) use two underwing engines and a
-visible tail-engine bulge. B752/B753 use a longer, thinner medium-twin silhouette.
+visible tail-engine bulge and larger, more rearward-swept wings for a distinct
+MD-11-inspired outline. Its underwing nacelles protrude ahead of the leading
+edges to retain an airliner appearance. B752/B753 use a longer, thinner
+medium-twin silhouette.
 
 The lookup is intentionally not a complete ICAO database. Unknown, unfiled and
 unmapped types (including rear-engine trijets such as B722) use the Medium
@@ -119,8 +122,12 @@ once per category. No SVG package or rasterization is needed. Bundled SVGs must
 use only untransformed filled paths and an optional title; unsupported geometry
 or missing resources raise an explicit error. Marker templates preserve the 64x64
 canvas in a Viewbox, rotate only the artwork clockwise by normalized heading,
-and use the theme's TextBrush. Selection halos, 26px click areas, 21/24px artwork
-and ground opacity remain unchanged. Heading updates reuse the same geometry;
+and use the theme's TextBrush. OPTIONS > Map layers > Aircraft glyph size sets
+the base size from 20 to 30 pixels in one-pixel steps (default 21). Saving applies
+it immediately and persists `aircraftGlyphSize`; Cancel leaves the map unchanged.
+Selected aircraft are 3 pixels larger. Halos and click areas grow with the glyph,
+while marker centres stay anchored to their coordinates. Ground opacity remains
+unchanged. Heading updates reuse the same geometry;
 type changes and loaded flight plans refresh the category.
 
 

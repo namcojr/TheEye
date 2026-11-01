@@ -101,6 +101,14 @@
                     <Border Style="{StaticResource Divider}" Margin="0,10,0,0" />
 
                     <TextBlock Text="MAP LAYERS" Style="{StaticResource SectionTitle}" Margin="0,18,0,0" />
+                    <TextBlock Text="AIRCRAFT GLYPH SIZE" Style="{StaticResource DetailLabel}" Margin="0,12,0,5" />
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding AircraftGlyphSizeLabel}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                        <Slider Minimum="20" Maximum="30" TickFrequency="1" IsSnapToTickEnabled="True"
+                                Value="{Binding AircraftGlyphSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                AutomationProperties.Name="Aircraft glyph size" />
+                    </DockPanel>
+                    <TextBlock Style="{StaticResource MutedText}" Text="Small: 20 px. Large: 30 px. Selected aircraft are 3 px larger." Margin="0,5,0,9" />
                     <StackPanel Margin="0,9,0,0">
                         <CheckBox Content="Show pilots" IsChecked="{Binding Draft.ShowPilots}" Margin="0,0,0,9" />
                         <CheckBox Content="Show ATC sectors, labels and stations" IsChecked="{Binding Draft.ShowAtc}" Margin="0,0,0,9" />

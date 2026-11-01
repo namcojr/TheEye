@@ -86,13 +86,13 @@ public static class AtcMarkerStyles
     public const double MinStarDiameter = 12;
 
     /// <summary>Largest allowed screen diameter for either airport-position star.</summary>
-    public const double MaxStarDiameter = 550;
+    public const double MaxStarDiameter = 850;
 
     /// <summary>Smallest allowed screen diameter for an airport-position circle.</summary>
     public const double MinCircleDiameter = 16;
 
     /// <summary>Largest allowed screen diameter for an airport-position circle.</summary>
-    public const double MaxCircleDiameter = 580;
+    public const double MaxCircleDiameter = 880;
 
     /// <summary>Zoom level at which the facility diameters above are drawn at their configured size.</summary>
     public const int ReferenceZoomLevel = 6;
