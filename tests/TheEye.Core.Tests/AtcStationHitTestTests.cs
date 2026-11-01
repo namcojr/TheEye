@@ -151,6 +151,13 @@ public sealed class AtcStationHitTestTests
         var screen = model.Map.Navigator.Viewport.WorldToScreen(placement.Point);
         var position = new ScreenPosition(screen.X, screen.Y);
 
+        model.SetHoveredAtc(position);
+        Assert.Same(ground, model.HoveredAtc?.Atc);
+        var sectorScreen = model.Map.Navigator.Viewport.WorldToScreen(WorldMap.Project(new GeoCoordinate(53, 6)));
+        model.SetHoveredAtc(new ScreenPosition(sectorScreen.X, sectorScreen.Y));
+        Assert.Same(tower, model.HoveredAtc?.Atc);
+        Assert.Null(model.SelectedAtc);
+
         model.SelectAt(placement.Point, position);
         Assert.Same(ground, model.SelectedAtc?.Atc);
         model.SelectAt(placement.Point, position);
@@ -161,6 +168,68 @@ public sealed class AtcStationHitTestTests
         model.ShowAtc = false;
         model.SelectAt(placement.Point, position);
         Assert.Null(model.SelectedAtc);
+    }
+
+    [Fact]
+    public void Hover_ShowsPositionAndFrequencyWithoutCyclingOrSelecting()
+    {
+        var ground = CreateAtc("LPPT_GND", "GND", id: 1);
+        var tower = CreateAtc("LPPT_TWR", "TWR", id: 2);
+        ground.AtcPosition!.Airport = new IvaoAirport { Latitude = 38.7742, Longitude = -9.1342 };
+        tower.AtcPosition!.Airport = ground.AtcPosition.Airport;
+        tower.AtcSession!.Frequency = 118.105;
+        using var model = new MapViewModel(new Images()) { CenterOnMapClick = false };
+        model.Initialize(new MapPalette("#000000", "#111111", "#222222", "#FFFFFF", "#FFFFFF", true),
+            new GeoCoordinate(38.7742, -9.1342), 1000);
+        model.Map!.Navigator.SetSize(800, 600);
+        model.UpdateTraffic(new TrackerSnapshot([], [ground, tower], [], new IvaoConnectionStats(),
+            DateTimeOffset.UtcNow, []));
+        var point = WorldMap.Project(tower.Position!.Value);
+        var screen = model.Map.Navigator.Viewport.WorldToScreen(point);
+        var zoom = AtcMarkerStyles.ZoomScale(model.Map.Navigator.Viewport.Resolution);
+        var groundRadius = AtcMarkerStyles.HitRadius(AtcMarkerStyles.For(ground.Facility, ground.Callsign, zoom));
+        var towerRadius = AtcMarkerStyles.HitRadius(AtcMarkerStyles.For(tower.Facility, tower.Callsign, zoom));
+        var position = new ScreenPosition(screen.X + (groundRadius + towerRadius) / 2, screen.Y);
+
+        model.SetHoveredAtc(position);
+        Assert.True(model.HasHoveredAtc);
+        Assert.Equal("LPPT_TWR", model.HoveredAtc!.Callsign);
+        Assert.Equal("118.105", model.HoveredAtc.Frequency);
+        Assert.Null(model.SelectedAtc);
+        model.SelectAtc(model.HoveredAtc, center: false);
+        model.SetHoveredAtc(position);
+        Assert.Same(tower, model.HoveredAtc!.Atc);
+        Assert.InRange(model.AtcHoverX, 0, 640);
+        Assert.InRange(model.AtcHoverY, 0, 544);
+        model.SetHoveredAtc(null);
+        Assert.False(model.HasHoveredAtc);
+        model.SetHoveredAtc(position);
+        model.ShowAtc = false;
+        Assert.False(model.HasHoveredAtc);
+        model.SetHoveredAtc(position);
+        Assert.False(model.HasHoveredAtc);
+
+        model.ShowAtc = true;
+        model.SetHoveredAtc(position);
+        model.Map.Navigator.SetSize(900, 600);
+        Assert.False(model.HasHoveredAtc);
+        var pilot = new IvaoPilot
+        {
+            Id = 3,
+            LastTrack = new IvaoLastTrack { Latitude = 38.7742, Longitude = -9.1342 }
+        };
+        model.UpdateTraffic(new TrackerSnapshot([pilot], [tower], [], new IvaoConnectionStats(),
+            DateTimeOffset.UtcNow, []));
+        screen = model.Map.Navigator.Viewport.WorldToScreen(point);
+        position = new ScreenPosition(screen.X, screen.Y);
+        model.SetHoveredAtc(position);
+        Assert.False(model.HasHoveredAtc);
+        model.ShowPilots = false;
+        model.SetHoveredAtc(position);
+        Assert.Same(tower, model.HoveredAtc!.Atc);
+        model.UpdateTraffic(new TrackerSnapshot([], [], [], new IvaoConnectionStats(),
+            DateTimeOffset.UtcNow, []));
+        Assert.False(model.HasHoveredAtc);
     }
 
     private sealed class Images : IImagePipeline, IAircraftIconCache, IImageCache

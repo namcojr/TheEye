@@ -49,6 +49,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private ILayer? _airportLayer;
     private PilotItem? _selectedPilot;
     private AtcItem? _selectedAtc;
+    private AtcItem? _hoveredAtc;
+    private double _atcHoverX;
+    private double _atcHoverY;
     private bool _showPilots = true;
     private bool _showAtc = true;
     private IReadOnlyList<IvaoAtc> _atc = [];
@@ -108,6 +111,32 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _selectedAtc, value);
     }
 
+    public AtcItem? HoveredAtc
+    {
+        get => _hoveredAtc;
+        private set
+        {
+            if (SetProperty(ref _hoveredAtc, value))
+            {
+                OnPropertyChanged(nameof(HasHoveredAtc));
+            }
+        }
+    }
+
+    public bool HasHoveredAtc => HoveredAtc is not null;
+
+    public double AtcHoverX
+    {
+        get => _atcHoverX;
+        private set => SetProperty(ref _atcHoverX, value);
+    }
+
+    public double AtcHoverY
+    {
+        get => _atcHoverY;
+        private set => SetProperty(ref _atcHoverY, value);
+    }
+
     public bool ShowPilots
     {
         get => _showPilots;
@@ -139,6 +168,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
                 SetLayerEnabled(_atcRegionsLayer, value);
                 SetLayerEnabled(_atcLabelsLayer, value);
                 SetLayerEnabled(_atcStationsLayer, value);
+                if (!value) SetHoveredAtc(null);
             }
         }
     }
@@ -249,9 +279,31 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         SetLayerEnabled(_atcStationsLayer, _showAtc);
 
         _regionIndex = AtcRegionIndex.Build(atc);
+        if (HoveredAtc is { } hovered && !_atcById.ContainsKey(hovered.Id))
+        {
+            SetHoveredAtc(null);
+        }
         UpdatePilotPositions();
         RebuildHoverRouteLayer();
         Map.Refresh();
+    }
+
+    public void SetHoveredAtc(ScreenPosition? position)
+    {
+        if (!_showAtc || position is not { } screen || Map is not { } map
+            || HitTestPilot(screen) is not null)
+        {
+            HoveredAtc = null;
+            return;
+        }
+
+        var viewport = map.Navigator.Viewport;
+        var world = viewport.ScreenToWorld(screen.X, screen.Y);
+        var station = AtcStationHitTest.Find(_stationTargets, screen.X, screen.Y,
+            regions: _regionIndex?.FindAllAt(world));
+        HoveredAtc = station is not null && _atcById.TryGetValue(station.Id, out var item) ? item : null;
+        AtcHoverX = Math.Clamp(screen.X + 14, 0, Math.Max(0, viewport.Width - 160));
+        AtcHoverY = Math.Clamp(screen.Y + 14, 0, Math.Max(0, viewport.Height - 56));
     }
 
     public void SetHoveredPilot(PilotItem? pilot)
@@ -679,6 +731,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
     private void OnViewportChanged(object? sender, ViewportChangedEventArgs e)
     {
+        SetHoveredAtc(null);
         UpdatePilotPositions();
         UpdateStationTargets();
         UpdateStationZoom();

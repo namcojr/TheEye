@@ -829,7 +829,8 @@
                 <!-- Offline world map with the WPF pilot marker overlay -->
                 <Grid Grid.Column="1" Background="{DynamicResource MapWaterBrush}" ClipToBounds="True"
                       PreviewMouseWheel="OnMapWheel">
-                    <mapsui:MapControl x:Name="MapControl" Map="{Binding Map.Map}" MapTapped="OnMapTapped" />
+                    <mapsui:MapControl x:Name="MapControl" Map="{Binding Map.Map}" MapTapped="OnMapTapped"
+                                       MouseMove="OnMapMouseMove" MouseLeave="OnMapMouseLeave" />
 
                     <ItemsControl ItemsSource="{Binding Map.Pilots}"
                                   Visibility="{Binding Map.ShowPilots, Converter={StaticResource BoolToVisibility}}"
@@ -849,13 +850,39 @@
                         </ItemsControl.ItemContainerStyle>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Button Style="{StaticResource PilotMarkerButton}"
-                                        MouseEnter="OnPilotMarkerEnter"
-                                        MouseLeave="OnPilotMarkerLeave"
-                                        Click="OnPilotMarkerClick" />
+                                <Grid Width="{Binding MarkerSize}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Button Style="{StaticResource PilotMarkerButton}"
+                                            MouseEnter="OnPilotMarkerEnter"
+                                            MouseLeave="OnPilotMarkerLeave"
+                                            Click="OnPilotMarkerClick" />
+                                    <TextBlock Grid.Row="1" Text="{Binding Callsign}" Width="120"
+                                               HorizontalAlignment="Center" TextAlignment="Center"
+                                               FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextBrush}"
+                                               IsHitTestVisible="False" />
+                                </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <Canvas IsHitTestVisible="False" Panel.ZIndex="3">
+                        <Border Canvas.Left="{Binding Map.AtcHoverX}" Canvas.Top="{Binding Map.AtcHoverY}"
+                                Visibility="{Binding Map.HasHoveredAtc, Converter={StaticResource BoolToVisibility}}"
+                                Width="160" Height="56" Padding="10,6" CornerRadius="4"
+                                Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                            <StackPanel DataContext="{Binding Map.HoveredAtc}">
+                                <TextBlock Text="{Binding Callsign}" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextBrush}" />
+                                <TextBlock Text="{Binding Frequency}" FontSize="12"
+                                           Foreground="{DynamicResource MutedTextBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </Canvas>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top"
                                 Margin="14">

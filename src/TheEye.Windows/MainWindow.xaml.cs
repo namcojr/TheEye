@@ -129,6 +129,16 @@ public partial class MainWindow : Window
         viewModel.SelectPilotFromMap(pilot);
     }
 
+    private void OnMapMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        var point = e.GetPosition(MapControl);
+        ViewModel?.Map.SetHoveredAtc(e.LeftButton == System.Windows.Input.MouseButtonState.Pressed
+            ? null : new ScreenPosition(point.X, point.Y));
+    }
+
+    private void OnMapMouseLeave(object sender, System.Windows.Input.MouseEventArgs e) =>
+        ViewModel?.Map.SetHoveredAtc(null);
+
     private void OnMapTapped(object sender, MapEventArgs e)
     {
         ViewModel?.Map.SelectAt(e.WorldPosition, e.ScreenPosition);
