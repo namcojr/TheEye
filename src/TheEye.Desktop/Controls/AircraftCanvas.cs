@@ -11,6 +11,9 @@ namespace TheEye.Desktop.Controls;
 /// </summary>
 public sealed class AircraftCanvas : Panel
 {
+    // Avalonia only re-arranges on these for a real Canvas parent, so pins would lag behind the map.
+    static AircraftCanvas() => AffectsParentArrange<AircraftCanvas>(Canvas.LeftProperty, Canvas.TopProperty);
+
     protected override Size MeasureOverride(Size availableSize)
     {
         foreach (var child in Children)
