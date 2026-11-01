@@ -29,6 +29,29 @@ public static class TheEyeThemes
         All.FirstOrDefault(t => string.Equals(t, theme, StringComparison.OrdinalIgnoreCase)) ?? Dark;
 }
 
+/// <summary>A colour the user can paint their own or a friend's aircraft with.</summary>
+public sealed record AircraftHighlightColor(string Name, string Label, string Hex);
+
+public static class AircraftHighlightColors
+{
+    public const string DefaultOwn = "Green";
+    public const string DefaultFriend = "Yellow";
+
+    public static IReadOnlyList<AircraftHighlightColor> All { get; } =
+    [
+        new("Green", "Green", "#22C55E"),
+        new("White", "White", "#FFFFFF"),
+        new("Red", "Red", "#EF4444"),
+        new("Yellow", "Yellow", "#FACC15"),
+        new("Orange", "Orange", "#F97316"),
+        new("Magenta", "Magenta", "#E040FB"),
+        new("Cyan", "Cyan", "#22D3EE")
+    ];
+
+    public static AircraftHighlightColor? Find(string? name) =>
+        All.FirstOrDefault(color => string.Equals(color.Name, name, StringComparison.OrdinalIgnoreCase));
+}
+
 /// <summary>
 /// User preferences persisted as JSON in %AppData%\TheEyeIVAO\settings.json.
 /// Keeping this in the core library means a future Linux shell can use the
@@ -95,6 +118,56 @@ public sealed class TheEyeSettings
     public double MapLongitude { get; set; } = 10;
 
     public double MapResolution { get; set; } = WorldMap.MaxZoomOutResolution;
+
+    /// <summary>Colour of the signed-in member's own aircraft, by name in <see cref="AircraftHighlightColors"/>.</summary>
+    public string OwnAircraftColor { get; set; } = AircraftHighlightColors.DefaultOwn;
+
+    /// <summary>Colour of a friend's aircraft; never the same as <see cref="OwnAircraftColor"/>.</summary>
+    public string FriendAircraftColor { get; set; } = AircraftHighlightColors.DefaultFriend;
+
+    /// <summary>
+    /// The VID of the signed-in member, read from <see cref="OAuthAccount"/>
+    /// ("123456 (Jane Doe)"); 0 when nobody is signed in or the id is unknown.
+    /// </summary>
+    public long GetOwnUserId()
+    {
+        if (!HasOAuthTokens || string.IsNullOrWhiteSpace(OAuthAccount))
+        {
+            return 0;
+        }
+
+        var account = OAuthAccount.Trim();
+        var length = 0;
+        while (length < account.Length && char.IsAsciiDigit(account[length]))
+        {
+            length++;
+        }
+
+        return length > 0 &&
+            (length == account.Length || account[length] == ' ') &&
+            long.TryParse(account.AsSpan(0, length), NumberStyles.None, CultureInfo.InvariantCulture, out var id)
+                ? id
+                : 0;
+    }
+
+    /// <summary>
+    /// The colour an aircraft of the member is painted with, or null for the
+    /// default. The user's own aircraft wins over the friend colour.
+    /// </summary>
+    public string? AircraftHighlightFor(long userId)
+    {
+        if (userId <= 0)
+        {
+            return null;
+        }
+
+        if (userId == GetOwnUserId())
+        {
+            return AircraftHighlightColors.Find(OwnAircraftColor)?.Hex;
+        }
+
+        return IsFriend(userId) ? AircraftHighlightColors.Find(FriendAircraftColor)?.Hex : null;
+    }
 
     /// <summary>
     /// The members the user follows, by IVAO id (VID). A friend is marked in the
@@ -172,6 +245,8 @@ public sealed class TheEyeSettings
         MapLatitude = MapLatitude,
         MapLongitude = MapLongitude,
         MapResolution = MapResolution,
+        OwnAircraftColor = OwnAircraftColor,
+        FriendAircraftColor = FriendAircraftColor,
         FriendIds = [.. FriendIds]
     };
 
@@ -195,6 +270,8 @@ public sealed class TheEyeSettings
         MapLatitude = other.MapLatitude;
         MapLongitude = other.MapLongitude;
         MapResolution = other.MapResolution;
+        OwnAircraftColor = other.OwnAircraftColor;
+        FriendAircraftColor = other.FriendAircraftColor;
         FriendIds = [.. other.FriendIds];
     }
 
@@ -215,6 +292,14 @@ public sealed class TheEyeSettings
         OAuthAccount = OAuthAccount?.Trim() ?? string.Empty;
         Theme = TheEyeThemes.Normalize(Theme);
         AircraftGlyphSize = Math.Clamp(AircraftGlyphSize, MinAircraftGlyphSize, MaxAircraftGlyphSize);
+
+        OwnAircraftColor = AircraftHighlightColors.Find(OwnAircraftColor)?.Name ?? AircraftHighlightColors.DefaultOwn;
+        FriendAircraftColor = AircraftHighlightColors.Find(FriendAircraftColor)?.Name ?? AircraftHighlightColors.DefaultFriend;
+        if (string.Equals(OwnAircraftColor, FriendAircraftColor, StringComparison.Ordinal))
+        {
+            FriendAircraftColor = AircraftHighlightColors.All
+                .First(color => !string.Equals(color.Name, OwnAircraftColor, StringComparison.Ordinal)).Name;
+        }
 
         if (RefreshSeconds is < 10 or > 600)
         {

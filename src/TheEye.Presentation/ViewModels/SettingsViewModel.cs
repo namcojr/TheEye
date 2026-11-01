@@ -62,6 +62,10 @@ public sealed class SettingsViewModel : ObservableObject
         var interval = IntervalOptions.FirstOrDefault(option => option.Seconds == Draft.RefreshSeconds)
             ?? IntervalOptions[2];
         interval.IsSelected = true;
+
+        OwnColorOptions = CreateColorOptions(Draft.OwnAircraftColor, color => Draft.OwnAircraftColor = color);
+        FriendColorOptions = CreateColorOptions(Draft.FriendAircraftColor, color => Draft.FriendAircraftColor = color);
+        UpdateColorAvailability();
     }
 
     public TheEyeSettings Draft { get; }
@@ -84,6 +88,12 @@ public sealed class SettingsViewModel : ObservableObject
     public IReadOnlyList<ThemeOption> ThemeOptions { get; }
 
     public IReadOnlyList<IntervalOption> IntervalOptions { get; }
+
+    /// <summary>Colours for the signed-in member's own aircraft.</summary>
+    public IReadOnlyList<ColorOption> OwnColorOptions { get; }
+
+    /// <summary>Colours for friends' aircraft; the one picked for the own aircraft is disabled.</summary>
+    public IReadOnlyList<ColorOption> FriendColorOptions { get; }
 
     public string SettingsPath => string.Empty;
 
@@ -180,6 +190,80 @@ public sealed class SettingsViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(Draft));
+    }
+
+    private List<ColorOption> CreateColorOptions(string current, Action<string> apply)
+    {
+        var options = AircraftHighlightColors.All
+            .Select(color => new ColorOption(color.Name, color.Label, color.Hex))
+            .ToList();
+
+        foreach (var option in options)
+        {
+            option.IsSelected = string.Equals(option.Name, current, StringComparison.Ordinal);
+            option.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName != nameof(ColorOption.IsSelected) || !option.IsSelected) return;
+                apply(option.Name);
+                foreach (var other in options.Where(other => !ReferenceEquals(other, option)))
+                {
+                    other.IsSelected = false;
+                }
+
+                UpdateColorAvailability();
+                OnPropertyChanged(nameof(Draft));
+            };
+        }
+
+        return options;
+    }
+
+    private void UpdateColorAvailability()
+    {
+        // Called while the second list is still being built.
+        if (OwnColorOptions is null || FriendColorOptions is null) return;
+
+        foreach (var option in OwnColorOptions)
+        {
+            option.IsEnabled = !string.Equals(option.Name, Draft.FriendAircraftColor, StringComparison.Ordinal);
+        }
+
+        foreach (var option in FriendColorOptions)
+        {
+            option.IsEnabled = !string.Equals(option.Name, Draft.OwnAircraftColor, StringComparison.Ordinal);
+        }
+    }
+}
+
+public sealed class ColorOption : ObservableObject
+{
+    private bool _isSelected;
+    private bool _isEnabled = true;
+
+    public ColorOption(string name, string label, string hex)
+    {
+        Name = name;
+        Label = label;
+        Hex = hex;
+    }
+
+    public string Name { get; }
+
+    public string Label { get; }
+
+    /// <summary>The colour as "#RRGGBB", painted by the view.</summary>
+    public string Hex { get; }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value);
+    }
+
+    public bool IsEnabled
+    {
+        get => _isEnabled;
+        set => SetProperty(ref _isEnabled, value);
     }
 }
 

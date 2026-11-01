@@ -269,6 +269,40 @@ public sealed class SettingsStoreTests
         Assert.Equal("test-key", settings.ApiKey);
     }
 
+    [Fact]
+    public void AircraftHighlightFor_PrefersTheOwnColourOverTheFriendColour()
+    {
+        var settings = new TheEyeSettings
+        {
+            OAuthAccessToken = "access",
+            OAuthAccount = "123456 (Jane Doe)",
+            OwnAircraftColor = "Red",
+            FriendAircraftColor = "Cyan"
+        };
+        settings.AddFriend(123456);
+        settings.AddFriend(654321);
+
+        Assert.Equal(123456, settings.GetOwnUserId());
+        Assert.Equal("#EF4444", settings.AircraftHighlightFor(123456));
+        Assert.Equal("#22D3EE", settings.AircraftHighlightFor(654321));
+        Assert.Null(settings.AircraftHighlightFor(111111));
+
+        settings.ClearOAuthTokens();
+        Assert.Equal("#22D3EE", settings.AircraftHighlightFor(123456));
+    }
+
+    [Fact]
+    public void Normalize_NeverLeavesTheOwnAndFriendColoursEqual()
+    {
+        var settings = new TheEyeSettings { OwnAircraftColor = "white", FriendAircraftColor = "WHITE" };
+
+        settings.Normalize();
+
+        Assert.Equal("White", settings.OwnAircraftColor);
+        Assert.NotEqual(settings.OwnAircraftColor, settings.FriendAircraftColor);
+        Assert.NotNull(AircraftHighlightColors.Find(settings.FriendAircraftColor));
+    }
+
     [Theory]
     [InlineData(null, TheEyeThemes.Dark)]
     [InlineData("", TheEyeThemes.Dark)]

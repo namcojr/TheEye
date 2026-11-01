@@ -86,7 +86,7 @@ the public API.
 THINGS TO ADD / CORRECTIONS
 ===========================
 
-- To add more detail to the maps: City delimiters, roads, detailed airport ground structures, do we need Open StreetMap or similar for this?
+- Analyze the possibility to add more detailed maps.
 
 
 ## AIRCRAFT SVG GLYPHS (implemented)
@@ -134,12 +134,14 @@ type changes and loaded flight plans refresh the category.
 ## MAP WHEEL ZOOM (implemented)
 ==============================
 
-Each full wheel notch moves one zoom level up or down on Windows and Linux with
+Each full wheel notch moves half a zoom level up or down (10, 10.5, 11, 11.5, etc.)
+on Windows and Linux with
 a short, eased 200 ms transition. Rapid notches accumulate toward the next target
 level rather than restarting from the partially zoomed view.
 Partial/high-resolution wheel events accumulate into full notches. Scrolling
 over aircraft or map overlays uses the same behaviour as scrolling over the map,
-and the location under the pointer stays anchored while zooming.
+and the location under the pointer stays anchored while zooming. Zoom buttons
+retain their predefined whole-level steps, and the zoom limits are unchanged.
 
 
 ## IVAO SIGN-IN (implemented)
@@ -170,6 +172,15 @@ It also works for accounts that have no API key at all.
   credentials only authorise /v2/users/me, proving the sign-in (account label appears)
   but not the trail.
 
+
+## MAP HOVER AND BUTTON THEMES
+=============================
+
+Hovering over an unselected aircraft temporarily shows its quick route together
+with the departure/arrival airport dots and ICAO labels, using the same glyphs as
+the selected route. Leaving the aircraft clears the preview without changing the
+selection. Button content follows its control's theme foreground in both shells,
+including the checked PILOTS / ATC switches and the Save settings button.
 
 ## RUNWAY PAVEMENT ON THE MAP (implemented)
 ========================================

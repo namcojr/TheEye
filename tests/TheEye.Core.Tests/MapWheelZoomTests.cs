@@ -10,20 +10,79 @@ public sealed class MapWheelZoomTests
 {
     private static readonly ScreenPosition Pointer = new(300, 200);
 
+    [Fact]
+    public void Zoom_VisitsConsecutiveHalfLevelsAndReturns()
+    {
+        var navigator = CreateNavigator();
+        var wheel = new MapWheelZoom();
+        foreach (var level in new[] { 10.5, 11, 11.5, 12, 12.5 })
+        {
+            wheel.Zoom(navigator, 1, Pointer);
+            Assert.Equal(WorldMap.MaxResolution / Math.Pow(2, level), navigator.Viewport.Resolution, 8);
+        }
+
+        foreach (var level in new[] { 12, 11.5, 11, 10.5, 10 })
+        {
+            wheel.Zoom(navigator, -1, Pointer);
+            Assert.Equal(WorldMap.MaxResolution / Math.Pow(2, level), navigator.Viewport.Resolution, 8);
+        }
+    }
+
+    [Fact]
+    public void Zoom_LeavesZoomButtonWholeLevelStepsUnchanged()
+    {
+        var navigator = CreateNavigator();
+        var initial = navigator.Viewport.Resolution;
+
+        navigator.ZoomIn();
+        Assert.Equal(initial / 2, navigator.Viewport.Resolution, 8);
+        navigator.ZoomOut();
+        Assert.Equal(initial, navigator.Viewport.Resolution, 8);
+    }
+
+    [Fact]
+    public void Zoom_WithPanLockKeepsTheMapCenterFixed()
+    {
+        var navigator = CreateNavigator();
+        navigator.PanLock = true;
+        var before = navigator.Viewport;
+
+        new MapWheelZoom().Zoom(navigator, 1, Pointer);
+
+        Assert.Equal(before.CenterX, navigator.Viewport.CenterX, 8);
+        Assert.Equal(before.CenterY, navigator.Viewport.CenterY, 8);
+        Assert.Equal(before.Resolution / Math.Sqrt(2), navigator.Viewport.Resolution, 8);
+    }
+
+    [Theory]
+    [InlineData(WorldMap.DeepestZoomLevel - 0.25, 1, WorldMap.MinResolution)]
+    [InlineData(WorldMap.MinZoomLevel + 0.25, -1, WorldMap.MaxZoomOutResolution)]
+    public void Zoom_ClampsStepsThatCrossZoomBounds(double level, int direction, double expected)
+    {
+        var navigator = CreateNavigator();
+        navigator.ZoomTo(WorldMap.MaxResolution / Math.Pow(2, level));
+        var wheel = new MapWheelZoom();
+
+        wheel.Zoom(navigator, direction, Pointer);
+        Assert.Equal(expected, navigator.Viewport.Resolution, 8);
+        wheel.Zoom(navigator, -direction, Pointer);
+        Assert.Equal(expected / Math.Pow(2, -direction * 0.5), navigator.Viewport.Resolution, 8);
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(-1)]
     [InlineData(3)]
     [InlineData(-3)]
     [InlineData(0)]
-    public void Zoom_MovesOneLevelPerFullNotch(int notches)
+    public void Zoom_MovesHalfALevelPerFullNotch(int notches)
     {
         var navigator = CreateNavigator();
         var initial = navigator.Viewport.Resolution;
 
         new MapWheelZoom().Zoom(navigator, notches, Pointer);
 
-        Assert.Equal(initial / Math.Pow(2, notches), navigator.Viewport.Resolution, 8);
+        Assert.Equal(initial / Math.Pow(2, notches * 0.5), navigator.Viewport.Resolution, 8);
     }
 
     [Theory]
@@ -43,7 +102,7 @@ public sealed class MapWheelZoomTests
 
         wheel.Zoom(navigator, direction * 0.25, Pointer);
 
-        Assert.Equal(initial / Math.Pow(2, direction), navigator.Viewport.Resolution, 8);
+        Assert.Equal(initial / Math.Pow(2, direction * 0.5), navigator.Viewport.Resolution, 8);
     }
 
     [Fact]
@@ -61,20 +120,20 @@ public sealed class MapWheelZoomTests
 
         wheel.Zoom(navigator, 0.1, Pointer);
 
-        Assert.Equal(initial / 2, navigator.Viewport.Resolution, 8);
+        Assert.Equal(initial / Math.Sqrt(2), navigator.Viewport.Resolution, 8);
     }
 
     [Theory]
-    [InlineData(1, 250)]
-    [InlineData(-1, 1000)]
-    public void Zoom_FromASavedIntermediateResolutionMovesOneLevel(int direction, double expectedResolution)
+    [InlineData(1)]
+    [InlineData(-1)]
+    public void Zoom_FromASavedIntermediateResolutionMovesHalfALevel(int direction)
     {
         var navigator = CreateNavigator();
         navigator.ZoomTo(500);
 
         new MapWheelZoom().Zoom(navigator, direction, Pointer);
 
-        Assert.Equal(expectedResolution, navigator.Viewport.Resolution, 8);
+        Assert.Equal(500 / Math.Pow(2, direction * 0.5), navigator.Viewport.Resolution, 8);
     }
 
     [Fact]
@@ -85,10 +144,10 @@ public sealed class MapWheelZoomTests
         var wheel = new MapWheelZoom();
 
         wheel.Zoom(navigator, 1.5, Pointer);
-        Assert.Equal(initial / 2, navigator.Viewport.Resolution, 8);
+        Assert.Equal(initial / Math.Sqrt(2), navigator.Viewport.Resolution, 8);
         wheel.Zoom(navigator, 0, Pointer);
         wheel.Zoom(navigator, 0.5, Pointer);
-        Assert.Equal(initial / 4, navigator.Viewport.Resolution, 8);
+        Assert.Equal(initial / 2, navigator.Viewport.Resolution, 8);
     }
 
     [Fact]
@@ -102,7 +161,7 @@ public sealed class MapWheelZoomTests
         wheel.Zoom(navigator, -0.25, Pointer);
         Assert.Equal(initial, navigator.Viewport.Resolution);
         wheel.Zoom(navigator, -0.75, Pointer);
-        Assert.Equal(initial * 2, navigator.Viewport.Resolution, 8);
+        Assert.Equal(initial * Math.Sqrt(2), navigator.Viewport.Resolution, 8);
     }
 
     [Fact]
@@ -144,7 +203,7 @@ public sealed class MapWheelZoomTests
     }
 
     [Fact]
-    public void Zoom_RapidNotchesMoveExactlyOneLevelEachWithoutAnimationOvershoot()
+    public void Zoom_RapidNotchesMoveExactlyHalfALevelEachWithoutAnimationOvershoot()
     {
         var navigator = CreateNavigator();
         var initial = navigator.Viewport.Resolution;
@@ -154,7 +213,7 @@ public sealed class MapWheelZoomTests
         wheel.Zoom(navigator, 1, Pointer);
         wheel.Zoom(navigator, 1, Pointer);
 
-        Assert.Equal(initial / 8, navigator.Viewport.Resolution, 8);
+        Assert.Equal(initial / Math.Pow(2, 1.5), navigator.Viewport.Resolution, 8);
         Assert.False(navigator.UpdateAnimations());
     }
 
@@ -163,7 +222,7 @@ public sealed class MapWheelZoomTests
     [InlineData(-1)]
     [InlineData(3)]
     [InlineData(-3)]
-    public async Task Zoom_AnimatesToExactlyOneLevelPerNotch(int notches)
+    public async Task Zoom_AnimatesToExactlyHalfALevelPerNotch(int notches)
     {
         var navigator = CreateNavigator(animate: true);
         var initial = navigator.Viewport.Resolution;
@@ -172,7 +231,7 @@ public sealed class MapWheelZoomTests
 
         Assert.Equal(initial, navigator.Viewport.Resolution);
         await FinishAnimationAsync(navigator);
-        Assert.Equal(initial / Math.Pow(2, notches), navigator.Viewport.Resolution, 8);
+        Assert.Equal(initial / Math.Pow(2, notches * 0.5), navigator.Viewport.Resolution, 8);
     }
 
     [Fact]
@@ -186,11 +245,11 @@ public sealed class MapWheelZoomTests
         wheel.Zoom(navigator, 1, Pointer);
         await Task.Delay(40);
         Assert.True(navigator.UpdateAnimations());
-        Assert.InRange(navigator.Viewport.Resolution, initial / 4, initial);
+        Assert.InRange(navigator.Viewport.Resolution, initial / 2, initial);
         wheel.Zoom(navigator, 1, Pointer);
 
         await FinishAnimationAsync(navigator);
-        Assert.Equal(initial / 8, navigator.Viewport.Resolution, 8);
+        Assert.Equal(initial / Math.Pow(2, 1.5), navigator.Viewport.Resolution, 8);
     }
 
     [Fact]
@@ -221,7 +280,7 @@ public sealed class MapWheelZoomTests
         navigator.UpdateAnimations();
 
         Assert.True(navigator.Viewport.Resolution < initial);
-        Assert.True(navigator.Viewport.Resolution > initial / 2);
+        Assert.True(navigator.Viewport.Resolution > initial / Math.Sqrt(2));
         var during = navigator.Viewport.ScreenToWorld(Pointer);
         Assert.Equal(before.X, during.X, 8);
         Assert.Equal(before.Y, during.Y, 8);

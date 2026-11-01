@@ -34,6 +34,7 @@ public sealed class PilotItem : ObservableObject
     private bool _isSelected;
     private bool _isFriend;
     private bool _isSupervisor;
+    private string _markerColor = string.Empty;
     private int _glyphSize = TheEyeSettings.DefaultAircraftGlyphSize;
 
     public int GlyphSize
@@ -177,6 +178,24 @@ public sealed class PilotItem : ObservableObject
     /// column of its own and the star survives a narrow panel.
     /// </summary>
     public string CallsignLabel => IsFriend ? $"★ {Callsign}" : Callsign;
+
+    /// <summary>
+    /// The "#RRGGBB" the map pin is painted with when the aircraft is the user's
+    /// own or a friend's; empty leaves the theme's text colour.
+    /// </summary>
+    public string MarkerColor
+    {
+        get => _markerColor;
+        set
+        {
+            if (SetProperty(ref _markerColor, value ?? string.Empty))
+            {
+                OnPropertyChanged(nameof(HasMarkerColor));
+            }
+        }
+    }
+
+    public bool HasMarkerColor => _markerColor.Length > 0;
 
     public bool HasFlightPlan => Plan is not null;
 

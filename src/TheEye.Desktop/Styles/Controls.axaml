@@ -29,6 +29,7 @@
                         Padding="{TemplateBinding Padding}">
                     <ContentPresenter Content="{TemplateBinding Content}"
                                       ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Foreground="{TemplateBinding Foreground}"
                                       HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
                                       VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
                 </Border>
@@ -103,6 +104,7 @@
                 <Border Name="Root" Background="{TemplateBinding Background}">
                     <ContentPresenter Content="{TemplateBinding Content}"
                                       ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Foreground="{TemplateBinding Foreground}"
                                       HorizontalContentAlignment="Center"
                                       VerticalContentAlignment="Center" />
                 </Border>
@@ -154,7 +156,10 @@
                             <RotateTransform Angle="{Binding HeadingDegrees}" />
                         </Viewbox.RenderTransform>
                         <Canvas Width="64" Height="64">
-                            <Path Data="{Binding Icon}" Fill="{DynamicResource TextBrush}" />
+                            <Path Data="{Binding Icon}" Fill="{DynamicResource TextBrush}"
+                                  IsVisible="{Binding !HasMarkerColor}" />
+                            <Path Data="{Binding Icon}" Fill="{Binding MarkerColor, Converter={StaticResource HexToBrush}}"
+                                  IsVisible="{Binding HasMarkerColor}" />
                         </Canvas>
                     </Viewbox>
                 </Grid>
@@ -183,6 +188,7 @@
                         BorderThickness="1" CornerRadius="5" Padding="10,6">
                     <ContentPresenter Content="{TemplateBinding Content}"
                                       ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Foreground="{TemplateBinding Foreground}"
                                       HorizontalContentAlignment="Center"
                                       VerticalContentAlignment="Center" />
                 </Border>
@@ -197,6 +203,9 @@
         </Style>
         <Style Selector="^:pointerover /template/ Border#Root">
             <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.35" />
         </Style>
     </ControlTheme>
 
@@ -221,6 +230,7 @@
                     <ContentPresenter Grid.Column="1" Margin="8,0,0,0"
                                       Content="{TemplateBinding Content}"
                                       ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Foreground="{TemplateBinding Foreground}"
                                       HorizontalAlignment="Left" VerticalAlignment="Center" />
                 </Grid>
             </ControlTemplate>
@@ -258,6 +268,7 @@
                         Padding="{TemplateBinding Padding}">
                     <ContentPresenter Content="{TemplateBinding Content}"
                                       ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Foreground="{TemplateBinding Foreground}"
                                       HorizontalContentAlignment="Center"
                                       VerticalContentAlignment="Center" />
                 </Border>
@@ -268,7 +279,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
         </Style>
         <Style Selector="^:checked">
-            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         </Style>
         <Style Selector="^:pointerover /template/ Border#Root">
             <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />

@@ -24,6 +24,8 @@
 
   <ItemGroup>
     <None Update="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="..\..\src\TheEye.Windows\Themes\Controls.xaml" LogicalName="WpfControls.xaml" />
+    <EmbeddedResource Include="..\..\src\TheEye.Desktop\Styles\Controls.axaml" LogicalName="AvaloniaControls.axaml" />
   </ItemGroup>
 
 </Project>

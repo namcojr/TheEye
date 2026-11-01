@@ -22,13 +22,72 @@ public sealed class HoverRouteTests
         var selectedRoute = Layer(model, IvaoMapLayers.RouteLayerName);
 
         model.SetHoveredPilot(model.Pilots[1]);
-        Assert.Equal(2, Hover(model).Features.Count());
+        Assert.Equal(4, Hover(model).Features.Count());
         Assert.Same(model.Pilots[0], model.SelectedPilot);
         Assert.Same(selectedRoute, Layer(model, IvaoMapLayers.RouteLayerName));
 
         model.SetHoveredPilot(null);
         Assert.Empty(Hover(model).Features);
         Assert.Same(selectedRoute, Layer(model, IvaoMapLayers.RouteLayerName));
+    }
+
+    [Fact]
+    public void Hover_MarksAirportsWithTheSameDotsAndLabelsAsSelection()
+    {
+        var pilot = Pilot(1);
+        var selected = IvaoMapLayers.CreateRoute(pilot, Palette).Features.OfType<PointFeature>().ToArray();
+        var hovered = IvaoMapLayers.CreateHoverRoute(pilot, Palette).Features.OfType<PointFeature>().ToArray();
+
+        Assert.Equal(2, hovered.Length);
+        for (var index = 0; index < selected.Length; index++)
+        {
+            Assert.Equal(selected[index].Point, hovered[index].Point);
+            var expectedSymbol = selected[index].Styles.OfType<SymbolStyle>().Single();
+            var symbol = hovered[index].Styles.OfType<SymbolStyle>().Single();
+            Assert.Equal(expectedSymbol.SymbolType, symbol.SymbolType);
+            Assert.Equal(expectedSymbol.SymbolScale, symbol.SymbolScale);
+            Assert.Equal(expectedSymbol.Fill!.Color, symbol.Fill!.Color);
+            Assert.Equal(expectedSymbol.Outline!.Color, symbol.Outline!.Color);
+            Assert.Equal(expectedSymbol.Outline.Width, symbol.Outline.Width);
+            var expectedLabel = selected[index].Styles.OfType<LabelStyle>().Single();
+            var label = hovered[index].Styles.OfType<LabelStyle>().Single();
+            Assert.Equal(expectedLabel.GetLabelText(selected[index]), label.GetLabelText(hovered[index]));
+            Assert.Equal(expectedLabel.ForeColor, label.ForeColor);
+        }
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void Hover_OnlyDrawsKnownAirports(bool hasDeparture, bool hasArrival)
+    {
+        var pilot = Pilot(1);
+        if (!hasDeparture)
+        {
+            pilot.FlightPlan!.Departure = null;
+        }
+        if (!hasArrival)
+        {
+            pilot.FlightPlan!.Arrival = null;
+        }
+
+        var features = IvaoMapLayers.CreateHoverRoute(pilot, Palette).Features.ToArray();
+        var airportCount = (hasDeparture ? 1 : 0) + (hasArrival ? 1 : 0);
+        Assert.Equal(airportCount * 2, features.Length);
+        Assert.Equal(airportCount, features.OfType<PointFeature>().Count());
+    }
+
+    [Fact]
+    public void Hover_WithoutAnAircraftPositionOrFlightPlanDrawsNothing()
+    {
+        Assert.Empty(IvaoMapLayers.CreateHoverRoute(null, Palette).Features);
+        var pilot = Pilot(1);
+        pilot.FlightPlan = null;
+        Assert.Empty(IvaoMapLayers.CreateHoverRoute(pilot, Palette).Features);
+        pilot = Pilot(1);
+        pilot.LastTrack = null;
+        Assert.Empty(IvaoMapLayers.CreateHoverRoute(pilot, Palette).Features);
     }
 
     [Fact]
@@ -71,9 +130,12 @@ public sealed class HoverRouteTests
 
         var theme = Palette with { Accent = "#FF8800" };
         model.ApplyTheme(theme);
-        Assert.All(Hover(model).Features, feature =>
+        Assert.All(Hover(model).Features.OfType<Mapsui.Nts.GeometryFeature>(), feature =>
             Assert.Equal(WorldMap.Parse(theme.Accent),
                 feature.Styles.OfType<VectorStyle>().Single().Line!.Color));
+        Assert.All(Hover(model).Features.OfType<PointFeature>(), feature =>
+            Assert.Equal(WorldMap.Parse(theme.Accent),
+                feature.Styles.OfType<SymbolStyle>().Single().Fill!.Color));
 
         model.UpdateTraffic(Snapshot([]));
         Assert.Empty(Hover(model).Features);

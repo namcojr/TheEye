@@ -83,7 +83,7 @@ public sealed class FlightTrailTests
 
         Assert.Equal(2, segments.Count);
         Assert.Equal(AltitudeBand.Below15000, segments[0].Band);
-        Assert.Equal(AltitudeBand.Below40000, segments[1].Band);
+        Assert.Equal(AltitudeBand.Below42000, segments[1].Band);
         Assert.Equal(points[1].Position, segments[0].End);
         Assert.Equal(points[1].Position, segments[1].Start);
     }
@@ -177,7 +177,7 @@ public sealed class FlightTrailTests
         Assert.Equal(Schiphol.Latitude, segments[0].Start.Latitude, 3);
         Assert.Equal(Schiphol.Longitude, segments[0].Start.Longitude, 3);
         Assert.Equal(aircraft, segments[^1].End);
-        Assert.All(segments, segment => Assert.Equal(AltitudeBand.Below30000, segment.Band));
+        Assert.All(segments, segment => Assert.Equal(AltitudeBand.Below25000, segment.Band));
 
         // Only the first third of the route is behind the aircraft, so the trail
         // must not reach the arrival airport.

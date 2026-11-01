@@ -93,6 +93,60 @@
 
                     <Border Classes="divider" Margin="0,10,0,0" />
 
+                    <TextBlock Text="AIRCRAFT COLOURS" Classes="section" Margin="0,18,0,0" />
+                    <TextBlock Classes="muted" Margin="0,5,0,0" TextWrapping="Wrap"
+                               Text="Your own aircraft (when signed in) and your friends' aircraft stand out on the map. Your own colour wins if you are on your friend list." />
+                    <TextBlock Text="MY AIRCRAFT" Classes="detail-label" Margin="0,12,0,5" />
+                    <ItemsControl ItemsSource="{Binding OwnColorOptions}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <RadioButton Theme="{StaticResource ChoiceButton}" GroupName="OwnAircraftColor"
+                                             Margin="0,0,8,8" AutomationProperties.Name="{Binding Label}"
+                                             IsEnabled="{Binding IsEnabled}"
+                                             IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Width="14" Height="14" CornerRadius="7"
+                                                Background="{Binding Hex, Converter={StaticResource HexToBrush}}"
+                                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" />
+                                        <TextBlock Text="{Binding Label}" Margin="7,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </RadioButton>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="FRIENDS' AIRCRAFT" Classes="detail-label" Margin="0,6,0,5" />
+                    <ItemsControl ItemsSource="{Binding FriendColorOptions}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <RadioButton Theme="{StaticResource ChoiceButton}" GroupName="FriendAircraftColor"
+                                             Margin="0,0,8,8" AutomationProperties.Name="{Binding Label}"
+                                             IsEnabled="{Binding IsEnabled}"
+                                             IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Width="14" Height="14" CornerRadius="7"
+                                                Background="{Binding Hex, Converter={StaticResource HexToBrush}}"
+                                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" />
+                                        <TextBlock Text="{Binding Label}" Margin="7,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </RadioButton>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Classes="divider" Margin="0,10,0,0" />
+
                     <TextBlock Text="MAP LAYERS" Classes="section" Margin="0,18,0,0" />
                     <TextBlock Text="AIRCRAFT GLYPH SIZE" Classes="detail-label" Margin="0,12,0,5" />
                     <DockPanel>

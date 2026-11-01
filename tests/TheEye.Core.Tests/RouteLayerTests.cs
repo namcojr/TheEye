@@ -40,8 +40,8 @@ public sealed class RouteLayerTests
         Assert.Equal(
             [
                 WorldMap.Parse(AltitudePalette.Ground),
-                WorldMap.Parse(AltitudePalette.Below7000),
-                WorldMap.Parse(AltitudePalette.Below40000)
+                WorldMap.Parse(AltitudePalette.Below10000),
+                WorldMap.Parse(AltitudePalette.Below42000)
             ],
             lines.Select(PenColor));
         Assert.All(lines, line => Assert.Equal(IvaoMapLayers.TrailWidth, PenWidth(line)));
@@ -85,7 +85,7 @@ public sealed class RouteLayerTests
                 "timestamp": "2026-10-31T13:02:39.000Z", "time": 901 },
               { "altitude": 35500, "latitude": 35.402, "longitude": 33.918, "onGround": false,
                 "timestamp": "2026-10-31T13:12:39.000Z", "time": 1501 },
-              { "altitude": 41000, "latitude": 35.611, "longitude": 34.044, "onGround": false,
+              { "altitude": 43000, "latitude": 35.611, "longitude": 34.044, "onGround": false,
                 "timestamp": "2026-10-31T13:24:39.000Z", "time": 2221 }
             ]
             """;
@@ -94,7 +94,7 @@ public sealed class RouteLayerTests
         var pilot = Pilot();
         pilot.LastTrack!.Latitude = 35.611;
         pilot.LastTrack.Longitude = 34.044;
-        pilot.LastTrack.Altitude = 41000;
+        pilot.LastTrack.Altitude = 43000;
 
         var lines = TrailLines(IvaoMapLayers.CreateRoute(pilot, Palette, tracks));
 
@@ -104,8 +104,8 @@ public sealed class RouteLayerTests
                 WorldMap.Parse(AltitudePalette.Below3000),
                 WorldMap.Parse(AltitudePalette.Below15000),
                 WorldMap.Parse(AltitudePalette.Below30000),
-                WorldMap.Parse(AltitudePalette.Below40000),
-                WorldMap.Parse(AltitudePalette.Above40000)
+                WorldMap.Parse(AltitudePalette.Below42000),
+                WorldMap.Parse(AltitudePalette.Above42000)
             ],
             lines.Select(PenColor));
         Assert.All(lines, line => Assert.Equal(IvaoMapLayers.TrailWidth, PenWidth(line)));
@@ -129,7 +129,7 @@ public sealed class RouteLayerTests
 
         var line = Assert.Single(TrailLines(layer));
         Assert.Equal(
-            WorldMap.WithAlpha(WorldMap.Parse(AltitudePalette.Below40000), IvaoMapLayers.EstimatedTrailAlpha),
+            WorldMap.WithAlpha(WorldMap.Parse(AltitudePalette.Below42000), IvaoMapLayers.EstimatedTrailAlpha),
             PenColor(line));
         Assert.Equal(2, features.OfType<PointFeature>().Count());
     }
@@ -160,7 +160,7 @@ public sealed class RouteLayerTests
         var layer = IvaoMapLayers.CreateHoverRoute(pilot, Palette);
         var lines = TrailLines(layer);
         Assert.Equal(2, lines.Count);
-        Assert.Equal(2, layer.Features.Count());
+        Assert.Equal(4, layer.Features.Count());
         AssertEndpoint(lines[0], pilot.FlightPlan!.Departure!.Position!.Value, first: true);
         AssertEndpoint(lines[0], pilot.LastTrack!.Position!.Value, first: false);
         AssertEndpoint(lines[1], pilot.LastTrack.Position.Value, first: true);

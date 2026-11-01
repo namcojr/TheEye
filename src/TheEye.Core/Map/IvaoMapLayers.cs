@@ -269,10 +269,10 @@ public static class IvaoMapLayers
     }
 
     /// <summary>
-    /// Width of the trail, in device independent pixels. One pixel keeps a long
-    /// recorded track readable while the altitude bands stay distinct.
+    /// Width of the trail, in device independent pixels. Two pixels, like WebEye,
+    /// keep the altitude colours vivid against the map without hiding it.
     /// </summary>
-    public const double TrailWidth = 1.0;
+    public const double TrailWidth = 2.0;
 
     /// <summary>
     /// Alpha of the estimated trail, i.e. the flown part of the filed route that
@@ -305,17 +305,7 @@ public static class IvaoMapLayers
             FlightTrail.BuildPilotTrail(pilot, tracks, estimateWhenMissing),
             FlightTrail.HasRecordedTrack(tracks));
 
-        var flightPlan = pilot.FlightPlan;
-        var color = WorldMap.Parse(palette.Accent);
-        if (flightPlan?.Departure?.Position is { } departure)
-        {
-            features.Add(CreateAirportFeature(departure, flightPlan.DepartureIcao, color, palette));
-        }
-
-        if (flightPlan?.Arrival?.Position is { } arrival)
-        {
-            features.Add(CreateAirportFeature(arrival, flightPlan.ArrivalIcao, color, palette));
-        }
+        AddAirportFeatures(features, pilot.FlightPlan, palette);
 
         return new MemoryLayer(RouteLayerName)
         {
@@ -339,6 +329,8 @@ public static class IvaoMapLayers
             {
                 AddLeg(position, arrival);
             }
+
+            AddAirportFeatures(features, pilot.FlightPlan, palette);
 
             void AddLeg(GeoCoordinate start, GeoCoordinate end)
             {
@@ -592,6 +584,20 @@ public static class IvaoMapLayers
     {
         var projected = WorldMap.Project(point);
         return new Coordinate(projected.X, projected.Y);
+    }
+
+    private static void AddAirportFeatures(List<IFeature> features, IvaoFlightPlan? flightPlan, MapPalette palette)
+    {
+        var color = WorldMap.Parse(palette.Accent);
+        if (flightPlan?.Departure?.Position is { } departure)
+        {
+            features.Add(CreateAirportFeature(departure, flightPlan.DepartureIcao, color, palette));
+        }
+
+        if (flightPlan?.Arrival?.Position is { } arrival)
+        {
+            features.Add(CreateAirportFeature(arrival, flightPlan.ArrivalIcao, color, palette));
+        }
     }
 
     private static PointFeature CreateAirportFeature(GeoCoordinate coordinate, string name, Color color, MapPalette palette)

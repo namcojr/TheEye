@@ -1,6 +1,4 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.IO;
 using TheEye.Core.Api;
 using TheEye.Core.Maps;
 using TheEye.Core.Models;
@@ -543,6 +541,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Map.ShowAtc = _settings.ShowAtc;
         Map.CenterOnMapClick = _settings.CenterOnMapClick;
         Map.AircraftGlyphSize = _settings.AircraftGlyphSize;
+        RefreshFriendMarks();
         OnPropertyChanged(nameof(ShowPilots));
         OnPropertyChanged(nameof(ShowAtc));
         OnPropertyChanged(nameof(HasApiKey));
@@ -1104,6 +1103,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         foreach (var pilot in Map.Pilots)
         {
             pilot.IsFriend = _settings.IsFriend(pilot.UserId);
+            pilot.MarkerColor = _settings.AircraftHighlightFor(pilot.UserId) ?? string.Empty;
         }
 
         foreach (var station in Map.Atc)
