@@ -411,15 +411,10 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // Tower, ground and delivery badges are drawn inside the much larger
-        // control sector around their airport, so the glyphs win over the polygon.
-        if (HitTestStation(screenPosition) is { } station)
-        {
-            SelectAtc(station, CenterOnMapClick);
-            return;
-        }
-
-        var atc = _regionIndex?.FindAt(worldPosition);
+        var atc = _showAtc
+            ? AtcStationHitTest.Find(_stationTargets, screenPosition.X, screenPosition.Y,
+                SelectedAtc?.Id, _regionIndex?.FindAllAt(worldPosition))
+            : null;
         if (atc is not null && _atcById.TryGetValue(atc.Id, out var item))
         {
             SelectAtc(item, CenterOnMapClick);

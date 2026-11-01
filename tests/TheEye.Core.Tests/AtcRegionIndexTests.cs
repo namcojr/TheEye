@@ -42,6 +42,19 @@ public sealed class AtcRegionIndexTests
     }
 
     [Fact]
+    public void FindAllAt_ReturnsEveryOverlappingSectorSmallestFirst()
+    {
+        var center = CreateAtc("EHAA_CTR", "CTR", (49, 1), (49, 9), (55, 9), (55, 1));
+        var approach = CreateAtc("EHAM_APP", "APP", (51, 3), (51, 7), (54, 7), (54, 3));
+        var tower = CreateAtc("EHAM_TWR", "TWR", (52, 4), (52, 6), (53, 6), (53, 4));
+        var index = AtcRegionIndex.Build([center, tower, approach]);
+
+        Assert.Equal([tower, approach, center], index.FindAllAt(WorldMap.Project(new GeoCoordinate(52.5, 5))));
+        Assert.Equal([center], index.FindAllAt(WorldMap.Project(new GeoCoordinate(50, 2))));
+        Assert.Empty(index.FindAllAt(WorldMap.Project(new GeoCoordinate(40, 40))));
+    }
+
+    [Fact]
     public void Build_SkipsStationsWithoutUsablePolygon()
     {
         var index = AtcRegionIndex.Build(

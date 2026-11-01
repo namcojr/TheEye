@@ -20,9 +20,8 @@ public readonly record struct AtcStationHitTarget(
 /// pointer picks the ring it sits deepest in, i.e. the small star in the middle
 /// and the wide approach ring at its edge, and every further click on the same
 /// airport walks outwards through the stack, which keeps all positions of the
-/// airport reachable. The glyphs are tested before <see cref="AtcRegionIndex"/>
-/// because they are drawn on top of the much larger control sector around their
-/// airport.
+/// airport reachable. Overlapping badges and control sectors join the same
+/// cycle, with glyphs first because they are drawn on top of the sectors.
 /// </summary>
 public static class AtcStationHitTest
 {
@@ -81,41 +80,55 @@ public static class AtcStationHitTest
 
     /// <summary>
     /// Picks the station a click selects. When <paramref name="selectedId"/> is
-    /// one of the badges under the pointer, the next ring of that airport is
-    /// returned instead, so clicking the same spot again cycles through the
-    /// stacked positions and finally wraps around to the innermost one.
+    /// one of the overlapping badges or sectors, the next station is returned
+    /// instead, finally wrapping around to the first badge or smallest sector.
     /// </summary>
     public static IvaoAtc? Find(
         IReadOnlyList<AtcStationHitTarget> targets,
         double x,
         double y,
-        long? selectedId = null)
+        long? selectedId = null,
+        IReadOnlyList<IvaoAtc>? regions = null)
     {
-        if (Nearest(targets, x, y) is not { } hit)
+        var hit = Nearest(targets, x, y);
+        var stack = hit is { } badge
+            ? Stack(targets, badge, x, y).Select(target => target.Station).ToList()
+            : new List<IvaoAtc>();
+        foreach (var region in regions ?? [])
         {
-            return null;
+            if (!stack.Any(station => station.Id == region.Id))
+            {
+                stack.Add(region);
+            }
         }
 
-        if (selectedId is not { } id)
+        var first = hit?.Station ?? stack.FirstOrDefault();
+        if (selectedId is not { } id || stack.Count == 0)
         {
-            return hit.Station;
+            return first;
         }
 
-        var stack = Stack(targets, hit);
-        var current = stack.FindIndex(target => target.Station.Id == id);
-        return current < 0 ? hit.Station : stack[(current + 1) % stack.Count].Station;
+        var current = stack.FindIndex(station => station.Id == id);
+        return current < 0 ? first : stack[(current + 1) % stack.Count];
     }
 
     /// <summary>
-    /// The badges drawn on one airport, i.e. every target on the coordinate of
-    /// <paramref name="hit"/>, in the order a click walks through them.
+    /// The badges drawn on the hit airport plus other badges overlapping the
+    /// pointer, in the order a click walks through them.
     /// </summary>
-    private static List<AtcStationHitTarget> Stack(IReadOnlyList<AtcStationHitTarget> targets, AtcStationHitTarget hit)
+    private static List<AtcStationHitTarget> Stack(
+        IReadOnlyList<AtcStationHitTarget> targets,
+        AtcStationHitTarget hit,
+        double x,
+        double y)
     {
         var stack = new List<AtcStationHitTarget>();
         foreach (var target in targets)
         {
-            if (Math.Abs(target.X - hit.X) < 0.5 && Math.Abs(target.Y - hit.Y) < 0.5)
+            var dx = target.X - x;
+            var dy = target.Y - y;
+            if ((Math.Abs(target.X - hit.X) < 0.5 && Math.Abs(target.Y - hit.Y) < 0.5)
+                || dx * dx + dy * dy <= target.Radius * target.Radius)
             {
                 stack.Add(target);
             }

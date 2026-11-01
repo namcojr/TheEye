@@ -36,6 +36,21 @@ public sealed class AtcRegionIndex
                 : region.Geometry.Area).ToList());
     }
 
+    public IReadOnlyList<IvaoAtc> FindAllAt(MPoint point)
+    {
+        var ntsPoint = new Point(point.X, point.Y);
+        var matches = new List<IvaoAtc>();
+        foreach (var (atc, geometry) in _regions)
+        {
+            if (geometry.Contains(ntsPoint))
+            {
+                matches.Add(atc);
+            }
+        }
+
+        return matches;
+    }
+
     public IvaoAtc? FindAt(MPoint point)
     {
         var ntsPoint = new Point(point.X, point.Y);
