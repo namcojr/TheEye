@@ -46,6 +46,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private FriendItem? _selectedFriend;
     private SupervisorItem? _selectedSupervisor;
     private bool _syncingSelection;
+
+    // Avalonia lists drop and re-pick their selection on a Reset; that write-back must not re-select (and re-centre).
+    private bool _rebuildingLists;
     private bool _started;
     private bool _disposed;
 
@@ -135,7 +138,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => Map.SelectedPilot;
         set
         {
-            if (Map.SelectedPilot == value)
+            if (Map.SelectedPilot == value || _rebuildingLists)
             {
                 return;
             }
@@ -155,7 +158,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => Map.SelectedAtc;
         set
         {
-            if (Map.SelectedAtc == value)
+            if (Map.SelectedAtc == value || _rebuildingLists)
             {
                 return;
             }
@@ -183,7 +186,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _selectedFriend;
         set
         {
-            if (!SetProperty(ref _selectedFriend, value))
+            if (!SetProperty(ref _selectedFriend, value) || _rebuildingLists)
             {
                 return;
             }
@@ -210,7 +213,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _selectedSupervisor;
         set
         {
-            if (!SetProperty(ref _selectedSupervisor, value) || value is null || value.UserId <= 0)
+            if (!SetProperty(ref _selectedSupervisor, value) || _rebuildingLists || value is null || value.UserId <= 0)
             {
                 return;
             }
@@ -300,10 +303,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _searchText, value))
             {
-                _pilotsView.Refresh();
-                _atcView.Refresh();
-                _supervisorsView.Refresh();
-                _friendsView.Refresh();
+                RebuildLists(() =>
+                {
+                    _pilotsView.Refresh();
+                    _atcView.Refresh();
+                    _supervisorsView.Refresh();
+                    _friendsView.Refresh();
+                });
             }
         }
     }
@@ -711,13 +717,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        Map.UpdateTraffic(snapshot);
+        RebuildLists(() =>
+        {
+            Map.UpdateTraffic(snapshot);
 
-        // The two lists that follow members rather than sessions. They are filled
-        // before the counts, because a FRIENDS row is assembled from the traffic
-        // the map has just taken in.
-        SyncSupervisors(snapshot.Supervisors);
-        SyncFriends();
+            // The two lists that follow members rather than sessions. They are filled
+            // before the counts, because a FRIENDS row is assembled from the traffic
+            // the map has just taken in.
+            SyncSupervisors(snapshot.Supervisors);
+            SyncFriends();
+        });
         SupervisorListCount = _supervisors.Count;
         FriendCount = _friends.Count;
 
@@ -747,8 +756,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ErrorMessage = string.Empty;
         IsRefreshing = false;
 
-        _pilotsView.Refresh();
-        _atcView.Refresh();
+        RebuildLists(() =>
+        {
+            _pilotsView.Refresh();
+            _atcView.Refresh();
+        });
+    }
+
+    private void RebuildLists(Action rebuild)
+    {
+        _rebuildingLists = true;
+        try
+        {
+            rebuild();
+        }
+        finally
+        {
+            _rebuildingLists = false;
+        }
     }
 
     private void OnRefreshFailed(object? sender, TrackerRefreshException exception)
@@ -1130,7 +1155,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         // The star sits on every row that follows the member, and the FRIENDS list
         // gains or loses its row.
-        SyncFriends();
+        RebuildLists(SyncFriends);
         FriendCount = _friends.Count;
         OnPropertyChanged(nameof(IsSelectionFriend));
         OnPropertyChanged(nameof(FriendActionText));

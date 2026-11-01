@@ -87,6 +87,7 @@ THINGS TO ADD / CORRECTIONS
 ===========================
 
 - Analyze the possibility to add more detailed maps.
+- Fix labels for GND TWR etc not showing on map
 
 
 ## AIRCRAFT SVG GLYPHS (implemented)
