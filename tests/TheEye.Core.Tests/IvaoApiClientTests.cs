@@ -65,6 +65,35 @@ public sealed class IvaoApiClientTests
         ]
         """;
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RateLimitedResponse_PausesOtherEndpointsWithoutSendingRequests(bool useDate)
+    {
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            var response = StubHttpMessageHandler.Json(HttpStatusCode.TooManyRequests, "{}");
+            response.Headers.RetryAfter = useDate
+                ? new System.Net.Http.Headers.RetryConditionHeaderValue(DateTimeOffset.UtcNow.AddMinutes(10))
+                : new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromMinutes(10));
+            return response;
+        });
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+
+        var first = await Assert.ThrowsAsync<IvaoApiException>(() => api.GetSupervisorsAsync());
+        var pilots = await Assert.ThrowsAsync<IvaoApiException>(() => api.GetPilotSummariesAsync());
+        var atc = await Assert.ThrowsAsync<IvaoApiException>(() => api.GetAtcSummariesAsync());
+        var tracks = await Assert.ThrowsAsync<IvaoApiException>(() => api.GetSessionTracksAsync(4242));
+
+        Assert.Equal(429, first.StatusCode);
+        Assert.Equal(429, pilots.StatusCode);
+        Assert.Equal(429, atc.StatusCode);
+        Assert.Equal(429, tracks.StatusCode);
+        Assert.Single(handler.Requests);
+        Assert.Contains("paused", pilots.Message);
+    }
+
     [Fact]
     public async Task GetSessionTracksAsync_ReadsABareArray()
     {

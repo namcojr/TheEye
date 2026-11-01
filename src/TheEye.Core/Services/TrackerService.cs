@@ -12,15 +12,19 @@ public sealed class TrackerService : IDisposable
 {
     private readonly IvaoApiClient _api;
     private readonly TimeSpan _interval;
+    private readonly TimeProvider _timeProvider;
+    private readonly Dictionary<string, CachedFeed> _feedCache = [];
+    private readonly System.Threading.Lock _cacheGate = new();
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private Task? _loop;
     private int _started;
     private int _disposed;
 
-    public TrackerService(IvaoApiClient api, TimeSpan? refreshInterval = null)
+    public TrackerService(IvaoApiClient api, TimeSpan? refreshInterval = null, TimeProvider? timeProvider = null)
     {
         _api = api;
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _interval = refreshInterval is { TotalSeconds: >= 5 } interval
             ? interval
             : TimeSpan.FromSeconds(30);
@@ -43,14 +47,14 @@ public sealed class TrackerService : IDisposable
 
     public TrackerSnapshot? LastSnapshot { get; private set; }
 
-    public void Start()
+    public void Start(bool refreshImmediately = true)
     {
         if (Interlocked.Exchange(ref _started, 1) == 1)
         {
             return;
         }
 
-        _loop = RunAsync(_cts.Token);
+        _loop = RunAsync(refreshImmediately, _cts.Token);
     }
 
     /// <summary>
@@ -82,15 +86,18 @@ public sealed class TrackerService : IDisposable
         _refreshGate.Dispose();
     }
 
-    private async Task RunAsync(CancellationToken cancellationToken)
+    private async Task RunAsync(bool refreshImmediately, CancellationToken cancellationToken)
     {
-        await RefreshSafelyAsync(cancellationToken);
-
-        using var timer = new PeriodicTimer(_interval);
         try
         {
-            while (await timer.WaitForNextTickAsync(cancellationToken))
+            if (refreshImmediately)
             {
+                await RefreshSafelyAsync(cancellationToken);
+            }
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(_interval, cancellationToken);
                 await RefreshSafelyAsync(cancellationToken);
             }
         }
@@ -131,25 +138,63 @@ public sealed class TrackerService : IDisposable
         var warnings = new List<string>();
         var pilotsTask = FetchPilotsAsync(warnings, cancellationToken);
         var atcTask = FetchAtcAsync(warnings, cancellationToken);
-        var statsTask = FetchAsync(
+        var statsTask = FetchCachedAsync(
             () => _api.GetConnectionStatsAsync(cancellationToken),
             null,
             warnings,
             "Statistics",
+            _interval,
             cancellationToken);
         var supervisorsTask = IncludeIdentity
-            ? FetchAsync(
+            ? FetchCachedAsync(
                 () => _api.GetSupervisorsAsync(cancellationToken),
                 (IReadOnlyList<IvaoSupervisor>)Array.Empty<IvaoSupervisor>(),
                 warnings,
                 "Supervisors",
+                TimeSpan.FromMinutes(2),
                 cancellationToken)
             : Task.FromResult<IReadOnlyList<IvaoSupervisor>>(Array.Empty<IvaoSupervisor>());
+        var pilotIdentitiesTask = IncludeIdentity
+            ? FetchCachedAsync(
+                () => _api.GetPilotsAsync(cancellationToken),
+                (IReadOnlyList<IvaoPilot>)Array.Empty<IvaoPilot>(),
+                warnings,
+                "Member names",
+                TimeSpan.FromMinutes(2),
+                cancellationToken)
+            : Task.FromResult<IReadOnlyList<IvaoPilot>>(Array.Empty<IvaoPilot>());
+        var atcIdentitiesTask = IncludeIdentity
+            ? FetchCachedAsync(
+                () => _api.GetAtcsAsync(cancellationToken),
+                (IReadOnlyList<IvaoAtc>)Array.Empty<IvaoAtc>(),
+                warnings,
+                "Controller names",
+                TimeSpan.FromMinutes(2),
+                cancellationToken)
+            : Task.FromResult<IReadOnlyList<IvaoAtc>>(Array.Empty<IvaoAtc>());
 
-        await Task.WhenAll(pilotsTask, atcTask, statsTask, supervisorsTask);
+        await Task.WhenAll(pilotsTask, atcTask, statsTask, supervisorsTask, pilotIdentitiesTask, atcIdentitiesTask);
 
         var pilots = pilotsTask.Result;
         var atc = atcTask.Result;
+        var pilotIdentities = pilotIdentitiesTask.Result.ToDictionary(pilot => pilot.Id);
+        var atcIdentities = atcIdentitiesTask.Result.ToDictionary(station => station.Id);
+        foreach (var pilot in pilots)
+        {
+            if (pilotIdentities.TryGetValue(pilot.Id, out var identity))
+            {
+                pilot.ApplyMember(identity);
+            }
+        }
+
+        foreach (var station in atc)
+        {
+            if (atcIdentities.TryGetValue(station.Id, out var identity))
+            {
+                station.ApplyMember(identity);
+            }
+        }
+
         var stats = statsTask.Result ?? CreateFallbackStats(pilots, atc);
 
         if (pilots.Count == 0 && atc.Count == 0 && statsTask.Result is null)
@@ -207,22 +252,12 @@ public sealed class TrackerService : IDisposable
         List<string> warnings,
         CancellationToken cancellationToken)
     {
-        if (IncludeIdentity)
-        {
-            var pilots = await FetchAsync(
-                () => _api.GetPilotsAsync(cancellationToken),
-                (IReadOnlyList<IvaoPilot>)Array.Empty<IvaoPilot>(),
-                warnings,
-                "Pilots",
-                cancellationToken);
-            return pilots.ToList();
-        }
-
-        var summaries = await FetchAsync(
+        var summaries = await FetchCachedAsync(
             () => _api.GetPilotSummariesAsync(cancellationToken),
             (IReadOnlyList<IvaoPilotSummary>)Array.Empty<IvaoPilotSummary>(),
             warnings,
             "Pilots",
+            _interval,
             cancellationToken);
         return summaries.Select(pilot => pilot.ToPilot()).ToList();
     }
@@ -231,36 +266,45 @@ public sealed class TrackerService : IDisposable
         List<string> warnings,
         CancellationToken cancellationToken)
     {
-        if (IncludeIdentity)
-        {
-            var atc = await FetchAsync(
-                () => _api.GetAtcsAsync(cancellationToken),
-                (IReadOnlyList<IvaoAtc>)Array.Empty<IvaoAtc>(),
-                warnings,
-                "ATC",
-                cancellationToken);
-            return atc.ToList();
-        }
-
-        var summaries = await FetchAsync(
+        var summaries = await FetchCachedAsync(
             () => _api.GetAtcSummariesAsync(cancellationToken),
             (IReadOnlyList<IvaoAtcSummary>)Array.Empty<IvaoAtcSummary>(),
             warnings,
             "ATC",
+            _interval,
             cancellationToken);
         return summaries.Select(station => station.ToAtc()).ToList();
     }
 
-    private static async Task<T> FetchAsync<T>(
+    private async Task<T> FetchCachedAsync<T>(
         Func<Task<T>> fetch,
         T fallback,
         List<string> warnings,
         string label,
+        TimeSpan cacheDuration,
         CancellationToken cancellationToken)
     {
+        CachedFeed? cached;
+        lock (_cacheGate)
+        {
+            _feedCache.TryGetValue(label, out cached);
+        }
+
+        if (cached is not null && _timeProvider.GetUtcNow() < cached.NextAttempt)
+        {
+            AddWarning(warnings, cached.Warning);
+            return (T)cached.Value!;
+        }
+
         try
         {
-            return await fetch();
+            var value = await fetch();
+            lock (_cacheGate)
+            {
+                _feedCache[label] = new CachedFeed(value, _timeProvider.GetUtcNow() + cacheDuration, null, 0);
+            }
+
+            return value;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -268,20 +312,38 @@ public sealed class TrackerService : IDisposable
         }
         catch (IvaoApiException ex) when (ex.IsUnauthorized)
         {
-            return fallback;
-        }
-        catch (Exception ex)
-        {
-            // Tracker feeds are fetched concurrently, so more than one can
-            // report a failure at the same moment. Guard the shared warning list.
-            lock (warnings)
+            lock (_cacheGate)
             {
-                warnings.Add($"{label}: {ex.Message}");
+                _feedCache[label] = new CachedFeed(fallback, _timeProvider.GetUtcNow() + TimeSpan.FromMinutes(10), null, 0);
             }
 
             return fallback;
         }
+        catch (Exception ex)
+        {
+            var failures = Math.Min((cached?.Failures ?? 0) + 1, 5);
+            var retryDelay = TimeSpan.FromMinutes(Math.Min(Math.Pow(2, failures - 1), 10));
+            var warning = $"{label}: {ex.Message} Next attempt at {(_timeProvider.GetUtcNow() + retryDelay).ToLocalTime():HH:mm:ss}; showing last available data.";
+            var value = cached is null ? fallback : (T)cached.Value!;
+            lock (_cacheGate)
+            {
+                _feedCache[label] = new CachedFeed(value, _timeProvider.GetUtcNow() + retryDelay, warning, failures);
+            }
+
+            AddWarning(warnings, warning);
+            return value;
+        }
     }
 
+    private static void AddWarning(List<string> warnings, string? warning)
+    {
+        if (warning is null) return;
+        lock (warnings)
+        {
+            warnings.Add(warning);
+        }
+    }
+
+    private sealed record CachedFeed(object? Value, DateTimeOffset NextAttempt, string? Warning, int Failures);
 }
 

@@ -104,9 +104,12 @@ public sealed class TrackerServiceTests
         Assert.Equal("Niels de Vries", published.Atc[0].MemberName);
         Assert.Equal("Aurora", published.Atc[0].SoftwareText);
 
-        Assert.Equal(4, handler.Requests.Count);
-        Assert.DoesNotContain(handler.Requests, request => request.Path == PilotsPath);
-        Assert.DoesNotContain(handler.Requests, request => request.Path == AtcPath);
+        Assert.NotNull(published.Pilots[0].LastTrack);
+        Assert.NotNull(published.Pilots[0].FlightPlan);
+        Assert.NotNull(published.Atc[0].Position);
+        Assert.Equal(6, handler.Requests.Count);
+        Assert.Contains(handler.Requests, request => request.Path == PilotsPath);
+        Assert.Contains(handler.Requests, request => request.Path == AtcPath);
         Assert.Contains(handler.Requests, request => request.Path == PilotIdentityPath);
         Assert.Contains(handler.Requests, request => request.Path == AtcIdentityPath);
         Assert.Contains(handler.Requests, request => request.Path == SupervisorsPath);
@@ -142,6 +145,99 @@ public sealed class TrackerServiceTests
         Assert.Equal(2, published.PilotCount);
         Assert.Equal("Ana Silva", published.Pilots[0].MemberName);
         Assert.False(published.IsPartial);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ReusesOptionalFeedsUntilTheirCacheExpires()
+    {
+        var clock = new ManualTimeProvider();
+        var handler = new StubHttpMessageHandler(request => TrackerResponse(request.RequestUri!.AbsolutePath));
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+        using var service = new TrackerService(api, timeProvider: clock) { IncludeIdentity = true };
+
+        await service.RefreshAsync();
+        clock.Advance(TimeSpan.FromSeconds(30));
+        await service.RefreshAsync();
+
+        Assert.Equal(9, handler.Requests.Count);
+        Assert.Equal("Ana Silva", service.LastSnapshot!.Pilots[0].MemberName);
+        Assert.Equal(2, service.LastSnapshot.SupervisorCount);
+        Assert.Single(handler.Requests, request => request.Path == PilotIdentityPath);
+        Assert.Single(handler.Requests, request => request.Path == AtcIdentityPath);
+        Assert.Single(handler.Requests, request => request.Path == SupervisorsPath);
+
+        clock.Advance(TimeSpan.FromSeconds(90));
+        await service.RefreshAsync();
+
+        Assert.Equal(15, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_BackToBackCallsDoNotRepeatAnyFeed()
+    {
+        var clock = new ManualTimeProvider();
+        var handler = new StubHttpMessageHandler(request => TrackerResponse(request.RequestUri!.AbsolutePath));
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+        using var service = new TrackerService(api, timeProvider: clock) { IncludeIdentity = true };
+
+        await Task.WhenAll(service.RefreshAsync(), service.RefreshAsync());
+
+        Assert.Equal(6, handler.Requests.Count);
+        Assert.NotNull(service.LastSnapshot!.Pilots[0].LastTrack);
+        Assert.NotNull(service.LastSnapshot.Atc[0].Position);
+    }
+
+    [Theory]
+    [InlineData(PilotsPath, "Pilots:")]
+    [InlineData(AtcPath, "ATC:")]
+    [InlineData(StatsPath, "Statistics:")]
+    [InlineData(PilotIdentityPath, "Member names:")]
+    [InlineData(AtcIdentityPath, "Controller names:")]
+    [InlineData(SupervisorsPath, "Supervisors:")]
+    public async Task RefreshAsync_BacksOffEveryFailingFeedAndRetainsItsLastData(string failedPath, string warningPrefix)
+    {
+        var clock = new ManualTimeProvider();
+        var fail = false;
+        var handler = new StubHttpMessageHandler(request =>
+            fail && request.RequestUri!.AbsolutePath == failedPath
+                ? throw new HttpRequestException("An error occurred while sending the request.")
+                : TrackerResponse(request.RequestUri!.AbsolutePath));
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+        using var service = new TrackerService(api, timeProvider: clock) { IncludeIdentity = true };
+
+        await service.RefreshAsync();
+        fail = true;
+        clock.Advance(TimeSpan.FromMinutes(2));
+        await service.RefreshAsync();
+        Assert.Equal(2, handler.Requests.Count(request => request.Path == failedPath));
+        Assert.Contains(service.LastSnapshot!.Warnings, warning => warning.StartsWith(warningPrefix, StringComparison.Ordinal));
+        Assert.Equal(2, service.LastSnapshot.PilotCount);
+        Assert.Equal(1, service.LastSnapshot.AtcCount);
+        Assert.Equal(2, service.LastSnapshot.SupervisorCount);
+        Assert.NotNull(service.LastSnapshot.Atc[0].Position);
+        Assert.Equal("Ana Silva", service.LastSnapshot.Pilots[0].MemberName);
+
+        clock.Advance(TimeSpan.FromSeconds(30));
+        await service.RefreshAsync();
+        Assert.Equal(2, handler.Requests.Count(request => request.Path == failedPath));
+        Assert.Contains(service.LastSnapshot!.Warnings, warning => warning.StartsWith(warningPrefix, StringComparison.Ordinal));
+
+        clock.Advance(TimeSpan.FromSeconds(30));
+        await service.RefreshAsync();
+        Assert.Equal(3, handler.Requests.Count(request => request.Path == failedPath));
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await service.RefreshAsync();
+        Assert.Equal(3, handler.Requests.Count(request => request.Path == failedPath));
+
+        fail = false;
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await service.RefreshAsync();
+        Assert.Equal(4, handler.Requests.Count(request => request.Path == failedPath));
+        Assert.DoesNotContain(service.LastSnapshot!.Warnings, warning => warning.StartsWith(warningPrefix, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -249,6 +345,27 @@ public sealed class TrackerServiceTests
     }
 
     [Fact]
+    public async Task Start_WithoutImmediateRefresh_DoesNotDuplicateExplicitRefresh()
+    {
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            PilotsPath => Json(Fixture("pilots-summary.json")),
+            AtcPath => Json(Fixture("atc-summary.json")),
+            StatsPath => Json(Fixture("stats.json")),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+        using var service = new TrackerService(api);
+
+        service.Start(refreshImmediately: false);
+        Assert.Empty(handler.Requests);
+        await service.RefreshAsync();
+
+        Assert.Equal(3, handler.Requests.Count);
+    }
+
+    [Fact]
     public void Constructor_ClampsRefreshIntervalToSafeRange()
     {
         using var httpClient = new HttpClient(new StubHttpMessageHandler(_ => Json("[]")));
@@ -269,6 +386,26 @@ public sealed class TrackerServiceTests
                 Origin = "https://test.origin"
             },
             httpClient);
+
+    private static HttpResponseMessage TrackerResponse(string path) => path switch
+    {
+        PilotsPath => Json(Fixture("pilots-summary.json")),
+        AtcPath => Json(Fixture("atc-summary.json")),
+        StatsPath => Json(Fixture("stats.json")),
+        PilotIdentityPath => Json(Fixture("pilots-identity.json")),
+        AtcIdentityPath => Json(Fixture("atc-identity.json")),
+        SupervisorsPath => Json(Fixture("supervisors.json")),
+        _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+    };
+
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan elapsed) => _now += elapsed;
+    }
 
     private static string Fixture(string name) =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name));

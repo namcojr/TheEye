@@ -621,7 +621,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _tracker.IncludeIdentity = _api.CanAuthenticate && IsSignedIn;
         _tracker.SnapshotUpdated += OnSnapshotUpdated;
         _tracker.RefreshFailed += OnRefreshFailed;
-        _tracker.Start();
+        _tracker.Start(refreshImmediately: false);
 
         // The recorded track of the selected flight is fetched on demand, because
         // only one aircraft is ever on screen. A station is never traced.
@@ -822,7 +822,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private async Task RefreshSelectionTracksAsync()
     {
-        if (_tracks is not { } tracks)
+        if (_tracks is not { } tracks || !IsSignedIn)
         {
             // Nothing can fetch a track, so the map must stop waiting for one and
             // fall back to the flown part of the route.
@@ -929,7 +929,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private async Task RefreshSelectionFlightPlanAsync()
     {
-        if (_flightPlans is not { } flightPlans || Map.SelectedPilot is not { } pilot)
+        if (!IsSignedIn || _flightPlans is not { } flightPlans || Map.SelectedPilot is not { } pilot)
         {
             return;
         }

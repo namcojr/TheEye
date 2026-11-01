@@ -230,6 +230,35 @@ card instead of leaving it empty: 401/403 points at the sign-in (or a personal A
 key), and any other failure prints the reason.
 
 
+## IVAO REQUEST POLICY (2026-11-01)
+==================================
+
+Pilot and ATC summaries remain the live traffic source. In particular, the ATC
+summary supplies airport positions and sector geometry missing from the full ATC
+feed. Full pilot/controller feeds enrich those records with member details; they
+are not interchangeable with summaries.
+
+- Successful summaries and statistics are reused for the configured refresh
+  interval, including overlapping or repeated manual refreshes.
+- Signed-in member feeds and supervisors are cached for two minutes. Signed-out
+  runs do not request these feeds or authenticated selection data.
+- Startup/settings changes issue one initial refresh. Automatic polling waits a
+  full interval after a batch finishes, rather than catching up missed ticks.
+- Each failing tracker endpoint backs off for 1, 2, 4, 8, then 10 minutes. Last
+  successful data is retained and a warning indicates its next attempt. A 401
+  is cached quietly for ten minutes.
+- HTTP 429 pauses subsequent calls through the shared API client until the
+  server's Retry-After deadline (one minute when the header is absent).
+- Selected-session details reuse the live member record when present. A selected
+  aircraft still needs its recorded history and expanded flight plan: neither is
+  included in the summaries. Those requests remain on demand and cached.
+
+The published Whazzup limit of one download per 15 seconds applies to the separate
+`/v2/tracker/whazzup` endpoint, which this application does not use. This does not
+establish a general tracker quota or certify application approval; those must be
+confirmed with IVAO. Transport errors alone are not evidence of rate limiting.
+
+
 ## RECORDED TRAIL
 ================
 

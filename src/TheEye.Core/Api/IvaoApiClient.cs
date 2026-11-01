@@ -16,6 +16,8 @@ public sealed class IvaoApiClient : IDisposable
     private readonly HttpClient _http;
     private readonly bool _ownsHttpClient;
     private readonly IvaoApiOptions _options;
+    private readonly System.Threading.Lock _rateLimitGate = new();
+    private DateTimeOffset _rateLimitUntil;
 
     public IvaoApiClient(IvaoApiOptions? options = null, HttpClient? httpClient = null)
     {
@@ -180,6 +182,15 @@ public sealed class IvaoApiClient : IDisposable
 
     private async Task<JsonDocument> GetDocumentAsync(string path, CancellationToken cancellationToken)
     {
+        lock (_rateLimitGate)
+        {
+            if (DateTimeOffset.UtcNow < _rateLimitUntil)
+            {
+                throw new IvaoApiException(429, string.Empty,
+                    $"IVAO API requests are paused until {_rateLimitUntil.ToLocalTime():HH:mm:ss} after rate limiting; skipped {path}.");
+            }
+        }
+
         var token = await ResolveAccessTokenAsync(false, cancellationToken);
         var response = await SendAsync(path, token, cancellationToken);
 
@@ -231,7 +242,21 @@ public sealed class IvaoApiClient : IDisposable
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         }
 
-        return await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            var retryAfter = response.Headers.RetryAfter;
+            var until = retryAfter?.Date ?? DateTimeOffset.UtcNow + (retryAfter?.Delta ?? TimeSpan.FromMinutes(1));
+            lock (_rateLimitGate)
+            {
+                if (until > _rateLimitUntil)
+                {
+                    _rateLimitUntil = until;
+                }
+            }
+        }
+
+        return response;
     }
 
     private Uri BuildUri(string path)
