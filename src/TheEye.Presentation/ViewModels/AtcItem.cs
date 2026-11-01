@@ -101,7 +101,7 @@ public sealed class AtcItem : ObservableObject
     public bool HasMemberName => MemberName.Length > 0;
 
     /// <summary>The name for a cell that would look broken when left empty.</summary>
-    public string MemberText => HasMemberName ? MemberName : "—";
+    public string MemberText => HasMemberName ? MemberName : MissingProfileValue;
 
     /// <summary>
     /// True when the controller is on the friend list of the settings. The shell
@@ -163,7 +163,7 @@ public sealed class AtcItem : ObservableObject
                 id = _atc.UserId;
             }
 
-            return id > 0 ? id.ToString("0") : "—";
+            return id > 0 ? id.ToString("0") : MissingProfileValue;
         }
     }
 
@@ -173,17 +173,19 @@ public sealed class AtcItem : ObservableObject
     /// with a badge slot would look like a failure rather than an answer that has
     /// not arrived.
     /// </summary>
-    public bool HasProfile => _detail?.User is not null;
+    public bool HasProfile => _detail?.User is not null || IsUnauthorized(_detailStatus);
+
+    private string MissingProfileValue => IsUnauthorized(_detailStatus) ? "-" : "—";
 
     /// <summary>
     /// The name of the card header. The record of the session may leave the name
     /// out, so the one the traffic list already has is printed instead of the
     /// placeholder the roster record would produce.
     /// </summary>
-    public string ProfileName => MemberName is { Length: > 0 } name ? name : "—";
+    public string ProfileName => MemberName is { Length: > 0 } name ? name : MissingProfileValue;
 
     /// <summary>The division the controller belongs to, spelled out from its code.</summary>
-    public string HomeText => _detail?.User?.DivisionName is { Length: > 0 } name ? name : "—";
+    public string HomeText => _detail?.User?.DivisionName is { Length: > 0 } name ? name : MissingProfileValue;
 
     /// <summary>Controller rating in short form ("AS3"), the level IVAO grants.</summary>
     public string RatingText
@@ -201,12 +203,12 @@ public sealed class AtcItem : ObservableObject
                 return rating.AtcRating.Name;
             }
 
-            return !string.IsNullOrWhiteSpace(rating?.PilotRating?.ShortName) ? rating.PilotRating.ShortName : "—";
+            return !string.IsNullOrWhiteSpace(rating?.PilotRating?.ShortName) ? rating.PilotRating.ShortName : MissingProfileValue;
         }
     }
 
     /// <summary>The rating spelled out ("Advanced ATC Trainee"), shown on hover.</summary>
-    public string RatingName => _detail?.User?.Rating?.AtcRating?.Name is { Length: > 0 } name ? name : "—";
+    public string RatingName => _detail?.User?.Rating?.AtcRating?.Name is { Length: > 0 } name ? name : MissingProfileValue;
 
     /// <summary>
     /// "Aurora/mac 1.0.38b", the client the controller is connected with. The
@@ -267,8 +269,7 @@ public sealed class AtcItem : ObservableObject
 
             return _detailStatus switch
             {
-                401 or 403 =>
-                    "IVAO refused the controller details (401 not authenticated). Sign in with IVAO in Settings, or add a personal API key, to see who is on the frequency.",
+                401 or 403 => string.Empty,
                 404 => "IVAO has no record of this session (404) — the controller may have just disconnected.",
                 { } status => $"IVAO answered {status} for this session, so the controller details are unavailable.",
                 _ when !string.IsNullOrWhiteSpace(_detailError) =>
@@ -287,6 +288,8 @@ public sealed class AtcItem : ObservableObject
     /// both shells.
     /// </summary>
     public string AccentColor { get; private set; } = "#808080";
+
+    private static bool IsUnauthorized(int? status) => status is 401 or 403;
 
     /// <summary>The same colour at a quarter opacity, for the pill behind the facility name.</summary>
     public string AccentSoftColor { get; private set; } = "#00000000";

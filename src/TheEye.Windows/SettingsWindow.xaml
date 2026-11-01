@@ -156,11 +156,11 @@
                     <TextBlock Text="AIRCRAFT GLYPH SIZE" Style="{StaticResource DetailLabel}" Margin="0,12,0,5" />
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Right" Text="{Binding AircraftGlyphSizeLabel}" Margin="12,0,0,0" VerticalAlignment="Center" />
-                        <Slider Minimum="20" Maximum="30" TickFrequency="1" IsSnapToTickEnabled="True"
+                        <Slider Minimum="20" Maximum="40" TickFrequency="1" IsSnapToTickEnabled="True"
                                 Value="{Binding AircraftGlyphSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                 AutomationProperties.Name="Aircraft glyph size" />
                     </DockPanel>
-                    <TextBlock Style="{StaticResource MutedText}" Text="Small: 20 px. Large: 30 px. Selected aircraft are 3 px larger." Margin="0,5,0,9" />
+                    <TextBlock Style="{StaticResource MutedText}" Text="Small: 20 px. Large: 40 px. Selected aircraft are 3 px larger." Margin="0,5,0,9" />
                     <StackPanel Margin="0,9,0,0">
                         <CheckBox Content="Show pilots" IsChecked="{Binding Draft.ShowPilots}" Margin="0,0,0,9" />
                         <CheckBox Content="Show ATC sectors, labels and stations" IsChecked="{Binding Draft.ShowAtc}" Margin="0,0,0,9" />
@@ -180,17 +180,11 @@
                     <Border Style="{StaticResource Divider}" Margin="0,18,0,18" />
 
                     <TextBlock Text="CONNECTION" Style="{StaticResource SectionTitle}" />
-                    <TextBlock Text="IVAO API KEY" Style="{StaticResource DetailLabel}" Margin="0,12,0,5" />
-                    <TextBox Text="{Binding Draft.ApiKey, UpdateSourceTrigger=PropertyChanged}"
-                             AutomationProperties.Name="IVAO API key"
-                             FontFamily="{DynamicResource MonoFontFamily}" />
-                    <TextBlock Style="{StaticResource MutedText}" Margin="0,6,0,0" TextWrapping="Wrap"
-                               Text="Optional. Without a key the app reads the public tracker summary only. The recorded tracks behind the altitude-coloured trail are an authenticated endpoint: request your own consumer key on api.ivao.aero and paste it here to trace the selected flight or station." />
                     <Border Style="{StaticResource Divider}" Margin="0,18,0,0" />
 
                     <TextBlock Text="IVAO SIGN-IN" Style="{StaticResource SectionTitle}" Margin="0,18,0,0" />
                     <TextBlock Style="{StaticResource MutedText}" Margin="0,5,0,9" TextWrapping="Wrap"
-                               Text="Signing in authorises the app as you, which is how the recorded tracks and the per-session details become readable without a consumer key. Create an application on developers.ivao.aero, add the redirect URL below to its allowed URLs, then paste the client id and secret it gives you." />
+                               Text="Sign in to IVAO to access your account and authenticated session details. Create an application on developers.ivao.aero, add the redirect URL below to its allowed URLs, then paste the client id and secret it gives you." />
 
                     <TextBlock Text="CLIENT ID" Style="{StaticResource DetailLabel}" Margin="0,0,0,5" />
                     <TextBox Text="{Binding Draft.OAuthClientId, UpdateSourceTrigger=PropertyChanged}"

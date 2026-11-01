@@ -13,7 +13,6 @@ public sealed class SettingsStoreTests
 
         var settings = store.Load();
 
-        Assert.Equal(string.Empty, settings.ApiKey);
         Assert.Equal(TheEyeThemes.Dark, settings.Theme);
         Assert.Equal(30, settings.RefreshSeconds);
         Assert.Equal(21, settings.AircraftGlyphSize);
@@ -61,7 +60,6 @@ public sealed class SettingsStoreTests
         var store = new SettingsStore(temporary.FilePath("settings.json"));
         var settings = new TheEyeSettings
         {
-            ApiKey = "  test-key  ",
             Theme = "forest",
             RefreshSeconds = 120,
             AircraftGlyphSize = 30,
@@ -76,7 +74,6 @@ public sealed class SettingsStoreTests
         store.Save(settings);
         var loaded = store.Load();
 
-        Assert.Equal("test-key", loaded.ApiKey);
         Assert.Equal(TheEyeThemes.Forest, loaded.Theme);
         Assert.Equal(120, loaded.RefreshSeconds);
         Assert.Equal(30, loaded.AircraftGlyphSize);
@@ -89,7 +86,7 @@ public sealed class SettingsStoreTests
 
         var json = File.ReadAllText(store.FilePath);
         Assert.Contains("\"theme\": \"Forest\"", json);
-        Assert.Contains("\"apiKey\": \"test-key\"", json);
+        Assert.DoesNotContain("apiKey", json, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"centerOnMapClick\": false", json);
     }
 
@@ -100,7 +97,7 @@ public sealed class SettingsStoreTests
         var path = temporary.FilePath("settings.json");
         File.WriteAllText(path, """
             {
-              "apiKey": "",
+              "apiKey": "legacy-key",
               "theme": "light",
               "refreshSeconds": 60,
               "showPilots": true,
@@ -116,6 +113,8 @@ public sealed class SettingsStoreTests
 
         Assert.True(settings.CenterOnMapClick);
         Assert.Equal(21, settings.AircraftGlyphSize);
+        var savedJson = System.Text.Json.JsonSerializer.Serialize(settings);
+        Assert.DoesNotContain("apiKey", savedJson, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -155,7 +154,7 @@ public sealed class SettingsStoreTests
         var path = temporary.FilePath("settings.json");
         File.WriteAllText(path, """
             {
-              "apiKey": "  abc  ",
+              "apiKey": "  legacy-key  ",
               "theme": "neon",
               "refreshSeconds": 2,
               "mapLatitude": 99,
@@ -167,7 +166,6 @@ public sealed class SettingsStoreTests
 
         var settings = store.Load();
 
-        Assert.Equal("abc", settings.ApiKey);
         Assert.Equal(TheEyeThemes.Dark, settings.Theme);
         Assert.Equal(30, settings.RefreshSeconds);
         Assert.Equal(45, settings.MapLatitude);
@@ -198,7 +196,6 @@ public sealed class SettingsStoreTests
         var store = new SettingsStore(temporary.FilePath("settings.json"));
         var settings = new TheEyeSettings
         {
-            ApiKey = "  ",
             Theme = "LIGHT",
             RefreshSeconds = 5,
             MapLatitude = double.NaN,
@@ -208,7 +205,6 @@ public sealed class SettingsStoreTests
 
         store.Save(settings);
 
-        Assert.Equal(string.Empty, settings.ApiKey);
         Assert.Equal(TheEyeThemes.Light, settings.Theme);
         Assert.Equal(30, settings.RefreshSeconds);
         Assert.Equal(45, settings.MapLatitude);
@@ -248,11 +244,10 @@ public sealed class SettingsStoreTests
     }
 
     [Fact]
-    public void ClearOAuthTokens_DropsTheSignInOnly()
+    public void ClearOAuthTokens_DropsTheSignIn()
     {
         var settings = new TheEyeSettings
         {
-            ApiKey = "test-key",
             OAuthClientId = "client-id",
             OAuthAccessToken = "access",
             OAuthRefreshToken = "refresh",
@@ -266,7 +261,6 @@ public sealed class SettingsStoreTests
         Assert.Null(settings.GetOAuthExpiry());
         Assert.Equal(string.Empty, settings.OAuthAccount);
         Assert.Equal("client-id", settings.OAuthClientId);
-        Assert.Equal("test-key", settings.ApiKey);
     }
 
     [Fact]

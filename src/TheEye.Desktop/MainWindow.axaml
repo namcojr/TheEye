@@ -792,16 +792,6 @@
                                           ToolTip.Tip="Show or hide controllers, sectors and stations" />
                         </StackPanel>
 
-                        <Border Classes="map-overlay" HorizontalAlignment="Right"
-                                VerticalAlignment="Top" Margin="14">
-                            <StackPanel>
-                                <TextBlock Text="{Binding ConnectionDescription}" Classes="muted"
-                                           FontSize="10" />
-                                <TextBlock Text="{Binding RefreshDescription}" Classes="muted"
-                                           FontSize="10" Margin="0,1,0,0" />
-                            </StackPanel>
-                        </Border>
-
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,14">
                             <Border Background="{DynamicResource PanelBackgroundBrush}"
                                     BorderBrush="{DynamicResource ErrorBrush}" BorderThickness="1"

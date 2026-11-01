@@ -7,9 +7,9 @@ using TheEye.Core.Models;
 namespace TheEye.Core.Api;
 
 /// <summary>
-/// Thin typed client for the IVAO tracker API. The public summary endpoints are
-/// queried with an Origin header (the same approach as IVAO WebEye); a consumer
-/// key is added only when the user has configured one.
+/// Thin typed client for the IVAO tracker API. Public summary endpoints are
+/// queried with an Origin header; authenticated feeds use the signed-in member's
+/// access token.
 /// </summary>
 public sealed class IvaoApiClient : IDisposable
 {
@@ -25,15 +25,10 @@ public sealed class IvaoApiClient : IDisposable
         _http.Timeout = _options.Timeout;
     }
 
-    public bool HasApiKey => !string.IsNullOrWhiteSpace(_options.ApiKey);
-
     /// <summary>
-    /// True when the client carries a credential the identity feeds accept: a
-    /// consumer key, or a token source that may hand out a signed-in member's
-    /// token. Without one those feeds answer 401, so a caller that only needs
-    /// the public summaries can skip them entirely.
+    /// True when the client has a token source for the signed-in member.
     /// </summary>
-    public bool CanAuthenticate => HasApiKey || _options.AccessTokenSource is not null;
+    public bool CanAuthenticate => _options.AccessTokenSource is not null;
 
     public string BaseAddress => _options.BaseAddress;
 
@@ -47,7 +42,7 @@ public sealed class IvaoApiClient : IDisposable
     /// The full pilot list (<c>/v2/tracker/now/pilots</c>): the same sessions as
     /// the summary, with the member behind every callsign — name, division,
     /// ratings — plus the software and simulator the pilot is connected with.
-    /// Authenticated, so a caller without a credential gets a 401.
+    /// Authenticated, so a caller without a sign-in gets a 401.
     /// </summary>
     public Task<IReadOnlyList<IvaoPilot>> GetPilotsAsync(CancellationToken cancellationToken = default) =>
         GetListAsync<IvaoPilot>("v2/tracker/now/pilots", cancellationToken);
@@ -98,8 +93,7 @@ public sealed class IvaoApiClient : IDisposable
     /// id carried by the tracker summaries (<c>id</c>, not <c>userId</c>). The
     /// feed is authenticated: IVAO answers 401 <c>not_authenticated</c> unless
     /// the request carries an IVAO login token, which is what WebEye sends after
-    /// its OAuth sign-in, or a personal consumer key. Callers must cope with an
-    /// unauthorised response.
+    /// its OAuth sign-in. Callers must cope with an unauthorised response.
     /// </summary>
     public Task<IReadOnlyList<IvaoPilotTrack>> GetSessionTracksAsync(
         long sessionId,
@@ -110,8 +104,7 @@ public sealed class IvaoApiClient : IDisposable
     /// The record of a single session: the member behind the callsign, the
     /// division they fly for, their ratings and the software they are connected
     /// with. Like the tracks feed this endpoint is authenticated, so a caller
-    /// without an IVAO sign-in or a consumer key gets a 401 and the card says so
-    /// rather than showing half an identity.
+    /// without an IVAO sign-in gets a 401 and the card shows unavailable values.
     /// </summary>
     public Task<IvaoSessionDetail?> GetSessionAsync(
         long sessionId,
@@ -200,14 +193,6 @@ public sealed class IvaoApiClient : IDisposable
             token = await ResolveAccessTokenAsync(true, cancellationToken);
             response = await SendAsync(path, token, cancellationToken);
 
-            if (response.StatusCode == HttpStatusCode.Unauthorized && HasApiKey)
-            {
-                // The sign-in may simply not carry the scope this feed needs,
-                // while the consumer key does: try the other credential once.
-                response.Dispose();
-                token = null;
-                response = await SendAsync(path, null, cancellationToken);
-            }
         }
 
         using (response)
@@ -242,14 +227,8 @@ public sealed class IvaoApiClient : IDisposable
 
         if (!string.IsNullOrWhiteSpace(accessToken))
         {
-            // The signed-in member's token is what WebEye sends, and the only
-            // credential the recorded-tracks feed accepts besides a consumer key.
+            // The signed-in member's token is what WebEye sends.
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        }
-        else if (HasApiKey)
-        {
-            // The IVAO API expects the consumer key in the lowercase apiKey header.
-            request.Headers.TryAddWithoutValidation("apiKey", _options.ApiKey);
         }
 
         return await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);

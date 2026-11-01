@@ -90,7 +90,7 @@ public sealed class SessionTrackStoreTests
     {
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)
         {
-            Content = new StringContent("consumer key required")
+            Content = new StringContent("authentication required")
         });
         using var httpClient = new HttpClient(handler);
         using var api = CreateApi(httpClient);
@@ -152,8 +152,7 @@ public sealed class SessionTrackStoreTests
             new IvaoApiOptions
             {
                 BaseAddress = "https://test.local",
-                Origin = "https://test.origin",
-                ApiKey = "secret"
+                Origin = "https://test.origin"
             },
             httpClient);
 }

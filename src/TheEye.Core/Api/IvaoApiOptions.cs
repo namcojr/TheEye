@@ -10,15 +10,9 @@ public sealed class IvaoApiOptions
     public string Origin { get; set; } = DefaultOrigin;
 
     /// <summary>
-    /// IVAO consumer key. The public summary endpoints work without it; full
-    /// pilot/ATC detail and filed flight-plan endpoints require it.
-    /// </summary>
-    public string? ApiKey { get; set; }
-
-    /// <summary>
     /// The IVAO sign-in of the member. When it yields a token the client sends
-    /// it as <c>Authorization: Bearer</c> (the credential WebEye uses for the
-    /// recorded tracks) and leaves the consumer key alone.
+    /// it as <c>Authorization: Bearer</c>, the credential WebEye uses for
+    /// authenticated feeds.
     /// </summary>
     public IIvaoAccessTokenSource? AccessTokenSource { get; set; }
 
@@ -28,7 +22,6 @@ public sealed class IvaoApiOptions
     {
         BaseAddress = BaseAddress,
         Origin = Origin,
-        ApiKey = ApiKey,
         AccessTokenSource = AccessTokenSource,
         Timeout = Timeout
     };

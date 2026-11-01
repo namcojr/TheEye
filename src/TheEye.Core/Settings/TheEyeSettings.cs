@@ -60,16 +60,14 @@ public static class AircraftHighlightColors
 public sealed class TheEyeSettings
 {
     public const int MinAircraftGlyphSize = 20;
-    public const int MaxAircraftGlyphSize = 30;
-    public const int DefaultAircraftGlyphSize = 21;
+    public const int MaxAircraftGlyphSize = 40;
+    public const int DefaultAircraftGlyphSize = 25;
 
     public int AircraftGlyphSize { get; set; } = DefaultAircraftGlyphSize;
 
-    public string ApiKey { get; set; } = string.Empty;
-
     /// <summary>
     /// Client id of the IVAO application that signs the member in. Empty when
-    /// the user works with a consumer key only.
+    /// no application has been configured.
     /// </summary>
     public string OAuthClientId { get; set; } = string.Empty;
 
@@ -83,9 +81,8 @@ public sealed class TheEyeSettings
     public string OAuthScopes { get; set; } = IvaoOAuthOptions.DefaultScopes;
 
     /// <summary>
-    /// The sign-in itself. Tokens sit in the same file as the consumer key:
-    /// both are readable by the Windows account that runs the app, which is the
-    /// same trust boundary the API key has always had.
+    /// The sign-in itself. Tokens are readable by the Windows account that runs
+    /// the app.
     /// </summary>
     public string OAuthAccessToken { get; set; } = string.Empty;
 
@@ -227,7 +224,6 @@ public sealed class TheEyeSettings
 
     public TheEyeSettings Clone() => new()
     {
-        ApiKey = ApiKey,
         OAuthClientId = OAuthClientId,
         OAuthClientSecret = OAuthClientSecret,
         OAuthRedirectUri = OAuthRedirectUri,
@@ -252,7 +248,6 @@ public sealed class TheEyeSettings
 
     public void CopyFrom(TheEyeSettings other)
     {
-        ApiKey = other.ApiKey;
         OAuthClientId = other.OAuthClientId;
         OAuthClientSecret = other.OAuthClientSecret;
         OAuthRedirectUri = other.OAuthRedirectUri;
@@ -277,7 +272,6 @@ public sealed class TheEyeSettings
 
     public void Normalize()
     {
-        ApiKey = ApiKey?.Trim() ?? string.Empty;
         OAuthClientId = OAuthClientId?.Trim() ?? string.Empty;
         OAuthClientSecret = OAuthClientSecret?.Trim() ?? string.Empty;
         OAuthRedirectUri = string.IsNullOrWhiteSpace(OAuthRedirectUri)

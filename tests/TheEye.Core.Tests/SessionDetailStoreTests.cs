@@ -229,8 +229,7 @@ public sealed class SessionDetailStoreTests
             new IvaoApiOptions
             {
                 BaseAddress = "https://test.local",
-                Origin = "https://test.origin",
-                ApiKey = "secret"
+                Origin = "https://test.origin"
             },
             httpClient);
 }

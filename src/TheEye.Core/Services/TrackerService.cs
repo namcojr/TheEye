@@ -36,8 +36,8 @@ public sealed class TrackerService : IDisposable
     /// True when the authenticated identity feeds should be fetched alongside
     /// the public summaries: the member behind each callsign, the software they
     /// are connected with and the connected supervisors. Those feeds answer 401
-    /// without a credential, so the shell only switches this on once the user
-    /// has signed in or configured a consumer key.
+    /// without a sign-in, so the shell only switches this on once the user has
+    /// signed in.
     /// </summary>
     public bool IncludeIdentity { get; set; }
 
@@ -230,6 +230,10 @@ public sealed class TrackerService : IDisposable
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
+        }
+        catch (IvaoApiException ex) when (ex.IsUnauthorized)
+        {
+            return fallback;
         }
         catch (Exception ex)
         {

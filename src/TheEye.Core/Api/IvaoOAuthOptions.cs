@@ -3,7 +3,7 @@ namespace TheEye.Core.Api;
 /// <summary>
 /// Credentials of an application registered with IVAO, used for the
 /// authorisation-code sign-in that unlocks the authenticated feeds (recorded
-/// tracks, session details) without asking for a consumer key. Application
+/// tracks and session details. Application
 /// credentials are issued on https://developers.ivao.aero, and every
 /// application carries its own list of allowed redirect URLs, so
 /// <see cref="RedirectUri"/> has to be one of them.
@@ -20,8 +20,8 @@ public sealed class IvaoOAuthOptions
     /// <summary>
     /// The scopes WebEye asks for, plus the tracker scope that covers the
     /// recorded sessions. IVAO grants scopes per application: an application
-    /// that was only approved for a subset fails here and the trail notice says
-    /// so, which is why the value is editable in the settings.
+    /// that was only approved for a subset may not access authenticated feeds,
+    /// which is why the value is editable in the settings.
     /// </summary>
     public const string DefaultScopes = "openid profile tracker";
 

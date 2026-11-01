@@ -364,7 +364,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Explains why the selected flight or station is not traced from its
-    /// recorded track, e.g. because no API key is configured. The map keeps
+    /// recorded track, e.g. because the user is not signed in. The map keeps
     /// drawing the flown part of the filed route in the meantime.
     /// </summary>
     public string TrackNotice
@@ -444,8 +444,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _uniqueUsers24h, value);
     }
 
-    public bool HasApiKey => !string.IsNullOrWhiteSpace(_settings.ApiKey);
-
     /// <summary>True while an IVAO sign-in is in place, which is what the trail feed needs.</summary>
     public bool IsSignedIn => _session?.IsSignedIn ?? _settings.HasOAuthTokens;
 
@@ -453,9 +451,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ? string.IsNullOrWhiteSpace(_settings.OAuthAccount)
             ? "Signed in to IVAO"
             : $"Signed in to IVAO as {_settings.OAuthAccount}"
-        : HasApiKey
-            ? "Authenticated with a personal IVAO API key"
-            : "Public tracker summary (no sign-in, no flight trails)";
+        : "Public tracker summary (no sign-in, no flight trails)";
 
     public string RefreshDescription => $"Every {_settings.RefreshSeconds} seconds";
 
@@ -522,7 +518,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         updated.Normalize();
         var authChanged =
-            !string.Equals(_settings.ApiKey, updated.ApiKey, StringComparison.Ordinal) ||
             !string.Equals(_settings.OAuthClientId, updated.OAuthClientId, StringComparison.Ordinal) ||
             !string.Equals(_settings.OAuthClientSecret, updated.OAuthClientSecret, StringComparison.Ordinal) ||
             !string.Equals(_settings.OAuthRedirectUri, updated.OAuthRedirectUri, StringComparison.Ordinal) ||
@@ -550,7 +545,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RefreshFriendMarks();
         OnPropertyChanged(nameof(ShowPilots));
         OnPropertyChanged(nameof(ShowAtc));
-        OnPropertyChanged(nameof(HasApiKey));
         OnPropertyChanged(nameof(IsSignedIn));
         OnPropertyChanged(nameof(ConnectionDescription));
         OnPropertyChanged(nameof(RefreshDescription));
@@ -617,16 +611,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _api = new IvaoApiClient(new IvaoApiOptions
         {
-            ApiKey = string.IsNullOrWhiteSpace(_settings.ApiKey) ? null : _settings.ApiKey,
             AccessTokenSource = _session
         });
 
         _tracker = new TrackerService(_api, TimeSpan.FromSeconds(_settings.RefreshSeconds));
 
-        // The names, the divisions and the supervisor feed are authenticated, so
-        // the shell asks for them only while a credential is in place: a run
-        // without a sign-in or a key keeps the public summaries and an empty SUP
-        // list instead of collecting a 401 on every poll.
+        // The names, divisions and supervisor feed are authenticated, so a
+        // signed-out run keeps the public summaries without polling them.
         _tracker.IncludeIdentity = _api.CanAuthenticate && IsSignedIn;
         _tracker.SnapshotUpdated += OnSnapshotUpdated;
         _tracker.RefreshFailed += OnRefreshFailed;
@@ -961,18 +952,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Why the map is drawing the filed route instead of a recorded trail. The
     /// tracks feed is authenticated: IVAO answers 401 unless the request carries
-    /// an IVAO sign-in token (what WebEye sends) or a personal consumer key. An
-    /// unauthorised answer is named as such, because it is the one cause the
-    /// user can fix; a session without a track is reported apart.
+    /// an IVAO sign-in token (what WebEye sends). An unauthorised answer is
+    /// quiet; a session without a track is reported apart.
     /// </summary>
     private string DescribeMissingTrack(SessionTrackResult result) => result.StatusCode switch
     {
-        401 or 403 when IsSignedIn =>
-            "IVAO refused the recorded track of this session (401) even though you are signed in — the IVAO application was not approved for the tracker scope, so it cannot read recorded sessions.",
-        401 or 403 when HasApiKey =>
-            "IVAO refused the recorded track of this session (401) even with an API key configured — the tracks feed needs a sign-in or a valid consumer key.",
-        401 or 403 =>
-            "IVAO refused the recorded track request (401 not authenticated). Sign in with IVAO in Settings, or paste a personal IVAO API key: the map traces the part of the route already flown.",
+        401 or 403 => string.Empty,
         { } status =>
             $"IVAO answered {status} for the recorded track of this session, so the map traces the part of the route already flown.",
         null => "No recorded track for this session — the map shows the part of the route already flown."

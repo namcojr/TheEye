@@ -26,7 +26,7 @@ public sealed class TrackerServiceTests
             _ => new HttpResponseMessage(HttpStatusCode.NotFound)
         });
         using var httpClient = new HttpClient(handler);
-        using var api = CreateApi(httpClient, apiKey: "secret");
+        using var api = CreateApi(httpClient);
         using var service = new TrackerService(api);
         TrackerSnapshot? published = null;
         var updates = 0;
@@ -57,7 +57,7 @@ public sealed class TrackerServiceTests
         Assert.All(handler.Requests, request =>
         {
             Assert.Equal("https://test.origin", request.Origin);
-            Assert.Equal("secret", request.ApiKey);
+            Assert.Null(request.ApiKey);
         });
     }
 
@@ -111,7 +111,7 @@ public sealed class TrackerServiceTests
     }
 
     [Fact]
-    public async Task RefreshAsync_WhenSupervisorFeedIsRefused_KeepsTrafficAndWarns()
+    public async Task RefreshAsync_WhenSupervisorFeedIsUnauthorized_KeepsTrafficWithoutWarning()
     {
         var handler = new StubHttpMessageHandler(request => request.RequestUri!.AbsolutePath switch
         {
@@ -133,22 +133,21 @@ public sealed class TrackerServiceTests
 
         Assert.NotNull(published);
         Assert.Empty(published.Supervisors);
-        var warning = Assert.Single(published.Warnings);
-        Assert.StartsWith("Supervisors:", warning, StringComparison.Ordinal);
+        Assert.Empty(published.Warnings);
 
         // Only the list that failed is lost; the traffic and the member names
         // from the feeds that did answer are still published.
         Assert.Equal(2, published.PilotCount);
         Assert.Equal("Ana Silva", published.Pilots[0].MemberName);
-        Assert.True(published.IsPartial);
+        Assert.False(published.IsPartial);
     }
 
     [Fact]
-    public async Task RefreshAsync_OmitsApiKeyHeaderWhenNoKeyIsConfigured()
+    public async Task RefreshAsync_DoesNotSendAnApiKeyHeader()
     {
         var handler = new StubHttpMessageHandler(_ => Json(Fixture("pilots-summary.json")));
         using var httpClient = new HttpClient(handler);
-        using var api = CreateApi(httpClient, apiKey: null);
+        using var api = CreateApi(httpClient);
         using var service = new TrackerService(api);
 
         await service.RefreshAsync();
@@ -260,13 +259,12 @@ public sealed class TrackerServiceTests
         Assert.Equal(TimeSpan.FromSeconds(90), accepted.RefreshInterval);
     }
 
-    private static IvaoApiClient CreateApi(HttpClient httpClient, string? apiKey = "secret") =>
+    private static IvaoApiClient CreateApi(HttpClient httpClient) =>
         new(
             new IvaoApiOptions
             {
                 BaseAddress = "https://test.local",
-                Origin = "https://test.origin",
-                ApiKey = apiKey
+                Origin = "https://test.origin"
             },
             httpClient);
 

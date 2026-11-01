@@ -65,7 +65,8 @@ the public API.
         string path = url.Replace("https://api.ivao.aero", "");
         HttpClient client = new(handler, true);
 
-        client.DefaultRequestHeaders.Add("ApiKey", "GET_YOUR_OWN_KEY");
+        client.DefaultRequestHeaders.Authorization =
+          new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
         client.DefaultRequestHeaders.Add("Origin", "https://webeye.ivao.aero");
         client.DefaultRequestHeaders.Add("authority", "api.ivao.aero");
         client.DefaultRequestHeaders.Add("method", "GET");
@@ -148,9 +149,8 @@ retain their predefined whole-level steps, and the zoom limits are unchanged.
 ## IVAO SIGN-IN (implemented)
 ==========================
 
-Settings > IVAO sign-in authorises the app as the member, which is what unlocks the
-authenticated feeds (recorded tracks, per-session detail) without a consumer key.
-It also works for accounts that have no API key at all.
+Settings > IVAO sign-in authorises the app as the member, which is the only way to
+access authenticated feeds such as recorded tracks and per-session details.
 
 - Credentials: request an application on https://developers.ivao.aero (or by mail to
   web@ivao.aero). You get a client id and secret, and IVAO keeps a list of the
@@ -159,14 +159,13 @@ It also works for accounts that have no API key at all.
   nothing exposed to the network). Register that exact URL on the IVAO application,
   or type another registered URL in Settings.
 - Scopes: `openid profile tracker`. IVAO approves scopes per application: without
-  `tracker` the sign-in still works but the recorded tracks stay refused, and the
-  trail notice says exactly that. The scope string is editable in Settings.
+  `tracker` the sign-in still works, but unavailable authenticated values display
+  as `-` and unauthorized notices stay quiet. The scope string is editable in Settings.
 - Flow: authorisation code + PKCE (S256) to https://sso.ivao.aero/authorize, the code
   is exchanged at https://api.ivao.aero/v2/oauth/token, and the access token is
-  renewed with the refresh token. Both tokens are stored in settings.json next to the
-  consumer key (same trust boundary as the key always had).
-- Requests: a signed-in token is sent as `Authorization: Bearer` (what WebEye does);
-  the consumer key is the fallback, and it is also retried if IVAO refuses the token.
+  renewed with the refresh token. Tokens are stored in settings.json.
+- Requests: authenticated feeds use the signed-in token as `Authorization: Bearer`
+  (what WebEye does); there is no API-key fallback.
 - Verification: IVAO publishes a public test client in its OAuth samples repo
   (github.com/ivaoaero/OAuth-samples). Its redirect list includes
   http://localhost:8000/auth/callback, so the flow can be exercised locally; those

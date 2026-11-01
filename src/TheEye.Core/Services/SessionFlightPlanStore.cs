@@ -32,8 +32,8 @@ public sealed class SessionFlightPlanStore
     /// Returns the flight plan of <paramref name="sessionId"/>. The endpoint is
     /// authenticated like the other session feeds: 401 means the caller is not
     /// signed in, 404 that the session has no flight plan (an ATC position, or a
-    /// flight that just disconnected). Both are reported so the card can say
-    /// which one it hit, and both are cached for the same short window as a
+    /// flight that just disconnected). Both are retained so the card can show
+    /// the appropriate value, and both are cached for the same short window as a
     /// success so the answer is not requested again on every refresh.
     /// </summary>
     public Task<SessionFlightPlanResult> GetFlightPlanAsync(
@@ -54,7 +54,7 @@ public sealed class SessionFlightPlanStore
         }
     }
 
-    /// <summary>Forgets every cached flight plan, e.g. after the API key changed.</summary>
+    /// <summary>Forgets every cached flight plan.</summary>
     public void Clear()
     {
         lock (_gate)

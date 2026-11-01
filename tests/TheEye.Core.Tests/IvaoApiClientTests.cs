@@ -107,14 +107,14 @@ public sealed class IvaoApiClientTests
     public async Task GetSessionTracksAsync_ThrowsWhenTheResponseCarriesNoList()
     {
         using var httpClient = new HttpClient(new StubHttpMessageHandler(_ =>
-            StubHttpMessageHandler.Json("""{"message":"consumer key required"}""")));
+            StubHttpMessageHandler.Json("""{"message":"authentication required"}""")));
         using var api = CreateApi(httpClient);
 
         await Assert.ThrowsAsync<IvaoApiException>(() => api.GetSessionTracksAsync(4242));
     }
 
     [Fact]
-    public async Task GetSessionTracksAsync_AsksTheSessionEndpointAndSendsTheConsumerKey()
+    public async Task GetSessionTracksAsync_AsksTheSessionEndpointWithoutAnApiKey()
     {
         var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json(TrackArray));
         using var httpClient = new HttpClient(handler);
@@ -123,11 +123,11 @@ public sealed class IvaoApiClientTests
         await api.GetSessionTracksAsync(4242);
 
         Assert.Equal(TracksPath, Assert.Single(handler.Requests));
-        Assert.Equal("consumer-key", Assert.Single(handler.ApiKeys));
+        Assert.Equal(string.Empty, Assert.Single(handler.ApiKeys));
     }
 
     [Fact]
-    public async Task GetSessionTracksAsync_OmitsTheKeyHeaderWhenNoneIsConfigured()
+    public async Task GetSessionTracksAsync_OmitsTheApiKeyHeader()
     {
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
         using var httpClient = new HttpClient(handler);
@@ -137,7 +137,6 @@ public sealed class IvaoApiClientTests
 
         await Assert.ThrowsAsync<IvaoApiException>(() => api.GetSessionTracksAsync(4242));
 
-        Assert.False(api.HasApiKey);
         Assert.Equal(string.Empty, Assert.Single(handler.ApiKeys));
     }
 
@@ -151,14 +150,12 @@ public sealed class IvaoApiClientTests
             {
                 BaseAddress = "https://test.local",
                 Origin = "https://test.origin",
-                ApiKey = "consumer-key",
                 AccessTokenSource = new StubTokenSource("access-1")
             },
             httpClient);
 
         await api.GetSessionTracksAsync(4242);
 
-        // The sign-in wins over the consumer key: the token is what WebEye sends.
         Assert.Equal("Bearer access-1", Assert.Single(handler.Authorizations));
         Assert.Equal(string.Empty, Assert.Single(handler.ApiKeys));
     }
@@ -213,31 +210,6 @@ public sealed class IvaoApiClientTests
     }
 
     [Fact]
-    public async Task GetSessionTracksAsync_FallsBackToTheConsumerKeyWhenTheTokenIsRefused()
-    {
-        var handler = new StubHttpMessageHandler(request =>
-            string.IsNullOrEmpty(request.Headers.Authorization?.ToString())
-                ? StubHttpMessageHandler.Json(TrackArray)
-                : new HttpResponseMessage(HttpStatusCode.Unauthorized));
-        using var httpClient = new HttpClient(handler);
-        using var api = new IvaoApiClient(
-            new IvaoApiOptions
-            {
-                BaseAddress = "https://test.local",
-                Origin = "https://test.origin",
-                ApiKey = "consumer-key",
-                AccessTokenSource = new StubTokenSource("access-1")
-            },
-            httpClient);
-
-        var tracks = await api.GetSessionTracksAsync(4242);
-
-        Assert.Equal(2, tracks.Count);
-        Assert.Equal(["Bearer access-1", "Bearer access-1", string.Empty], handler.Authorizations.ToArray());
-        Assert.Equal(["", "", "consumer-key"], handler.ApiKeys.ToArray());
-    }
-
-    [Fact]
     public async Task GetSessionAsync_ReadsABareSessionObject()
     {
         using var httpClient = new HttpClient(new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json(SessionObject)));
@@ -269,7 +241,7 @@ public sealed class IvaoApiClientTests
     }
 
     [Fact]
-    public async Task GetSessionAsync_AsksTheSessionEndpointAndSendsTheConsumerKey()
+    public async Task GetSessionAsync_AsksTheSessionEndpointWithoutAnApiKey()
     {
         var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json(SessionObject));
         using var httpClient = new HttpClient(handler);
@@ -278,7 +250,7 @@ public sealed class IvaoApiClientTests
         await api.GetSessionAsync(4242);
 
         Assert.Equal(SessionPath, Assert.Single(handler.Requests));
-        Assert.Equal("consumer-key", Assert.Single(handler.ApiKeys));
+        Assert.Equal(string.Empty, Assert.Single(handler.ApiKeys));
     }
 
     [Fact]
@@ -314,7 +286,6 @@ public sealed class IvaoApiClientTests
             {
                 BaseAddress = "https://test.local",
                 Origin = "https://test.origin",
-                ApiKey = "consumer-key"
             },
             httpClient);
 

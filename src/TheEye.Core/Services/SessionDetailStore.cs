@@ -32,8 +32,8 @@ public sealed class SessionDetailStore
     /// <summary>
     /// Returns the record of <paramref name="sessionId"/>. Like the tracks feed
     /// this endpoint is authenticated: IVAO answers 401 unless the request
-    /// carries an IVAO session or a personal consumer key, so the refusal is
-    /// reported rather than hidden. A failure is cached for the same short
+    /// carries an IVAO sign-in, so the refusal is retained for the UI to show
+    /// unavailable values without repeating the request. A failure is cached for the same short
     /// window as a success, so a session IVAO will not describe is not requested
     /// again on every refresh.
     /// </summary>
@@ -55,7 +55,7 @@ public sealed class SessionDetailStore
         }
     }
 
-    /// <summary>Forgets every cached record, e.g. after the API key changed.</summary>
+    /// <summary>Forgets every cached record.</summary>
     public void Clear()
     {
         lock (_gate)

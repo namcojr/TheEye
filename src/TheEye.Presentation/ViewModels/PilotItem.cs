@@ -128,7 +128,7 @@ public sealed class PilotItem : ObservableObject
     public bool HasMemberName => MemberName.Length > 0;
 
     /// <summary>The name for a cell that would look broken when left empty.</summary>
-    public string MemberText => HasMemberName ? MemberName : "—";
+    public string MemberText => HasMemberName ? MemberName : MissingProfileValue;
 
     /// <summary>
     /// True when the member is on the friend list of the settings. The shell
@@ -207,38 +207,42 @@ public sealed class PilotItem : ObservableObject
     /// </summary>
     private IvaoFlightPlan? Plan => _flightPlan ?? _pilot.FlightPlan;
 
-    public string FlightRules => Plan?.FlightRules is { Length: > 0 } rules ? rules : "—";
+    public string FlightRules => Plan?.FlightRules is { Length: > 0 } rules ? rules : MissingFlightPlanValue;
 
-    public string FlightType => Plan?.FlightType is { Length: > 0 } type ? type : "—";
+    public string FlightType => Plan?.FlightType is { Length: > 0 } type ? type : MissingFlightPlanValue;
 
-    public string CruisingLevel => _flightPlan?.Level is { Length: > 0 } level ? level : "—";
+    public string CruisingLevel => _flightPlan?.Level is { Length: > 0 } level ? level : MissingFlightPlanValue;
 
-    public string CruisingSpeed => _flightPlan?.Speed is { Length: > 0 } speed ? speed : "—";
+    public string CruisingSpeed => _flightPlan?.Speed is { Length: > 0 } speed ? speed : MissingFlightPlanValue;
 
-    public string EstimatedEnroute => DurationText.FromSeconds(_flightPlan?.EetSeconds);
+    public string EstimatedEnroute => _flightPlan?.EetSeconds is { } eet
+        ? DurationText.FromSeconds(eet)
+        : MissingFlightPlanValue;
 
-    public string Endurance => DurationText.FromSeconds(_flightPlan?.EnduranceSeconds);
+    public string Endurance => _flightPlan?.EnduranceSeconds is { } endurance
+        ? DurationText.FromSeconds(endurance)
+        : MissingFlightPlanValue;
 
-    public string Alternate => Plan?.AlternateIcao ?? "—";
+    public string Alternate => Plan?.AlternateIcao ?? MissingFlightPlanValue;
 
-    public string Alternate2 => Plan?.Alternate2Icao ?? "—";
+    public string Alternate2 => Plan?.Alternate2Icao ?? MissingFlightPlanValue;
 
     /// <summary>The off-block time the flight was filed for, in UTC.</summary>
     public string FiledDepartureText => _flightPlan?.DepartureTimeUtc is { } time
         ? time.UtcDateTime.ToString("HH:mm") + "z"
-        : "—";
+        : MissingFlightPlanValue;
 
     /// <summary>When the aircraft actually left the blocks, in UTC.</summary>
     public string ActualDepartureText => _flightPlan?.ActualDepartureTimeUtc is { } time
         ? time.UtcDateTime.ToString("HH:mm") + "z"
-        : "—";
+        : MissingFlightPlanValue;
 
-    public string PeopleOnBoardText => _flightPlan?.PeopleOnBoard is { } people ? $"{people:N0}" : "—";
+    public string PeopleOnBoardText => _flightPlan?.PeopleOnBoard is { } people ? $"{people:N0}" : MissingFlightPlanValue;
 
-    public string EquipmentText => _flightPlan?.EquipmentText is { Length: > 0 } equipment ? equipment : "—";
+    public string EquipmentText => _flightPlan?.EquipmentText is { Length: > 0 } equipment ? equipment : MissingFlightPlanValue;
 
     /// <summary>The surveillance capabilities of the filing, e.g. "L B1 D1".</summary>
-    public string TransponderTypeText => _flightPlan?.TransponderText is { Length: > 0 } types ? types : "—";
+    public string TransponderTypeText => _flightPlan?.TransponderText is { Length: > 0 } types ? types : MissingFlightPlanValue;
 
     /// <summary>True once IVAO described the filing, which is what the detail rows need.</summary>
     public bool HasFlightPlanDetails => _flightPlan is not null;
@@ -281,7 +285,7 @@ public sealed class PilotItem : ObservableObject
                 id = _pilot.UserId;
             }
 
-            return id > 0 ? id.ToString("0") : "—";
+            return id > 0 ? id.ToString("0") : MissingProfileValue;
         }
     }
 
@@ -291,17 +295,21 @@ public sealed class PilotItem : ObservableObject
     /// blank header with a flag slot would look like a failure rather than an
     /// answer that has not arrived.
     /// </summary>
-    public bool HasProfile => _detail?.User is not null;
+    public bool HasProfile => _detail?.User is not null || IsUnauthorized(_detailStatus);
+
+    private string MissingProfileValue => IsUnauthorized(_detailStatus) ? "-" : "—";
+
+    private string MissingFlightPlanValue => IsUnauthorized(_flightPlanStatus) ? "-" : "—";
 
     /// <summary>
     /// The name of the card header. The record of the session may leave the name
     /// out, so the one the traffic list already has is printed instead of the
     /// placeholder the roster record would produce.
     /// </summary>
-    public string ProfileName => MemberName is { Length: > 0 } name ? name : "—";
+    public string ProfileName => MemberName is { Length: > 0 } name ? name : MissingProfileValue;
 
     /// <summary>The division the member flies for, spelled out from its ISO code.</summary>
-    public string HomeText => _detail?.User?.DivisionName is { Length: > 0 } name ? name : "—";
+    public string HomeText => _detail?.User?.DivisionName is { Length: > 0 } name ? name : MissingProfileValue;
 
     /// <summary>Pilot rating in short form ("FS3"), the level IVAO grants the member.</summary>
     public string RatingText
@@ -319,7 +327,7 @@ public sealed class PilotItem : ObservableObject
                 return rating.PilotRating.Name;
             }
 
-            return !string.IsNullOrWhiteSpace(rating?.AtcRating?.ShortName) ? rating.AtcRating.ShortName : "—";
+            return !string.IsNullOrWhiteSpace(rating?.AtcRating?.ShortName) ? rating.AtcRating.ShortName : MissingProfileValue;
         }
     }
 
@@ -385,8 +393,7 @@ public sealed class PilotItem : ObservableObject
 
             return _detailStatus switch
             {
-                401 or 403 =>
-                    "IVAO refused the pilot details (401 not authenticated). Sign in with IVAO in Settings, or add a personal API key, to see who is flying.",
+                401 or 403 => string.Empty,
                 404 => "IVAO has no record of this session (404) — the flight may have just disconnected.",
                 { } status => $"IVAO answered {status} for this session, so the pilot details are unavailable.",
                 _ when !string.IsNullOrWhiteSpace(_detailError) =>
@@ -415,8 +422,7 @@ public sealed class PilotItem : ObservableObject
 
             return _flightPlanStatus switch
             {
-                401 or 403 =>
-                    "IVAO refused the flight plan (401 not authenticated). Sign in with IVAO in Settings, or add a personal API key, to see the filed details.",
+                401 or 403 => string.Empty,
                 _ when !string.IsNullOrWhiteSpace(_flightPlanError) =>
                     $"The filed flight plan could not be loaded — {_flightPlanError}",
                 _ => string.Empty
@@ -575,4 +581,6 @@ public sealed class PilotItem : ObservableObject
 
     private static string? First(string? preferred, string? fallback) =>
         string.IsNullOrWhiteSpace(preferred) ? (string.IsNullOrWhiteSpace(fallback) ? null : fallback) : preferred;
+
+    private static bool IsUnauthorized(int? status) => status is 401 or 403;
 }

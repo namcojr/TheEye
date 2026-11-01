@@ -221,6 +221,37 @@ public sealed class AircraftGlyphTests
     }
 
     [Fact]
+    public void UnauthorizedProfileAndFlightPlanUseQuietPlaceholders()
+    {
+        var icons = new AircraftIconCache<object>(_ => new object());
+        using var images = new EmptyImages();
+        var pilot = new PilotItem(new IvaoPilot(), icons, images);
+        var atc = new AtcItem(new IvaoAtc(), images);
+
+        pilot.ApplySessionDetail(new SessionDetailResult(null, 401));
+        pilot.ApplyFlightPlan(new SessionFlightPlanResult(null, 401));
+        atc.ApplySessionDetail(new SessionDetailResult(null, 401));
+
+        Assert.True(pilot.HasProfile);
+        Assert.Equal("-", pilot.ProfileName);
+        Assert.Equal("-", pilot.PilotId);
+        Assert.Equal("-", pilot.HomeText);
+        Assert.Equal("-", pilot.RatingText);
+        Assert.Equal(string.Empty, pilot.ProfileNotice);
+        Assert.Equal("-", pilot.FlightRules);
+        Assert.Equal("-", pilot.CruisingLevel);
+        Assert.Equal("-", pilot.EstimatedEnroute);
+        Assert.Equal(string.Empty, pilot.FlightPlanNotice);
+
+        Assert.True(atc.HasProfile);
+        Assert.Equal("-", atc.ProfileName);
+        Assert.Equal("-", atc.ControllerId);
+        Assert.Equal("-", atc.HomeText);
+        Assert.Equal("-", atc.RatingText);
+        Assert.Equal(string.Empty, atc.ProfileNotice);
+    }
+
+    [Fact]
     public void CacheCreatesEachCategoryOnlyOnceUnderConcurrentAccess()
     {
         var created = 0;

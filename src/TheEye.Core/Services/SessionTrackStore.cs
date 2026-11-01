@@ -29,8 +29,8 @@ public sealed class SessionTrackStore
     /// <summary>
     /// Returns the recorded track of <paramref name="sessionId"/>. The tracks
     /// feed is an authenticated endpoint: IVAO answers 401 unless the request
-    /// carries an IVAO session (the token WebEye gets from its login) or a
-    /// personal consumer key, so the refusal is reported instead of hidden.
+    /// carries an IVAO sign-in, so the refusal is retained without showing an
+    /// authentication message.
     /// A failure is cached for the same short window as a success: a session
     /// without track data must not trigger a request on every refresh.
     /// </summary>
@@ -52,7 +52,7 @@ public sealed class SessionTrackStore
         }
     }
 
-    /// <summary>Forgets every cached track, e.g. after the API key changed.</summary>
+    /// <summary>Forgets every cached track.</summary>
     public void Clear()
     {
         lock (_gate)
