@@ -19,6 +19,7 @@ public static class IvaoMapLayers
     public const string HoverRouteLayerName = "Hover route";
     public const string SelectedAtcLayerName = "Selected ATC";
     public const string AirportsLayerName = "Airports";
+    private const double AtcLabelMaxResolution = 14000;
 
     /// <summary>
     /// Zoom level at which the runway pavement and the ICAO codes of the airports
@@ -109,12 +110,12 @@ public static class IvaoMapLayers
                 feature.Styles.Add(new LabelStyle
                 {
                     LabelColumn = "Callsign",
-                    Font = new Font { FontFamily = "Segoe UI", Size = 10, Bold = true },
+                    Font = new Font { FontFamily = "Segoe UI", Size = AtcMarkerStyles.LabelFontSize(), Bold = true },
                     ForeColor = color,
                     BackColor = null,
                     Halo = new Pen(WorldMap.Parse(palette.Land), 2.5),
                     CollisionDetection = true,
-                    MaxVisible = 14000
+                    MaxVisible = AtcLabelMaxResolution
                 });
                 features.Add(feature);
             }
@@ -150,6 +151,7 @@ public static class IvaoMapLayers
         var features = new List<IFeature>();
         var stacks = placements.GroupBy(placement =>
             (X: Math.Round(placement.Point.X), Y: Math.Round(placement.Point.Y)));
+        var labels = new Dictionary<IFeature, (LabelStyle Style, AtcStationPlacement[] Members, int Line)>();
         foreach (var stack in stacks)
         {
             var members = stack.ToArray();
@@ -168,8 +170,7 @@ public static class IvaoMapLayers
 
                 // The glyph stays the one of the position the member controls: the
                 // ring is what says the member watches the network. It is drawn
-                // after the glyph so it sits on top of the empty middle, and before
-                // the label so the callsign keeps the last word.
+                // after the glyph so it sits on top of the empty middle.
                 if (supervisors is not null && supervisors.Contains(placement.Station.UserId))
                 {
                     feature.Styles.Add(new AtcGlyphStyle(
@@ -193,17 +194,9 @@ public static class IvaoMapLayers
                     HorizontalAlignment = labelAlignment.Horizontal,
                     VerticalAlignment = labelAlignment.Vertical,
                     CollisionDetection = true,
-                    MaxVisible = 3200
+                    MaxVisible = AtcLabelMaxResolution
                 };
-                var line = index;
-                feature.Styles.Add(new ThemeStyle((_, viewport) =>
-                {
-                    var currentZoom = AtcMarkerStyles.ZoomScale(viewport.Resolution);
-                    var widestScale = members.Max(member =>
-                        AtcMarkerStyles.For(member.Station.Facility, member.Station.Callsign, currentZoom).Scale);
-                    label.Offset = new Offset(0, AtcMarkerStyles.StackedLabelOffset(widestScale, line).Y);
-                    return label;
-                }));
+                labels.Add(feature, (label, members, index));
                 features.Add(feature);
             }
         }
@@ -211,7 +204,15 @@ public static class IvaoMapLayers
         return new MemoryLayer(AtcStationsLayerName)
         {
             Features = features,
-            Style = null
+            Style = new ThemeStyle((feature, viewport) =>
+            {
+                var (label, members, line) = labels[feature];
+                var currentZoom = AtcMarkerStyles.ZoomScale(viewport.Resolution);
+                var widestScale = members.Max(member =>
+                    AtcMarkerStyles.For(member.Station.Facility, member.Station.Callsign, currentZoom).Scale);
+                label.Offset = new Offset(0, AtcMarkerStyles.StackedLabelOffset(widestScale, line).Y);
+                return label;
+            })
         };
     }
 

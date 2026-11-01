@@ -86,13 +86,13 @@ public static class AtcMarkerStyles
     public const double MinStarDiameter = 12;
 
     /// <summary>Largest allowed screen diameter for either airport-position star.</summary>
-    public const double MaxStarDiameter = 850;
+    public const double MaxStarDiameter = 1250;
 
     /// <summary>Smallest allowed screen diameter for an airport-position circle.</summary>
     public const double MinCircleDiameter = 16;
 
     /// <summary>Largest allowed screen diameter for an airport-position circle.</summary>
-    public const double MaxCircleDiameter = 880;
+    public const double MaxCircleDiameter = 1280;
 
     /// <summary>Zoom level at which the facility diameters above are drawn at their configured size.</summary>
     public const int ReferenceZoomLevel = 6;
@@ -117,7 +117,7 @@ public static class AtcMarkerStyles
     /// </summary>
     public const double RingScale = 1.0;
 
-    private const double BaseLabelFontSize = 9;
+    private const double BaseLabelFontSize = 10;
     private const double ReferenceResolution = WorldMap.MaxResolution / (1 << ReferenceZoomLevel);
 
     /// <summary>Side of the inline SVG viewBox; a unit is one pixel of the artwork.</summary>
@@ -237,7 +237,7 @@ public static class AtcMarkerStyles
     public static (double X, double Y) StackedLabelOffset(double widestScale, int line)
     {
         var reach = (16 * widestScale) + 4;
-        var lineHeight = BaseLabelFontSize + 3;
+        var lineHeight = BaseLabelFontSize + 8;
         return (0d, Math.Round(reach + (line * lineHeight), 1));
     }
 

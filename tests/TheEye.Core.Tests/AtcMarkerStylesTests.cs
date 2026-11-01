@@ -100,11 +100,27 @@ public sealed class AtcMarkerStylesTests
 
         var feature = Assert.Single(layer.Features);
         var glyph = Assert.Single(feature.Styles.OfType<AtcGlyphStyle>());
-        var label = LabelFor(feature);
+        var label = LabelFor(layer, feature);
 
         Assert.Equal(AtcMarkerShape.Star, glyph.MarkerAtResolution(ReferenceResolution).Shape);
         Assert.Equal("Callsign", label.LabelColumn);
         Assert.True(label.Offset.Y > 0);
+    }
+
+    [Fact]
+    public void CreateAtcStations_LabelsMatchSectorFontAndVisibilityWithHaloSpacing()
+    {
+        var stations = IvaoMapLayers.CreateAtcStations([CreateAirportAtc("EDDB_TWR", "TWR")], Palette);
+        var sectors = IvaoMapLayers.CreateAtcLabels(
+            [CreatePolygonAtc("EDWW_CTR", "CTR", (52, 13), (52, 14), (53, 14), (53, 13))], Palette);
+        var stationLabel = LabelFor(stations, Assert.Single(stations.Features));
+        var sectorLabel = Assert.Single(Assert.Single(sectors.Features).Styles.OfType<LabelStyle>());
+
+        Assert.Equal(sectorLabel.Font.Size, stationLabel.Font.Size);
+        Assert.Equal(sectorLabel.MaxVisible, stationLabel.MaxVisible);
+        Assert.True(stationLabel.CollisionDetection);
+        var spacing = AtcMarkerStyles.StackedLabelOffset(1, 1).Y - AtcMarkerStyles.StackedLabelOffset(1, 0).Y;
+        Assert.True(spacing > stationLabel.Font.Size + stationLabel.Halo!.Width * 2);
     }
 
     [Fact]
@@ -250,12 +266,12 @@ public sealed class AtcMarkerStylesTests
         Assert.Equal(
             3,
             layer.Features
-                .Select(feature => LabelFor(feature).Offset)
+                .Select(feature => LabelFor(layer, feature).Offset)
                 .Select(offset => (offset.X, offset.Y))
                 .Distinct()
                 .Count());
         Assert.All(
-            layer.Features.Select(feature => LabelFor(feature)),
+            layer.Features.Select(feature => LabelFor(layer, feature)),
             style => Assert.Equal(LabelStyle.VerticalAlignmentEnum.Top, style.VerticalAlignment));
     }
 
@@ -300,7 +316,7 @@ public sealed class AtcMarkerStylesTests
     [Fact]
     public void LabelFontSize_RemainsConstantWhenTheMapZooms()
     {
-        Assert.Equal(9, AtcMarkerStyles.LabelFontSize());
+        Assert.Equal(10, AtcMarkerStyles.LabelFontSize());
     }
 
     [Fact]
@@ -308,7 +324,7 @@ public sealed class AtcMarkerStylesTests
     {
         var first = AtcMarkerStyles.StackedLabelOffset(1.2, 0);
         var second = AtcMarkerStyles.StackedLabelOffset(1.2, 1);
-        Assert.Equal(AtcMarkerStyles.LabelFontSize() + 3, second.Y - first.Y, 6);
+        Assert.Equal(AtcMarkerStyles.LabelFontSize() + 8, second.Y - first.Y, 6);
     }
 
     [Fact]
@@ -320,10 +336,10 @@ public sealed class AtcMarkerStylesTests
             zoom: 2);
 
         var glyph = Assert.Single(layer.Features.SelectMany(feature => feature.Styles.OfType<AtcGlyphStyle>()));
-        var label = LabelFor(Assert.Single(layer.Features), ReferenceResolution / 2);
+        var label = LabelFor(layer, Assert.Single(layer.Features), ReferenceResolution / 2);
 
         Assert.Equal(AtcMarkerStyles.For("TWR", "EDDB_TWR", 2).Scale, glyph.MarkerAtResolution(ReferenceResolution / 2).Scale, 6);
-        Assert.Equal(9, label.Font.Size);
+        Assert.Equal(10, label.Font.Size);
     }
 
     [Fact]
@@ -333,15 +349,15 @@ public sealed class AtcMarkerStylesTests
             [CreateAirportAtc("EDDB_GND", "GND"), CreateAirportAtc("EDDB_TWR", "TWR")], Palette);
         var tower = layer.Features.Single(feature => Equals(feature["Callsign"], "EDDB_TWR"));
         var glyph = Assert.Single(tower.Styles.OfType<AtcGlyphStyle>());
-        var firstLabel = LabelFor(tower, ReferenceResolution);
+        var firstLabel = LabelFor(layer, tower, ReferenceResolution);
         var firstOffset = firstLabel.Offset.Y;
         var firstScale = glyph.MarkerAtResolution(ReferenceResolution).Scale;
-        var nextLabel = LabelFor(tower, ReferenceResolution / 1.25);
+        var nextLabel = LabelFor(layer, tower, ReferenceResolution / 1.25);
         var nextScale = glyph.MarkerAtResolution(ReferenceResolution / 1.25).Scale;
 
         Assert.Equal(firstScale * 1.25, nextScale, 6);
         Assert.True(nextLabel.Offset.Y > firstOffset);
-        Assert.Equal(9, nextLabel.Font.Size);
+        Assert.Equal(10, nextLabel.Font.Size);
         Assert.Equal(2, layer.Features.Count());
     }
 
@@ -456,9 +472,10 @@ public sealed class AtcMarkerStylesTests
         Assert.Equal(FacilityPalette.Supervisor, images[1].RingColor);
         Assert.Single(other.Styles.OfType<AtcGlyphStyle>());
 
-        // The ring is drawn over the glyph and under the callsign.
+        // The ring is drawn over the glyph; labels use the layer theme.
         Assert.IsType<AtcGlyphStyle>(ringed.Styles.ElementAt(1));
-        Assert.IsType<ThemeStyle>(ringed.Styles.Last());
+        Assert.DoesNotContain(ringed.Styles, style => style is ThemeStyle);
+        Assert.IsType<ThemeStyle>(layer.Style);
     }
 
     [Fact]
@@ -474,8 +491,8 @@ public sealed class AtcMarkerStylesTests
 
     private const double ReferenceResolution = WorldMap.MaxResolution / (1 << AtcMarkerStyles.ReferenceZoomLevel);
 
-    private static LabelStyle LabelFor(IFeature feature, double resolution = ReferenceResolution) =>
-        Assert.IsType<LabelStyle>(Assert.Single(feature.Styles.OfType<ThemeStyle>())
+    private static LabelStyle LabelFor(MemoryLayer layer, IFeature feature, double resolution = ReferenceResolution) =>
+        Assert.IsType<LabelStyle>(Assert.IsType<ThemeStyle>(layer.Style)
             .GetStyle(feature, new Viewport { Resolution = resolution }));
 
     private static IvaoAtc CreateAirportAtc(string callsign, string facility) =>

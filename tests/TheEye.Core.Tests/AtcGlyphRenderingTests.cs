@@ -93,6 +93,40 @@ public sealed class AtcGlyphRenderingTests
         Assert.Equal(0, bitmap.GetPixel((int)(outside.X * 4), (int)(outside.Y * 4)).Alpha);
     }
 
+    [Theory]
+    [InlineData(6000)]
+    [InlineData(14000)]
+    [InlineData(ReferenceResolution / 1.25)]
+    public void AirportPositionLabels_RenderEveryStackedLineAtSectorLabelZooms(double resolution)
+    {
+        AtcGlyphRenderer.Register();
+        var facilities = new[] { "DEL", "GND", "GND", "TWR", "TWR", "APP", "DEP", "OBS" };
+        var stations = facilities.Select((facility, index) => new IvaoAtc
+        {
+            Callsign = $"TEST_{index}_{facility}",
+            AtcSession = new IvaoAtcSession { Position = facility },
+            AtcPosition = new IvaoAtcPosition
+            {
+                Airport = new IvaoAirport { Icao = "TEST", Latitude = 0, Longitude = 0 }
+            }
+        }).ToArray();
+        var palette = new MapPalette("#000000", "#111111", "#222222", "#FFFFFF", "#FFFFFF", true);
+        var zoom = AtcMarkerStyles.ZoomScale(resolution);
+        var placements = IvaoMapLayers.CreateAtcStationPlacements(stations, zoom);
+        var viewport = new Viewport { Width = 300, Height = 400, Resolution = resolution };
+        using var bitmap = RenderLayer(IvaoMapLayers.CreateAtcStations(placements, palette), viewport);
+
+        Assert.Equal(facilities.Length, placements.Count);
+        foreach (var placement in placements)
+        {
+            var startRow = (int)((viewport.Height / 2 + placement.LabelOffsetY) * 4);
+            var endRow = startRow + (int)((AtcMarkerStyles.LabelFontSize() + 6) * 4);
+            Assert.True(Enumerable.Range(startRow, endRow - startRow).Any(row =>
+                Enumerable.Range(100 * 4, 100 * 4).Any(column => bitmap.GetPixel(column, row).Alpha > 128)),
+                $"Missing rendered label for {placement.Station.Callsign} at resolution {resolution}.");
+        }
+    }
+
     private static SKBitmap Render(AtcGlyphStyle style, double resolution)
     {
         AtcGlyphRenderer.Register();
