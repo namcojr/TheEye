@@ -889,17 +889,14 @@
                     </ItemsControl>
 
                     <Canvas IsHitTestVisible="False" Panel.ZIndex="3">
-                        <Border Canvas.Left="{Binding Map.AtcHoverX}" Canvas.Top="{Binding Map.AtcHoverY}"
-                                Visibility="{Binding Map.HasHoveredAtc, Converter={StaticResource BoolToVisibility}}"
-                                Width="160" Padding="10,6" CornerRadius="4"
+                        <Border Canvas.Left="{Binding Map.MapTooltipX}" Canvas.Top="{Binding Map.MapTooltipY}"
+                                Visibility="{Binding Map.HasMapTooltip, Converter={StaticResource BoolToVisibility}}"
+                                Width="190" Padding="10,6" CornerRadius="4"
                                 Background="{DynamicResource PanelBackgroundBrush}"
                                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                            <StackPanel DataContext="{Binding Map.HoveredAtc}">
-                                <TextBlock Text="{Binding Callsign}" FontSize="12" FontWeight="SemiBold"
-                                           TextAlignment="Center" Foreground="{DynamicResource TextBrush}" />
-                                <TextBlock Text="{Binding Frequency}" FontSize="12"
-                                           TextAlignment="Center" Foreground="{DynamicResource MutedTextBrush}" />
-                            </StackPanel>
+                            <TextBlock Text="{Binding Map.MapTooltipText}" FontSize="12"
+                                       TextAlignment="Center" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextBrush}" />
                         </Border>
                     </Canvas>
 

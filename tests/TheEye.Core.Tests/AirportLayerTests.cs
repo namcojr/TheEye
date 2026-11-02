@@ -1,10 +1,15 @@
 using Mapsui.Layers;
 using Mapsui.Nts;
 using Mapsui.Styles;
+using Mapsui.Manipulations;
+using Mapsui.Extensions;
 using NetTopologySuite.Geometries;
 using TheEye.Core.Maps;
 using TheEye.Core.Models;
 using TheEye.Core.Reference;
+using TheEye.Core.Services;
+using TheEye.Presentation.Services;
+using TheEye.Presentation.ViewModels;
 
 namespace TheEye.Core.Tests;
 
@@ -113,6 +118,52 @@ public sealed class AirportLayerTests
     }
 
     [Fact]
+    public void CreateAirports_CanHideRunwaysAndDrawFixedScaleTrafficMarkers()
+    {
+        var airport = Heathrow();
+        var layer = IvaoMapLayers.CreateAirports(
+            [airport], Dark, resolution: 5, showRunways: false, trafficAirports: [airport]);
+
+        Assert.Empty(layer.Features.OfType<GeometryFeature>());
+        var trafficMarker = Assert.Single(layer.Features.OfType<PointFeature>(),
+            feature => feature.Styles.OfType<SymbolStyle>().Any());
+        var markerStyle = trafficMarker.Styles.OfType<SymbolStyle>().Single();
+
+        Assert.Equal(0.3, markerStyle.SymbolScale);
+        Assert.Equal(WorldMap.WithAlpha(WorldMap.Parse(Dark.Accent), 128), markerStyle.Outline?.Color);
+        Assert.Equal("EGLL", trafficMarker["Icao"]);
+        Assert.Single(trafficMarker.Styles.OfType<LabelStyle>());
+    }
+
+    [Fact]
+    public void OnlineMap_ShowsTrafficAirportTooltipWithoutRunwayPolygons()
+    {
+        var airport = AirportReference.Find("EGLL")!;
+        var pilot = new IvaoPilot
+        {
+            Id = 1,
+            Callsign = "TEST1",
+            LastTrack = new IvaoLastTrack { Latitude = 51.4706, Longitude = -0.45 },
+            FlightPlan = new IvaoFlightPlan { Departure = new IvaoAirport { Icao = airport.Icao } }
+        };
+        using var model = new MapViewModel(new Images()) { MapStyle = "positron" };
+        model.Initialize(Dark, airport.Position, resolution: 5);
+        model.Map!.Navigator.SetSize(800, 600);
+        model.UpdateTraffic(new TrackerSnapshot([pilot], [], [], new IvaoConnectionStats(),
+            DateTimeOffset.UtcNow, []));
+
+        var layer = Assert.IsType<MemoryLayer>(model.Map.Layers.Single(layer => layer.Name == IvaoMapLayers.AirportsLayerName));
+        Assert.Empty(layer.Features.OfType<GeometryFeature>());
+
+        var screen = model.Map.Navigator.Viewport.WorldToScreen(WorldMap.Project(airport.Position));
+        model.SetHoveredAtc(new ScreenPosition(screen.X, screen.Y));
+
+        Assert.True(model.HasMapTooltip);
+        Assert.Contains("EGLL", model.MapTooltipText);
+        Assert.Null(model.HoveredAtc);
+    }
+
+    [Fact]
     public void CreateAirports_SkipsAnAirportWithoutPavement()
     {
         var noRunways = new AirportRecord("EMPT", new GeoCoordinate(51.5, -0.4), "Nowhere", []);
@@ -129,6 +180,17 @@ public sealed class AirportLayerTests
 
     private static Color? OutlineColor(GeometryFeature feature) =>
         feature.Styles.OfType<VectorStyle>().First().Outline?.Color;
+
+    private sealed class Images : IImagePipeline, IAircraftIconCache, IImageCache
+    {
+        public IAircraftIconCache AircraftIcons => this;
+        public IImageCache SessionImages => this;
+        public object Get(AircraftGlyph glyph) => glyph;
+        public object? TryGet(string? url) => null;
+        public Task<object?> GetAsync(string? url, CancellationToken cancellationToken = default) =>
+            Task.FromResult<object?>(null);
+        public void Dispose() { }
+    }
 
     private static AirportRecord Heathrow() => new(
         "EGLL",

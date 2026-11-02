@@ -362,7 +362,9 @@ public static class IvaoMapLayers
     public static MemoryLayer CreateAirports(
         IEnumerable<AirportRecord> airports,
         MapPalette palette,
-        double resolution)
+        double resolution,
+        bool showRunways = true,
+        IEnumerable<AirportRecord>? trafficAirports = null)
     {
         var features = new List<IFeature>();
         var land = WorldMap.Parse(palette.Land);
@@ -376,22 +378,25 @@ public static class IvaoMapLayers
 
         foreach (var airport in airports)
         {
-            foreach (var runway in airport.Runways)
+            if (showRunways)
             {
-                var geometry = CreateRunway(runway, Math.Max(runway.WidthMetres, minimumWidth));
-                if (geometry is null)
+                foreach (var runway in airport.Runways)
                 {
-                    continue;
-                }
+                    var geometry = CreateRunway(runway, Math.Max(runway.WidthMetres, minimumWidth));
+                    if (geometry is null)
+                    {
+                        continue;
+                    }
 
-                var feature = new GeometryFeature { Geometry = geometry };
-                feature["Icao"] = airport.Icao;
-                feature.Styles.Add(new VectorStyle
-                {
-                    Fill = new Brush(surface),
-                    Outline = pavement
-                });
-                features.Add(feature);
+                    var feature = new GeometryFeature { Geometry = geometry };
+                    feature["Icao"] = airport.Icao;
+                    feature.Styles.Add(new VectorStyle
+                    {
+                        Fill = new Brush(surface),
+                        Outline = pavement
+                    });
+                    features.Add(feature);
+                }
             }
 
             var code = new PointFeature(WorldMap.Project(airport.Position));
@@ -407,6 +412,31 @@ public static class IvaoMapLayers
                 CollisionDetection = true
             });
             features.Add(code);
+        }
+
+        var trafficColor = WorldMap.WithAlpha(WorldMap.Parse(palette.Accent), 128);
+        foreach (var airport in (trafficAirports ?? []).DistinctBy(airport => airport.Icao))
+        {
+            var feature = new PointFeature(WorldMap.Project(airport.Position));
+            feature["Icao"] = airport.Icao;
+            feature.Styles.Add(new SymbolStyle
+            {
+                SymbolType = SymbolType.Ellipse,
+                SymbolScale = 0.3,
+                Fill = new Brush(new Color(0, 0, 0, 0)),
+                Outline = new Pen(trafficColor, 1.2)
+            });
+            feature.Styles.Add(new LabelStyle
+            {
+                LabelColumn = "Icao",
+                Font = new Font { FontFamily = "Segoe UI", Size = 8, Bold = true },
+                ForeColor = trafficColor,
+                BackColor = null,
+                Halo = new Pen(land, 2),
+                Offset = new Offset(0, -10),
+                CollisionDetection = true
+            });
+            features.Add(feature);
         }
 
         return new MemoryLayer(AirportsLayerName)

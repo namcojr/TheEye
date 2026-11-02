@@ -55,6 +55,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private AtcItem? _hoveredAtc;
     private double _atcHoverX;
     private double _atcHoverY;
+    private string? _mapTooltipText;
+    private double _mapTooltipX;
+    private double _mapTooltipY;
     private bool _showPilots = true;
     private bool _showAtc = true;
     private IReadOnlyList<IvaoAtc> _atc = [];
@@ -62,6 +65,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private bool _selectionTracksPending;
     private IReadOnlyList<IvaoMapLayers.AtcStationPlacement> _stationPlacements = [];
     private readonly List<AtcStationHitTarget> _stationTargets = [];
+    private readonly List<(AirportRecord Airport, double X, double Y)> _trafficAirportTargets = [];
     private double _stationZoom = 1;
     private string _airportsKey = string.Empty;
     private bool _disposed;
@@ -105,6 +109,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             // The pins are painted white or dark grey depending on the basemap,
             // so the same switch that swaps the tiles repaints the traffic.
             UpdateAircraftIconColors();
+            _airportsKey = string.Empty;
+            UpdateAirports();
         }
     }
 
@@ -197,6 +203,32 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     {
         get => _atcHoverY;
         private set => SetProperty(ref _atcHoverY, value);
+    }
+
+    public string? MapTooltipText
+    {
+        get => _mapTooltipText;
+        private set
+        {
+            if (SetProperty(ref _mapTooltipText, value))
+            {
+                OnPropertyChanged(nameof(HasMapTooltip));
+            }
+        }
+    }
+
+    public bool HasMapTooltip => !string.IsNullOrWhiteSpace(MapTooltipText);
+
+    public double MapTooltipX
+    {
+        get => _mapTooltipX;
+        private set => SetProperty(ref _mapTooltipX, value);
+    }
+
+    public double MapTooltipY
+    {
+        get => _mapTooltipY;
+        private set => SetProperty(ref _mapTooltipY, value);
     }
 
     public bool ShowPilots
@@ -356,25 +388,64 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
         UpdatePilotPositions();
         RebuildHoverRouteLayer();
+        _airportsKey = string.Empty;
+        UpdateAirports();
         Map.Refresh();
     }
 
     public void SetHoveredAtc(ScreenPosition? position)
     {
-        if (!_showAtc || position is not { } screen || Map is not { } map
-            || HitTestPilot(screen) is not null)
+        if (position is not { } screen || Map is not { } map)
         {
             HoveredAtc = null;
+            MapTooltipText = null;
             return;
         }
 
         var viewport = map.Navigator.Viewport;
+        if (HitTestPilot(screen) is { } pilot)
+        {
+            HoveredAtc = null;
+            SetMapTooltip(pilot.Tooltip, screen, viewport);
+            return;
+        }
+
+        AirportRecord? airport = null;
+        var airportDistance = 8d;
+        foreach (var target in _trafficAirportTargets)
+        {
+            var dx = target.X - screen.X;
+            var dy = target.Y - screen.Y;
+            var distance = Math.Sqrt(dx * dx + dy * dy);
+            if (distance <= airportDistance)
+            {
+                airport = target.Airport;
+                airportDistance = distance;
+            }
+        }
+
+        if (airport is not null)
+        {
+            HoveredAtc = null;
+            SetMapTooltip($"{airport.DisplayName} ({airport.Icao})", screen, viewport);
+            return;
+        }
+
+        if (!_showAtc)
+        {
+            HoveredAtc = null;
+            MapTooltipText = null;
+            return;
+        }
+
         var world = viewport.ScreenToWorld(screen.X, screen.Y);
         var station = AtcStationHitTest.Find(_stationTargets, screen.X, screen.Y,
             regions: _regionIndex?.FindAllAt(world));
         HoveredAtc = station is not null && _atcById.TryGetValue(station.Id, out var item) ? item : null;
         AtcHoverX = Math.Clamp(screen.X + 14, 0, Math.Max(0, viewport.Width - 160));
         AtcHoverY = Math.Clamp(screen.Y + 14, 0, Math.Max(0, viewport.Height - 56));
+        SetMapTooltip(HoveredAtc is { } hovered ? $"{hovered.Callsign}\n{hovered.Frequency}" : null,
+            screen, viewport);
     }
 
     public void SetHoveredPilot(PilotItem? pilot)
@@ -382,6 +453,11 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         pilot = _showPilots && !ReferenceEquals(pilot, SelectedPilot) ? pilot : null;
         if (ReferenceEquals(_hoveredPilot, pilot))
         {
+            if (pilot is not null && Map is { } currentMap)
+            {
+                SetMapTooltip(pilot.Tooltip,
+                    new ScreenPosition(pilot.X + pilot.MarkerSize, pilot.Y), currentMap.Navigator.Viewport);
+            }
             return;
         }
 
@@ -397,6 +473,16 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         if (pilot is not null)
         {
             pilot.IsHovered = true;
+            HoveredAtc = null;
+            if (Map is { } map)
+            {
+                SetMapTooltip(pilot.Tooltip,
+                    new ScreenPosition(pilot.X + pilot.MarkerSize, pilot.Y), map.Navigator.Viewport);
+            }
+        }
+        else
+        {
+            MapTooltipText = null;
         }
 
         RebuildHoverRouteLayer();
@@ -933,29 +1019,31 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (!IvaoMapLayers.ShowsRunways(viewport.Resolution))
-        {
-            // Far out the pavement is a sub-pixel smudge: one empty layer clears
-            // whatever a closer view left behind, and panning then does nothing.
-            if (_airportsKey.Length > 0)
+        var showsAirportCodes = IvaoMapLayers.ShowsRunways(viewport.Resolution);
+        var airports = showsAirportCodes
+            ? AirportReference.FindInBounds(ViewportBounds(viewport), runwaysOnly: true)
+            : [];
+        var trafficAirports = Pilots
+            .SelectMany(pilot => new[]
             {
-                _airportsKey = string.Empty;
-                ReplaceLayer(ref _airportLayer, IvaoMapLayers.CreateAirports([], _palette, viewport.Resolution));
-                map.Refresh();
-            }
-
-            return;
-        }
-
-        var airports = AirportReference.FindInBounds(ViewportBounds(viewport), runwaysOnly: true);
-        var key = AirportsKey(viewport.Resolution, airports);
+                AirportReference.Find(pilot.Pilot.FlightPlan?.DepartureIcao),
+                AirportReference.Find(pilot.Pilot.FlightPlan?.ArrivalIcao)
+            })
+            .Where(airport => airport is not null)
+            .Select(airport => airport!)
+            .DistinctBy(airport => airport.Icao)
+            .ToArray();
+        UpdateTrafficAirportTargets(trafficAirports);
+        var showRunways = string.Equals(MapStyle, MapBasemap.Offline, StringComparison.OrdinalIgnoreCase);
+        var key = AirportsKey(viewport.Resolution, airports, trafficAirports, showsAirportCodes, showRunways);
         if (key == _airportsKey)
         {
             return;
         }
 
         _airportsKey = key;
-        ReplaceLayer(ref _airportLayer, IvaoMapLayers.CreateAirports(airports, _palette, viewport.Resolution));
+        ReplaceLayer(ref _airportLayer, IvaoMapLayers.CreateAirports(
+            airports, _palette, viewport.Resolution, showRunways, trafficAirports));
         map.Refresh();
     }
 
@@ -964,9 +1052,39 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     /// because the smallest drawn runway depends on it. Two equal keys mean the
     /// layer on screen is already the right one.
     /// </summary>
-    private static string AirportsKey(double resolution, IReadOnlyList<AirportRecord> airports) =>
+    private static string AirportsKey(
+        double resolution,
+        IReadOnlyList<AirportRecord> airports,
+        IReadOnlyList<AirportRecord> trafficAirports,
+        bool showsAirportCodes,
+        bool showRunways) =>
         string.Join('|', airports.Select(airport => airport.Icao)) +
-        "#" + (int)Math.Round(Math.Log2(WorldMap.MaxResolution / resolution));
+        "#" + (int)Math.Round(Math.Log2(WorldMap.MaxResolution / resolution)) +
+        "#" + showsAirportCodes + "#" + showRunways +
+        "#" + string.Join('|', trafficAirports.Select(airport => airport.Icao));
+
+    private void UpdateTrafficAirportTargets(IReadOnlyList<AirportRecord> airports)
+    {
+        _trafficAirportTargets.Clear();
+        if (Map is not { } map)
+        {
+            return;
+        }
+
+        var viewport = map.Navigator.Viewport;
+        foreach (var airport in airports)
+        {
+            var screen = viewport.WorldToScreen(WorldMap.Project(airport.Position));
+            _trafficAirportTargets.Add((airport, screen.X, screen.Y));
+        }
+    }
+
+    private void SetMapTooltip(string? text, ScreenPosition point, Viewport viewport)
+    {
+        MapTooltipText = text;
+        MapTooltipX = Math.Clamp(point.X + 14, 0, Math.Max(0, viewport.Width - 190));
+        MapTooltipY = Math.Clamp(point.Y + 14, 0, Math.Max(0, viewport.Height - 70));
+    }
 
     /// <summary>
     /// The map window as a latitude/longitude box, grown by a quarter so the

@@ -195,6 +195,8 @@ public sealed class AtcStationHitTestTests
         Assert.True(model.HasHoveredAtc);
         Assert.Equal("LPPT_TWR", model.HoveredAtc!.Callsign);
         Assert.Equal("118.105", model.HoveredAtc.Frequency);
+        Assert.Equal("LPPT_TWR\n118.105", model.MapTooltipText);
+        Assert.True(model.HasMapTooltip);
         Assert.Null(model.SelectedAtc);
         model.SelectAtc(model.HoveredAtc, center: false);
         model.SetHoveredAtc(position);
