@@ -1,4 +1,5 @@
 using Mapsui.Layers;
+using Mapsui.Nts;
 using Mapsui.Styles;
 using TheEye.Core.Maps;
 using TheEye.Core.Models;
@@ -54,6 +55,59 @@ public sealed class HoverRouteTests
             Assert.Equal(expectedLabel.GetLabelText(selected[index]), label.GetLabelText(hovered[index]));
             Assert.Equal(expectedLabel.ForeColor, label.ForeColor);
         }
+    }
+
+    [Fact]
+    public void MapViewModel_DrawsNavdataRoutesForEveryAircraft()
+    {
+        var pilot = Pilot(1);
+        pilot.LastTrack!.Latitude = 52;
+        pilot.LastTrack.Longitude = 5.5;
+        pilot.FlightPlan!.Departure = new IvaoAirport { Icao = "EHAM", Latitude = 52, Longitude = 4.7 };
+        pilot.FlightPlan.Arrival = new IvaoAirport { Icao = "EGLL", Latitude = 52, Longitude = 8 };
+        pilot.FlightPlan.Route = "FIXA Q41 FIXB DCT FIXC";
+        var resolver = new NavigraphRouteResolver(
+            [
+                ("FIXA", new GeoCoordinate(52, 5)),
+                ("FIXB", new GeoCoordinate(52, 6)),
+                ("FIXC", new GeoCoordinate(52, 7))
+            ],
+            [
+                ("FIXA", "Q41", 10, new GeoCoordinate(52, 5)),
+                ("HIDDEN", "Q41", 20, new GeoCoordinate(52, 5.5)),
+                ("FIXB", "Q41", 30, new GeoCoordinate(52, 6))
+            ]);
+
+        var secondPilot = Pilot(2);
+        secondPilot.LastTrack!.Latitude = 52;
+        secondPilot.LastTrack.Longitude = 6.5;
+        secondPilot.FlightPlan!.Departure = pilot.FlightPlan.Departure;
+        secondPilot.FlightPlan.Arrival = pilot.FlightPlan.Arrival;
+        secondPilot.FlightPlan.Route = pilot.FlightPlan.Route;
+
+        using var model = new MapViewModel(new Images(), navDataResolver: () => resolver);
+        model.Initialize(Palette, new GeoCoordinate(52, 5), resolution: 10000);
+        model.UpdateTraffic(Snapshot([pilot, secondPilot]));
+
+        var layer = Assert.IsType<MemoryLayer>(
+            model.Map!.Layers.Single(mapLayer => mapLayer.Name == IvaoMapLayers.FlightPlanRoutesLayerName));
+        var lines = layer.Features.OfType<GeometryFeature>().ToArray();
+
+        Assert.Equal(2, lines.Length);
+        Assert.All(lines, line => Assert.Equal(
+            PenStyle.Dash,
+            line.Styles.OfType<VectorStyle>().Single().Line!.PenStyle));
+        Assert.Equal(6, layer.Features
+            .OfType<PointFeature>()
+            .Where(feature => feature["Waypoint"] is not null)
+            .Count());
+
+        model.SelectPilot(model.Pilots[0], center: false);
+        var selectedLayer = Assert.IsType<MemoryLayer>(
+            model.Map.Layers.Single(mapLayer => mapLayer.Name == IvaoMapLayers.FlightPlanRoutesLayerName));
+        Assert.Equal(2, selectedLayer.Features.OfType<GeometryFeature>().Count());
+        Assert.Equal(6, selectedLayer.Features.OfType<PointFeature>()
+            .Count(feature => feature["Waypoint"] is not null));
     }
 
     [Theory]
@@ -139,7 +193,7 @@ public sealed class HoverRouteTests
             Assert.Equal(WorldMap.Parse(theme.Accent),
                 feature.Styles.OfType<VectorStyle>().Single().Line!.Color));
         Assert.All(Hover(model).Features.OfType<PointFeature>(), feature =>
-            Assert.Equal(WorldMap.Parse(theme.Accent),
+            Assert.Equal(WorldMap.WithAlpha(WorldMap.Parse(theme.Accent), 51),
                 feature.Styles.OfType<SymbolStyle>().Single().Fill!.Color));
 
         model.UpdateTraffic(Snapshot([]));

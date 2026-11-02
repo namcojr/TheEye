@@ -79,7 +79,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _settings = settings;
         _theme = theme;
         _trafficColumnWidth = settings.TrafficColumnWidth;
-        Map = new MapViewModel(images);
+        Map = new MapViewModel(images, navDataResolver: NavigraphRouteResolver.GetDefault);
 
         // The lists a search box narrows: the map keeps every aircraft and
         // station, and these two collections are the filtered projection the

@@ -45,6 +45,7 @@ public sealed class RouteLayerTests
             ],
             lines.Select(PenColor));
         Assert.All(lines, line => Assert.Equal(IvaoMapLayers.TrailWidth, PenWidth(line)));
+        Assert.All(lines, line => Assert.Null(line.Styles.OfType<VectorStyle>().Single().Outline));
     }
 
     [Fact]
@@ -119,6 +120,7 @@ public sealed class RouteLayerTests
 
         Assert.Equal(IvaoMapLayers.TrailWidth, PenWidth(line));
         Assert.Equal(IvaoMapLayers.EstimatedTrailAlpha, PenColor(line)!.Value.A);
+        Assert.Null(line.Styles.OfType<VectorStyle>().Single().Outline);
     }
 
     [Fact]
@@ -132,6 +134,47 @@ public sealed class RouteLayerTests
             WorldMap.WithAlpha(WorldMap.Parse(AltitudePalette.Below42000), IvaoMapLayers.EstimatedTrailAlpha),
             PenColor(line));
         Assert.Equal(2, features.OfType<PointFeature>().Count());
+        var airportMarker = features.OfType<PointFeature>().First();
+        var airportStyle = Assert.Single(airportMarker.Styles.OfType<SymbolStyle>());
+        Assert.Equal(0.8, airportStyle.SymbolScale);
+        Assert.Equal(51, airportStyle.Fill!.Color!.Value.A);
+        Assert.Equal(51, airportStyle.Outline!.Color.A);
+    }
+
+    [Fact]
+    public void CreateRoute_DrawsDashedForwardRouteAndAllRouteWaypoints()
+    {
+        var pilot = Pilot();
+        pilot.FlightPlan!.Route = "FIXA Q41 FIXB DCT FIXC";
+        pilot.LastTrack!.Latitude = 52;
+        pilot.LastTrack.Longitude = 5.5;
+        pilot.FlightPlan.Departure = new IvaoAirport { Icao = "EHAM", Latitude = 52, Longitude = 4.7 };
+        pilot.FlightPlan.Arrival = new IvaoAirport { Icao = "EGLL", Latitude = 52, Longitude = 8 };
+        var resolver = new NavigraphRouteResolver(
+            [
+                ("FIXA", new GeoCoordinate(52, 5)),
+                ("FIXB", new GeoCoordinate(52, 6)),
+                ("FIXC", new GeoCoordinate(52, 7))
+            ],
+            [
+                ("FIXA", "Q41", 10, new GeoCoordinate(52, 5)),
+                ("HIDDEN", "Q41", 20, new GeoCoordinate(52, 5.5)),
+                ("FIXB", "Q41", 30, new GeoCoordinate(52, 6))
+            ]);
+
+        var layer = IvaoMapLayers.CreateFlightPlanRoutes([pilot], Palette, resolver);
+        var forwardLine = Assert.Single(TrailLines(layer), line =>
+            Assert.Single(line.Styles.OfType<VectorStyle>()).Line!.PenStyle == PenStyle.Dash);
+        var coordinates = forwardLine.Geometry!.Coordinates;
+
+        Assert.Equal(4, coordinates.Length);
+        Assert.Null(forwardLine.Styles.OfType<VectorStyle>().Single().Outline);
+        Assert.Equal(WorldMap.Project(new GeoCoordinate(52, 5.5)).X, coordinates[0].X, 5);
+        Assert.Equal(WorldMap.Project(new GeoCoordinate(52, 8)).X, coordinates[^1].X, 5);
+        Assert.Equal(["FIXA", "FIXB", "FIXC"], layer.Features
+            .OfType<PointFeature>()
+            .Where(feature => feature["Waypoint"] is not null)
+            .Select(feature => (string)feature["Waypoint"]!));
     }
 
     [Fact]

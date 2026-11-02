@@ -6,4 +6,5 @@ obj/
 *.suo
 TestResults/
 .scratch/
+NavData/
 *.log

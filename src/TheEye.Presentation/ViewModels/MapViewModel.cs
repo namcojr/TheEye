@@ -34,6 +34,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private readonly IImagePipeline _pipeline;
     private readonly TimeProvider _clock;
     private readonly string? _basemapCacheDirectory;
+    private readonly Func<NavigraphRouteResolver?>? _navDataResolver;
     private GeoCoordinate? _hoverRoutePosition;
     private readonly Dictionary<long, PilotItem> _pilotsById = [];
     private readonly Dictionary<long, AtcItem> _atcById = [];
@@ -46,6 +47,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private ILayer? _atcLabelsLayer;
     private ILayer? _atcStationsLayer;
     private ILayer? _routeLayer;
+    private ILayer? _flightPlanRoutesLayer;
     private ILayer? _hoverRouteLayer;
     private PilotItem? _hoveredPilot;
     private ILayer? _selectedAtcLayer;
@@ -142,13 +144,15 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     public MapViewModel(
         IImagePipeline images,
         TimeProvider? timeProvider = null,
-        string? basemapCacheDirectory = null)
+        string? basemapCacheDirectory = null,
+        Func<NavigraphRouteResolver?>? navDataResolver = null)
     {
         ArgumentNullException.ThrowIfNull(images);
 
         _pipeline = images;
         _clock = timeProvider ?? TimeProvider.System;
         _basemapCacheDirectory = basemapCacheDirectory;
+        _navDataResolver = navDataResolver;
         _icons = images.AircraftIcons;
         _images = images.SessionImages;
         Pilots = [];
@@ -277,18 +281,19 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         _atcLabelsLayer = IvaoMapLayers.CreateAtcLabels([], palette);
         _atcStationsLayer = CreateStationLayer([]);
         _routeLayer = new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };
+        _flightPlanRoutesLayer = IvaoMapLayers.CreateFlightPlanRoutes([], palette, navData: null);
         _hoverRouteLayer = IvaoMapLayers.CreateHoverRoute(null, palette);
         _selectedAtcLayer = IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), palette);
 
-        // Added first, so the runway pavement sits under the sectors, the trail
-        // and the aircraft markers instead of covering them.
-        _airportLayer = IvaoMapLayers.CreateAirports([], palette, map.Navigator.Viewport.Resolution);
+        _airportLayer = IvaoMapLayers.CreateAirports(
+            [], palette, map.Navigator.Viewport.Resolution, showRunways: false);
 
         map.Layers.Add(_airportLayer);
         map.Layers.Add(_atcRegionsLayer);
         map.Layers.Add(_atcLabelsLayer);
         map.Layers.Add(_atcStationsLayer);
         map.Layers.Add(_routeLayer);
+        map.Layers.Add(_flightPlanRoutesLayer);
         map.Layers.Add(_hoverRouteLayer);
         map.Layers.Add(_selectedAtcLayer);
 
@@ -327,6 +332,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         // Repaints the route with the new palette colours; the recorded track of
         // the selection is kept, so a theme switch does not drop the trail.
         RebuildRouteLayer();
+        RebuildFlightPlanRoutesLayer();
         RebuildHoverRouteLayer();
 
         // The airport pavement derives its colour from the palette, so it is
@@ -387,6 +393,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             SetHoveredAtc(null);
         }
         UpdatePilotPositions();
+        RebuildFlightPlanRoutesLayer();
         RebuildHoverRouteLayer();
         _airportsKey = string.Empty;
         UpdateAirports();
@@ -999,12 +1006,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Paints the runways and the ICAO codes of the airports in view, from the zoom
-    /// level at which a runway is wider than a couple of pixels
-    /// (<see cref="IvaoMapLayers.RunwayResolution"/>). The layer is rebuilt only when
-    /// the viewport moved to a different set of airports or the zoom changed enough
-    /// to change how narrow the smallest strip is drawn, so panning around one
-    /// airport costs nothing.
+    /// Paints one marker and ICAO label per traffic airport. Runway detail and
+    /// other airport labels are left to streamed basemaps.
     /// </summary>
     private void UpdateAirports()
     {
@@ -1019,10 +1022,6 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var showsAirportCodes = IvaoMapLayers.ShowsRunways(viewport.Resolution);
-        var airports = showsAirportCodes
-            ? AirportReference.FindInBounds(ViewportBounds(viewport), runwaysOnly: true)
-            : [];
         var trafficAirports = Pilots
             .SelectMany(pilot => new[]
             {
@@ -1034,8 +1033,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             .DistinctBy(airport => airport.Icao)
             .ToArray();
         UpdateTrafficAirportTargets(trafficAirports);
-        var showRunways = string.Equals(MapStyle, MapBasemap.Offline, StringComparison.OrdinalIgnoreCase);
-        var key = AirportsKey(viewport.Resolution, airports, trafficAirports, showsAirportCodes, showRunways);
+        var key = string.Join('|', trafficAirports.Select(airport => airport.Icao));
         if (key == _airportsKey)
         {
             return;
@@ -1043,25 +1041,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
         _airportsKey = key;
         ReplaceLayer(ref _airportLayer, IvaoMapLayers.CreateAirports(
-            airports, _palette, viewport.Resolution, showRunways, trafficAirports));
+            [], _palette, viewport.Resolution, showRunways: false, trafficAirports: trafficAirports));
         map.Refresh();
     }
-
-    /// <summary>
-    /// What the airport layer is showing: the airports in view plus the zoom level,
-    /// because the smallest drawn runway depends on it. Two equal keys mean the
-    /// layer on screen is already the right one.
-    /// </summary>
-    private static string AirportsKey(
-        double resolution,
-        IReadOnlyList<AirportRecord> airports,
-        IReadOnlyList<AirportRecord> trafficAirports,
-        bool showsAirportCodes,
-        bool showRunways) =>
-        string.Join('|', airports.Select(airport => airport.Icao)) +
-        "#" + (int)Math.Round(Math.Log2(WorldMap.MaxResolution / resolution)) +
-        "#" + showsAirportCodes + "#" + showRunways +
-        "#" + string.Join('|', trafficAirports.Select(airport => airport.Icao));
 
     private void UpdateTrafficAirportTargets(IReadOnlyList<AirportRecord> airports)
     {
@@ -1086,31 +1068,25 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         MapTooltipY = Math.Clamp(point.Y + 14, 0, Math.Max(0, viewport.Height - 70));
     }
 
-    /// <summary>
-    /// The map window as a latitude/longitude box, grown by a quarter so the
-    /// airports just outside the edge are drawn before the user pans onto them.
-    /// </summary>
-    private static GeoBounds ViewportBounds(Viewport viewport)
-    {
-        const double Margin = 1.25;
-        var halfWidth = viewport.Width * viewport.Resolution / 2 * Margin;
-        var halfHeight = viewport.Height * viewport.Resolution / 2 * Margin;
-
-        var topLeft = WorldMap.Unproject(viewport.CenterX - halfWidth, viewport.CenterY - halfHeight);
-        var bottomRight = WorldMap.Unproject(viewport.CenterX + halfWidth, viewport.CenterY + halfHeight);
-
-        return new GeoBounds(
-            Math.Min(topLeft.Latitude, bottomRight.Latitude),
-            Math.Min(topLeft.Longitude, bottomRight.Longitude),
-            Math.Max(topLeft.Latitude, bottomRight.Latitude),
-            Math.Max(topLeft.Longitude, bottomRight.Longitude));
-    }
-
     private void RebuildHoverRouteLayer()
     {
         _hoverRoutePosition = _hoveredPilot?.MapPosition;
         ReplaceLayer(ref _hoverRouteLayer,
-            IvaoMapLayers.CreateHoverRoute(_hoveredPilot?.Pilot, _palette ?? DefaultPalette, _hoverRoutePosition));
+            IvaoMapLayers.CreateHoverRoute(
+                _hoveredPilot?.Pilot,
+                _palette ?? DefaultPalette,
+                _hoverRoutePosition,
+                _navDataResolver?.Invoke(),
+                showAirportLabels: false));
+    }
+
+    private void RebuildFlightPlanRoutesLayer()
+    {
+        ReplaceLayer(ref _flightPlanRoutesLayer,
+            IvaoMapLayers.CreateFlightPlanRoutes(
+                Pilots.Select(item => item.Pilot),
+                _palette ?? DefaultPalette,
+                _navDataResolver?.Invoke()));
     }
 
     /// <summary>
@@ -1128,7 +1104,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
                 pilot.Pilot,
                 _palette ?? DefaultPalette,
                 _selectionTracks,
-                estimateWhenMissing: !_selectionTracksPending)
+                estimateWhenMissing: !_selectionTracksPending,
+                showAirportLabels: false)
             : new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };
 
         ReplaceLayer(ref _routeLayer, layer);

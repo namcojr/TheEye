@@ -129,14 +129,18 @@ public sealed class AirportLayerTests
             feature => feature.Styles.OfType<SymbolStyle>().Any());
         var markerStyle = trafficMarker.Styles.OfType<SymbolStyle>().Single();
 
-        Assert.Equal(0.3, markerStyle.SymbolScale);
-        Assert.Equal(WorldMap.WithAlpha(WorldMap.Parse(Dark.Accent), 128), markerStyle.Outline?.Color);
+        Assert.Equal(0.45, markerStyle.SymbolScale);
+        Assert.Equal(WorldMap.WithAlpha(WorldMap.Parse(Dark.Accent), 51), markerStyle.Outline?.Color);
         Assert.Equal("EGLL", trafficMarker["Icao"]);
         Assert.Single(trafficMarker.Styles.OfType<LabelStyle>());
     }
 
-    [Fact]
-    public void OnlineMap_ShowsTrafficAirportTooltipWithoutRunwayPolygons()
+    [Theory]
+    [InlineData(MapBasemap.Offline, 5)]
+    [InlineData(MapBasemap.Offline, 5000)]
+    [InlineData("positron", 5)]
+    [InlineData("positron", 5000)]
+    public void Map_ShowsOneTrafficAirportLabelWithoutRunways(string mapStyle, double resolution)
     {
         var airport = AirportReference.Find("EGLL")!;
         var pilot = new IvaoPilot
@@ -144,16 +148,32 @@ public sealed class AirportLayerTests
             Id = 1,
             Callsign = "TEST1",
             LastTrack = new IvaoLastTrack { Latitude = 51.4706, Longitude = -0.45 },
-            FlightPlan = new IvaoFlightPlan { Departure = new IvaoAirport { Icao = airport.Icao } }
+            FlightPlan = new IvaoFlightPlan
+            {
+                Departure = new IvaoAirport
+                {
+                    Icao = airport.Icao,
+                    Latitude = airport.Position.Latitude,
+                    Longitude = airport.Position.Longitude
+                }
+            }
         };
-        using var model = new MapViewModel(new Images()) { MapStyle = "positron" };
-        model.Initialize(Dark, airport.Position, resolution: 5);
+        using var model = new MapViewModel(new Images()) { MapStyle = mapStyle };
+        model.Initialize(Dark, airport.Position, resolution);
         model.Map!.Navigator.SetSize(800, 600);
         model.UpdateTraffic(new TrackerSnapshot([pilot], [], [], new IvaoConnectionStats(),
             DateTimeOffset.UtcNow, []));
 
         var layer = Assert.IsType<MemoryLayer>(model.Map.Layers.Single(layer => layer.Name == IvaoMapLayers.AirportsLayerName));
         Assert.Empty(layer.Features.OfType<GeometryFeature>());
+        var marker = Assert.Single(layer.Features.OfType<PointFeature>());
+        Assert.Equal("EGLL", marker["Icao"]);
+        Assert.Single(marker.Styles.OfType<LabelStyle>());
+
+        model.SetHoveredPilot(model.Pilots[0]);
+        AssertRouteHasNoAirportLabels(model, IvaoMapLayers.HoverRouteLayerName);
+        model.SelectPilot(model.Pilots[0], center: false);
+        AssertRouteHasNoAirportLabels(model, IvaoMapLayers.RouteLayerName);
 
         var screen = model.Map.Navigator.Viewport.WorldToScreen(WorldMap.Project(airport.Position));
         model.SetHoveredAtc(new ScreenPosition(screen.X, screen.Y));
@@ -161,6 +181,14 @@ public sealed class AirportLayerTests
         Assert.True(model.HasMapTooltip);
         Assert.Contains("EGLL", model.MapTooltipText);
         Assert.Null(model.HoveredAtc);
+    }
+
+    private static void AssertRouteHasNoAirportLabels(MapViewModel model, string name)
+    {
+        var layer = Assert.IsType<MemoryLayer>(model.Map!.Layers.Single(layer => layer.Name == name));
+        var marker = Assert.Single(layer.Features.OfType<PointFeature>());
+        Assert.Single(marker.Styles.OfType<SymbolStyle>());
+        Assert.Empty(marker.Styles.OfType<LabelStyle>());
     }
 
     [Fact]

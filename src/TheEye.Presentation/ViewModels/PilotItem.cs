@@ -14,10 +14,10 @@ public sealed class PilotItem : ObservableObject
     private const string TransparentTint = "#00000000";
 
     /// <summary>How much the artwork grows while the aircraft is selected.</summary>
-    private const int SelectionGrowth = 3;
+    private const int SelectionGrowth = 8;
 
     /// <summary>How much the artwork grows while the pointer is over the pin.</summary>
-    private const int HoverGrowth = 2;
+    private const int HoverGrowth = 8;
 
     private readonly IAircraftIconCache _icons;
     private readonly IImageCache _images;

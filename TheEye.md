@@ -232,32 +232,14 @@ floats over the right edge of the map while something is selected.
   pixels tall, which read as a third, blank line under the callsign and frequency.
 
 
-## RUNWAY PAVEMENT ON THE MAP (implemented)
-========================================
+## AIRPORT MARKERS ON THE MAP
+============================
 
-Zooming into an airport draws its runways, so a parked aircraft sits on a strip
-instead of on blank land. It is all offline, like the rest of the map.
-
-- Table: `src/TheEye.Core/Resources/Maps/airports.txt`, embedded, about 17 500
-  airports built from the public-domain OurAirports data by `tools/build-airports.py`.
-  One line per airport, `ICAO|lat|lon|name|runways`, and one runway per `;` with
-  `leLat,leLon,heLat,heLon,widthMetres`. `AirportReference` reads it once, indexes
-  it by ICAO and keeps the records in latitude order, so a viewport scan only walks
-  the band it covers.
-- Drawing: `IvaoMapLayers.CreateAirports` builds one rectangle per runway from the
-  two real thresholds and the published width (projected, then offset by half the
-  width along the perpendicular), so the strip points the right way and stretches
-  with the projection. The narrowest runway is widened to `max(resolution * 1.6, 25)`
-  metres so a small field stays visible at the zoom where runways appear at all, and
-  the fill is the land colour blended towards the label colour, which reads as
-  asphalt on every theme. Each airport also gets its ICAO label.
-- Zoom gate: runways appear from `IvaoMapLayers.RunwayZoomLevel` (12, i.e.
-  `RunwayResolution`) downwards; further out the layer is emptied, so panning costs
-  nothing. `MapViewModel.UpdateAirports` rebuilds the layer only when the set of
-  airports in view or the zoom level changed, and it looks 25 % beyond the viewport
-  so the fields just off screen are already drawn when the user pans onto them.
-- Order: the airport layer is added first, under the sectors, the trail and the
-  aircraft markers, so the pavement never covers a badge.
+The map draws one circle and ICAO label per traffic airport, using the embedded
+OurAirports reference data. Zooming in no longer adds offline runway geometry or
+an extra airport-label layer. Selected and hovered routes keep their airport
+circles but reuse the traffic layer's labels instead of adding duplicate labels.
+Switch to a streamed basemap for runway and other detailed airport mapping.
 
 
 ## FILED FLIGHT PLAN ON THE CARD (implemented)
@@ -327,6 +309,18 @@ as well, which is what used to draw an aircraft-like line across a controller's
 airport: `MainViewModel.RefreshSelectionTracksAsync` now asks for a track only while
 `MapViewModel.SelectedPilot` is set, and `MapViewModel.RebuildRouteLayer` paints an
 empty route layer for a station.
+
+Filed route waypoints are resolved from a user-provided Navigraph AIRAC
+`db.s3db` (`NG_FWDFD` format, with enroute waypoint and airway tables), read
+read-only from the app-data directory at `TheEyeIVAO\NavData\db.s3db` (for example,
+`%APPDATA%\TheEyeIVAO\NavData\db.s3db` on Windows). The database is not included
+with the application or in source control; users must obtain and place their own
+copy there. The app uses the airway sequence to resolve route entry and exit fixes,
+omits intermediate airway fixes, draws all filed waypoints as open, labelled
+circles for every aircraft, and draws each aircraft's remaining route as a dashed
+line. Route strokes have no outline pen. Without usable navdata, route waypoints
+and forward routes are simply omitted; the selected aircraft's flown trail
+continues to work as before.
 
 
 ## APPLICATION ICON (implemented)
