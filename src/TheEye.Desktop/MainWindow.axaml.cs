@@ -36,12 +36,62 @@ public partial class MainWindow : Window
         InitializeComponent();
         MapHost.AddHandler(PointerWheelChangedEvent, OnMapWheel, RoutingStrategies.Tunnel);
         _aircraftTimer.Tick += OnAircraftTick;
-        Opened += (_, _) => _aircraftTimer.Start();
+        Opened += (_, _) =>
+        {
+            _aircraftTimer.Start();
+            RestoreTrafficColumnWidth();
+        };
+        // The splitter writes the column width itself, so the setting is only
+        // recorded once the drag is over; the tunnel handler sees the release
+        // before the splitter consumes it.
+        TrafficSplitter.AddHandler(
+            PointerReleasedEvent,
+            OnTrafficSplitterReleased,
+            RoutingStrategies.Tunnel | RoutingStrategies.Bubble,
+            handledEventsToo: true);
         Closed += (_, _) =>
         {
             _aircraftTimer.Stop();
             _aircraftTimer.Tick -= OnAircraftTick;
         };
+    }
+
+    /// <summary>
+    /// Puts the traffic browser back at the width the user left it. The column
+    /// lives in the XAML rather than in a binding because a splitter writes the
+    /// width of the column itself, not of the panel inside it.
+    /// </summary>
+    private void RestoreTrafficColumnWidth()
+    {
+        if (ViewModel is { } viewModel)
+        {
+            TrafficColumn.Width = new GridLength(viewModel.TrafficColumnWidth);
+        }
+    }
+
+    /// <summary>Records the width the splitter settled on, and persists it at once.</summary>
+    private void OnTrafficSplitterReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (ViewModel is not { } viewModel)
+        {
+            return;
+        }
+
+        var width = Math.Round(TrafficColumn.ActualWidth);
+        if (width <= 0)
+        {
+            return;
+        }
+
+        // The setter clamps and keeps the value in the settings; the window is not
+        // resized again, the column is already where the user dropped it. A click
+        // that moved nothing writes nothing.
+        var previous = viewModel.TrafficColumnWidth;
+        viewModel.TrafficColumnWidth = width;
+        if (viewModel.TrafficColumnWidth != previous)
+        {
+            viewModel.SaveSettings();
+        }
     }
 
     private void OnAircraftTick(object? sender, EventArgs e)
@@ -50,6 +100,12 @@ public partial class MainWindow : Window
     }
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
+
+    /// <summary>
+    /// The traffic browser column. Avalonia does not name definition objects, so
+    /// the column is reached through the grid that owns it.
+    /// </summary>
+    private ColumnDefinition TrafficColumn => MainGrid.ColumnDefinitions[0];
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {

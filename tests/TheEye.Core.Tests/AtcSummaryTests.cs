@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TheEye.Core.Api;
+using TheEye.Core.Maps;
 using TheEye.Core.Models;
 using TheEye.Core.Services;
 
@@ -68,6 +69,34 @@ public sealed class AtcSummaryTests
         }
         """;
 
+    private const string ObserverStation = """
+        {
+          "id": 63830001,
+          "userId": 700001,
+          "callsign": "LROP_TWR",
+          "connectionType": "OBS",
+          "atcSession": { "frequency": null, "position": "TWR" },
+          "atcPosition": {
+            "airportId": "LROP",
+            "atcCallsign": "Otopeni Tower",
+            "position": "TWR",
+            "regionMap": [],
+            "regionMapPolygon": [],
+            "airport": {
+              "icao": "LROP",
+              "iata": "OTP",
+              "name": "Henri Coanda",
+              "countryId": "RO",
+              "city": "Bucharest",
+              "latitude": 44.5711111111,
+              "longitude": 26.085,
+              "military": "both"
+            }
+          },
+          "subcenter": null
+        }
+        """;
+
     [Fact]
     public void AirportStation_NamesTheAirportTheCardShows()
     {
@@ -100,6 +129,54 @@ public sealed class AtcSummaryTests
         Assert.Equal("—", atc.City);
         Assert.Equal("—", atc.CountryName);
         Assert.Equal("LIRR CTR", atc.ScopeLabel);
+    }
+
+    [Fact]
+    public void ObserverStation_IsListedAndDrawnAsAnObserver()
+    {
+        var atc = Read(ObserverStation);
+
+        // IVAO keeps the position of the station being watched, so the connection
+        // type is what says the member is only observing.
+        Assert.True(atc.IsObserver);
+        Assert.Equal("OBS", atc.Facility);
+        Assert.Equal("TWR", atc.ReportedFacility);
+        Assert.Equal("OBS", atc.PositionText);
+        Assert.NotNull(atc.Position);
+    }
+
+    [Theory]
+    [InlineData("ATC", "EDDB_OBS", "GND")]
+    [InlineData("OBS", "EDDB_GND", "GND")]
+    [InlineData("ATC", "EDDB_GND", "OBS")]
+    public void ObserverStation_IsRecognisedByTheConnectionTheSuffixOrThePosition(
+        string connectionType,
+        string callsign,
+        string position)
+    {
+        var atc = new IvaoAtc
+        {
+            Callsign = callsign,
+            ConnectionType = connectionType,
+            AtcSession = new IvaoAtcSession { Position = position },
+            AtcPosition = new IvaoAtcPosition { Position = position }
+        };
+
+        Assert.True(atc.IsObserver);
+        Assert.Equal("OBS", atc.Facility);
+    }
+
+    [Fact]
+    public void Controller_IsNotAnObserver()
+    {
+        var atc = Read(AirportStation);
+
+        Assert.False(atc.IsObserver);
+        Assert.False(atc.HasObserverSuffix);
+        Assert.Equal("TWR", atc.Facility);
+        Assert.Equal("Tower", FacilityPalette.DisplayName(atc.Facility));
+        Assert.Equal("Observer", FacilityPalette.DisplayName("OBS"));
+        Assert.Equal(AtcMarkerStyles.ObserverFill, AtcMarkerStyles.For("OBS", "LROP_OBS").Fill);
     }
 
     private static IvaoAtc Read(string json) =>

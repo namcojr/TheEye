@@ -65,6 +65,22 @@ public sealed class TheEyeSettings
 
     public int AircraftGlyphSize { get; set; } = DefaultAircraftGlyphSize;
 
+    /// <summary>Narrowest the traffic browser column may be dragged.</summary>
+    public const double MinTrafficColumnWidth = 248;
+
+    /// <summary>Widest the traffic browser column may be dragged.</summary>
+    public const double MaxTrafficColumnWidth = 560;
+
+    /// <summary>The width the traffic browser column starts at.</summary>
+    public const double DefaultTrafficColumnWidth = 322;
+
+    /// <summary>
+    /// Width in device-independent pixels of the traffic browser on the left of
+    /// the main window. The splitter next to it writes this, so the column comes
+    /// back at the width the user left it on the next launch.
+    /// </summary>
+    public double TrafficColumnWidth { get; set; } = DefaultTrafficColumnWidth;
+
     /// <summary>
     /// Client id of the IVAO application that signs the member in. Empty when
     /// no application has been configured.
@@ -243,6 +259,7 @@ public sealed class TheEyeSettings
         MapStyle = MapStyle,
         RefreshSeconds = RefreshSeconds,
         AircraftGlyphSize = AircraftGlyphSize,
+        TrafficColumnWidth = TrafficColumnWidth,
         ShowPilots = ShowPilots,
         ShowAtc = ShowAtc,
         CenterOnMapClick = CenterOnMapClick,
@@ -268,6 +285,7 @@ public sealed class TheEyeSettings
         MapStyle = other.MapStyle;
         RefreshSeconds = other.RefreshSeconds;
         AircraftGlyphSize = other.AircraftGlyphSize;
+        TrafficColumnWidth = other.TrafficColumnWidth;
         ShowPilots = other.ShowPilots;
         ShowAtc = other.ShowAtc;
         CenterOnMapClick = other.CenterOnMapClick;
@@ -296,6 +314,13 @@ public sealed class TheEyeSettings
         Theme = TheEyeThemes.Normalize(Theme);
         MapStyle = MapBasemap.Normalize(MapStyle);
         AircraftGlyphSize = Math.Clamp(AircraftGlyphSize, MinAircraftGlyphSize, MaxAircraftGlyphSize);
+
+        // The splitter cannot drag the column outside these limits, so a file
+        // edited by hand is pulled back to the nearest one instead of losing the
+        // width the user chose.
+        TrafficColumnWidth = double.IsNaN(TrafficColumnWidth)
+            ? DefaultTrafficColumnWidth
+            : Math.Clamp(TrafficColumnWidth, MinTrafficColumnWidth, MaxTrafficColumnWidth);
 
         OwnAircraftColor = AircraftHighlightColors.Find(OwnAircraftColor)?.Name ?? AircraftHighlightColors.DefaultOwn;
         FriendAircraftColor = AircraftHighlightColors.Find(FriendAircraftColor)?.Name ?? AircraftHighlightColors.DefaultFriend;

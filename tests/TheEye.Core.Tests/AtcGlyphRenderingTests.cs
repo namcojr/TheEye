@@ -19,7 +19,10 @@ public sealed class AtcGlyphRenderingTests
     [InlineData(1)]
     [InlineData(1.25)]
     [InlineData(2)]
-    [InlineData(100)]
+    // 6 keeps the widened tower badge (45 px per zoom step) inside the rendered
+    // frame; the clamped maximum is covered by AtcMarkerStylesTests, which can
+    // assert the size without drawing a 1300 px circle into a 1200 px bitmap.
+    [InlineData(6)]
     public void Circle_RenderedDiameterMatchesClampAndContourStaysOnePixel(double zoom)
     {
         var style = new AtcGlyphStyle("TWR", "TEST_TWR");
@@ -52,7 +55,9 @@ public sealed class AtcGlyphRenderingTests
     [Fact]
     public void Ring_ContourStaysTwoPixelsAtLargeZoom()
     {
-        using var bitmap = Render(new AtcGlyphStyle("TWR", "TEST_TWR", "#FFFFFF"), ReferenceResolution / 100);
+        // The ring is twice the badge radius, so a zoom of 6 still leaves the whole
+        // contour inside the frame (zoom 100 drew it outside the bitmap).
+        using var bitmap = Render(new AtcGlyphStyle("TWR", "TEST_TWR", "#FFFFFF"), ReferenceResolution / 6);
         var count = Enumerable.Range(0, bitmap.Width)
             .Count(x => bitmap.GetPixel(x, bitmap.Height / 2).Alpha > 128);
 
@@ -83,10 +88,13 @@ public sealed class AtcGlyphRenderingTests
         var palette = new MapPalette("#000000", "#111111", "#222222", "#FFFFFF", "#FFFFFF", true);
         using var bitmap = RenderLayer(IvaoMapLayers.CreateAtcRegions([station], palette), viewport);
 
+        // The sector is filled with the control alpha of a dark basemap, whatever
+        // part of the date line the pixel belongs to.
+        var fillAlpha = AtcMarkerStyles.ControlFillAlpha + AtcMarkerStyles.DarkSectorFillBoost;
         foreach (var longitude in new[] { 178d, 180d, 182d })
         {
             var point = viewport.WorldToScreen(WorldMap.Project(-15, longitude));
-            Assert.Equal(52, bitmap.GetPixel((int)(point.X * 4), (int)(point.Y * 4)).Alpha);
+            Assert.Equal(fillAlpha, bitmap.GetPixel((int)(point.X * 4), (int)(point.Y * 4)).Alpha);
         }
 
         var outside = viewport.WorldToScreen(WorldMap.Project(-15, 174));

@@ -209,6 +209,27 @@ the selected route. Leaving the aircraft clears the preview without changing the
 selection. Button content follows its control's theme foreground in both shells,
 including the checked PILOTS / ATC switches and the Save settings button.
 
+## MAIN WINDOW LAYOUT (implemented)
+=================================
+
+Both shells lay the main view out in four columns: the traffic browser, a four
+pixel splitter, the map and the selection pane.
+
+- The traffic browser is resizable. The splitter writes the width of the column
+  into `trafficColumnWidth` when the drag ends, so the next launch opens with the
+  width the user left. `TheEyeSettings.MinTrafficColumnWidth` (248) and
+  `MaxTrafficColumnWidth` (560) are mirrored by `MinWidth`/`MaxWidth` on the
+  column; a settings file edited by hand is pulled back to the nearest limit.
+  `MainViewModel.TrafficColumnWidth` owns the value (the Avalonia shell reaches
+  the column through `MainGrid.ColumnDefinitions[0]`, because Avalonia does not
+  generate a field for a `ColumnDefinition`).
+- The selection pane is only there while something is selected: `HasSelection`
+  collapses it, so the map keeps the width instead of showing an empty
+  "Nothing selected" card.
+- The ATC hover label sizes itself to its two lines. It used to be a fixed 56
+  pixels tall, which read as a third, blank line under the callsign and frequency.
+
+
 ## RUNWAY PAVEMENT ON THE MAP (implemented)
 ========================================
 
@@ -328,13 +349,31 @@ wraps the one before it:
 
 - Shapes: `_DEL` and `_GND` are four point stars — `_DEL` is rotated 45° so the
   two read differently — `_TWR` is the red disc around them, `_DEP`/`_APP` the
-  wider blue disc around the tower, `_OBS` is white, and `_CTR`/`_FSS`/unknown
-  keep their own discs. The contours are one pixel wide at the full facility colour;
-  only the fill is see-through.
+  wider blue disc around the tower, `_OBS` is a white disc with a dashed contour,
+  and `_CTR`/`_FSS`/unknown keep their own discs. The contours are one pixel wide at
+  the full facility colour; only the fill is see-through.
+- Fill alpha follows the facility, because the wider rings are painted on top of
+  the smaller ones. `GroundFillAlpha` (102, ~40%) is the most opaque, then
+  `TowerFillAlpha` (82, ~32%), `ApproachFillAlpha` (64, ~25%),
+  `InformationFillAlpha`/`DefaultFillAlpha` (51, ~20%) and `ControlFillAlpha`
+  (38, ~15%). Sector polygons use the same numbers through
+  `AtcMarkerStyles.FillAlpha`, plus `DarkSectorFillBoost` (12) on a dark basemap,
+  so a controller looks the same whether the feed published a shape or only a
+  coordinate, and a pile of concentric badges still shows every contour and the
+  star in the middle.
+- Observers: IVAO reports the position of the station being watched along with
+  the connection, so a member who only watches would have been listed and drawn
+  as that controller. `IvaoAtc.IsObserver` checks the connection type, the
+  `_OBS` callsign suffix and the position token; `Facility` then reports `OBS`,
+  the ATC list prints "Observer" and the glyph is the white
+  `ObserverFillAlpha` (38, ~15%) disc with a dashed contour
+  (`ObserverDashLength`, 3 screen pixels). The dashed ring is what keeps an
+  observer recognisable where the faint fill all but disappears.
 - Sizes: `DeliveryDiameter`, `GroundDiameter`, `TowerDiameter`,
   `ApproachDiameter`, `ControlDiameter`, `InformationDiameter`,
-  `ObserverDiameter`, `DefaultDiameter`, `OutlineWidth` and `CircleFillAlpha` are the tuning
-  variables at the top of `src/TheEye.Core/Map/AtcMarkerStyles.cs`.
+  `ObserverDiameter`, `DefaultDiameter`, `OutlineWidth` and the fill alphas above
+  are the tuning variables at the top of
+  `src/TheEye.Core/Map/AtcMarkerStyles.cs`.
 - Zoom limits: `WorldMap.MinZoomLevel` (default 3) is the most zoomed out level
   the navigator offers. `WorldMap.Create` builds `OverrideResolutions` from that
   level down to `DeepestZoomLevel` and sets `OverrideZoomBounds` to

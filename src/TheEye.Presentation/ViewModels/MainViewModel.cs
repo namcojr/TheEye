@@ -53,6 +53,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _disposed;
 
     private string _searchText = string.Empty;
+    private double _trafficColumnWidth;
     private string _statusText = "Starting";
     private string _lastUpdatedText = "Waiting for the first update";
     private string _errorMessage = string.Empty;
@@ -77,6 +78,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _store = store;
         _settings = settings;
         _theme = theme;
+        _trafficColumnWidth = settings.TrafficColumnWidth;
         Map = new MapViewModel(images);
 
         // The lists a search box narrows: the map keeps every aircraft and
@@ -314,6 +316,29 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Width of the traffic browser on the left of the main window. The shell
+    /// writes it when the splitter is released, and it is persisted with the
+    /// rest of the settings, so the column comes back at the width the user
+    /// left it.
+    /// </summary>
+    public double TrafficColumnWidth
+    {
+        get => _trafficColumnWidth;
+        set
+        {
+            var width = double.IsNaN(value)
+                ? TheEyeSettings.DefaultTrafficColumnWidth
+                : Math.Clamp(value, TheEyeSettings.MinTrafficColumnWidth, TheEyeSettings.MaxTrafficColumnWidth);
+            if (!SetProperty(ref _trafficColumnWidth, width))
+            {
+                return;
+            }
+
+            _settings.TrafficColumnWidth = width;
+        }
+    }
+
     public string StatusText
     {
         get => _statusText;
@@ -544,6 +569,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Map.CenterOnMapClick = _settings.CenterOnMapClick;
         Map.AircraftGlyphSize = _settings.AircraftGlyphSize;
         Map.MapStyle = _settings.MapStyle;
+        TrafficColumnWidth = _settings.TrafficColumnWidth;
         RefreshFriendMarks();
         OnPropertyChanged(nameof(ShowPilots));
         OnPropertyChanged(nameof(ShowAtc));
@@ -570,6 +596,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _settings.MapResolution = resolution;
         _settings.ShowPilots = Map.ShowPilots;
         _settings.ShowAtc = Map.ShowAtc;
+        _settings.TrafficColumnWidth = TrafficColumnWidth;
 
         try
         {

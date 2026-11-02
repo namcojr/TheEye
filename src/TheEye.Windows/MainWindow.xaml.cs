@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
 using Mapsui;
 using Mapsui.Manipulations;
@@ -23,7 +24,49 @@ public partial class MainWindow : Window
         StateChanged += (_, _) => UpdateMaximizeButton();
         ThemeService.ThemeChanged += OnThemeChanged;
         _aircraftTimer.Tick += OnAircraftTick;
-        Loaded += (_, _) => _aircraftTimer.Start();
+        Loaded += (_, _) =>
+        {
+            _aircraftTimer.Start();
+            RestoreTrafficColumnWidth();
+        };
+    }
+
+    /// <summary>
+    /// Puts the traffic browser back at the width the user left it. The column
+    /// lives in the XAML rather than in a binding because a splitter writes the
+    /// width of the column itself, not of the panel inside it.
+    /// </summary>
+    private void RestoreTrafficColumnWidth()
+    {
+        if (ViewModel is { } viewModel)
+        {
+            TrafficColumn.Width = new GridLength(viewModel.TrafficColumnWidth);
+        }
+    }
+
+    /// <summary>Records the width the splitter settled on, and persists it at once.</summary>
+    private void OnTrafficSplitterDragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        if (ViewModel is not { } viewModel)
+        {
+            return;
+        }
+
+        var width = Math.Round(TrafficColumn.ActualWidth);
+        if (width <= 0)
+        {
+            return;
+        }
+
+        // The setter clamps and keeps the value in the settings; the window is not
+        // resized again, the column is already where the user dropped it. A drag
+        // that ended where it started writes nothing.
+        var previous = viewModel.TrafficColumnWidth;
+        viewModel.TrafficColumnWidth = width;
+        if (viewModel.TrafficColumnWidth != previous)
+        {
+            viewModel.SaveSettings();
+        }
     }
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;

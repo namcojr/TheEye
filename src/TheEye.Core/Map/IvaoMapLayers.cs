@@ -62,9 +62,15 @@ public static class IvaoMapLayers
             var color = WorldMap.Parse(FacilityPalette.ForFacility(station.Facility));
             var feature = new GeometryFeature { Geometry = geometry };
             feature["Callsign"] = station.Callsign;
+            // The sector fill follows the badge of the same facility: a control
+            // sector covers the most map and is the most see-through, a tower
+            // polygon the most opaque of the shapes. A dark basemap needs a
+            // little more paint before the tint reads as a tint.
+            var fillAlpha = AtcMarkerStyles.FillAlpha(station.Facility, station.Callsign) +
+                (palette.IsDark ? AtcMarkerStyles.DarkSectorFillBoost : 0);
             feature.Styles.Add(new VectorStyle
             {
-                Fill = new Brush(WorldMap.WithAlpha(color, palette.IsDark ? 52 : 40)),
+                Fill = new Brush(WorldMap.WithAlpha(color, Math.Min(255, fillAlpha))),
                 Outline = new Pen(color, 1.1)
             });
             features.Add(feature);

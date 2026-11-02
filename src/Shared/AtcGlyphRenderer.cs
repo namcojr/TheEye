@@ -48,9 +48,16 @@ public sealed class AtcGlyphRenderer : ISkiaStyleRenderer, IFeatureSize
 
         var opacity = (float)(layer.Opacity * glyph.Opacity);
         var color = WorldMap.Parse(glyph.RingColor ?? marker.Fill);
+
+        // The contour of an observer is dashed, in screen pixels like its width,
+        // so the dashed ring stays dashed at every zoom.
+        using var dashEffect = marker.Dashed
+            ? SKPathEffect.CreateDash(
+                [(float)AtcMarkerStyles.ObserverDashLength, (float)AtcMarkerStyles.ObserverDashLength], 0)
+            : null;
         using var fill = new SKPaint
         {
-            Color = WorldMap.WithAlpha(color, AtcMarkerStyles.CircleFillAlpha).ToSkia(opacity),
+            Color = WorldMap.WithAlpha(color, marker.FillAlpha).ToSkia(opacity),
             Style = SKPaintStyle.Fill,
             IsAntialias = true
         };
@@ -60,7 +67,8 @@ public sealed class AtcGlyphRenderer : ISkiaStyleRenderer, IFeatureSize
             StrokeWidth = width,
             Style = SKPaintStyle.Stroke,
             StrokeJoin = SKStrokeJoin.Round,
-            IsAntialias = true
+            IsAntialias = true,
+            PathEffect = dashEffect
         };
         feature.CoordinateVisitor((x, y, _) =>
         {

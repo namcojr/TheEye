@@ -129,7 +129,9 @@ public sealed class HoverRouteTests
         Assert.NotSame(initial, Hover(model));
         var updated = Hover(model).Features.First().Extent!;
         var position = WorldMap.Project(new GeoCoordinate(52.5, 5));
-        Assert.InRange(position.X, updated.MinX, updated.MaxX);
+        // The plan folds each leg into one extent, so the projected coordinate can
+        // land a floating point step outside it.
+        Assert.InRange(position.X, updated.MinX - 1e-6, updated.MaxX + 1e-6);
 
         var theme = Palette with { Accent = "#FF8800" };
         model.ApplyTheme(theme);

@@ -15,7 +15,7 @@ public sealed class SettingsStoreTests
 
         Assert.Equal(TheEyeThemes.Dark, settings.Theme);
         Assert.Equal(30, settings.RefreshSeconds);
-        Assert.Equal(21, settings.AircraftGlyphSize);
+        Assert.Equal(TheEyeSettings.DefaultAircraftGlyphSize, settings.AircraftGlyphSize);
         Assert.True(settings.ShowPilots);
         Assert.True(settings.ShowAtc);
         Assert.True(settings.CenterOnMapClick);
@@ -51,6 +51,36 @@ public sealed class SettingsStoreTests
         Assert.True(loaded.IsFriend(54321));
         Assert.False(loaded.ToggleFriend(12345));
         Assert.False(loaded.IsFriend(12345));
+    }
+
+    [Fact]
+    public void SaveAndLoad_RoundTripsTheTrafficColumnWidth()
+    {
+        using var temporary = new TemporaryDirectory();
+        var store = new SettingsStore(temporary.FilePath("settings.json"));
+        var settings = new TheEyeSettings { TrafficColumnWidth = 410 };
+
+        store.Save(settings);
+        var loaded = store.Load();
+
+        Assert.Equal(TheEyeSettings.DefaultTrafficColumnWidth, new TheEyeSettings().TrafficColumnWidth);
+        Assert.Equal(410, loaded.TrafficColumnWidth);
+        Assert.Equal(410, settings.Clone().TrafficColumnWidth);
+    }
+
+    [Theory]
+    [InlineData(0d, TheEyeSettings.MinTrafficColumnWidth)]
+    [InlineData(199d, TheEyeSettings.MinTrafficColumnWidth)]
+    [InlineData(9000d, TheEyeSettings.MaxTrafficColumnWidth)]
+    [InlineData(double.NaN, TheEyeSettings.DefaultTrafficColumnWidth)]
+    [InlineData(300d, 300d)]
+    public void Normalize_ClampsTheTrafficColumnWidth(double width, double expected)
+    {
+        var settings = new TheEyeSettings { TrafficColumnWidth = width };
+
+        settings.Normalize();
+
+        Assert.Equal(expected, settings.TrafficColumnWidth);
     }
 
     [Fact]
@@ -112,7 +142,7 @@ public sealed class SettingsStoreTests
         var settings = store.Load();
 
         Assert.True(settings.CenterOnMapClick);
-        Assert.Equal(21, settings.AircraftGlyphSize);
+        Assert.Equal(TheEyeSettings.DefaultAircraftGlyphSize, settings.AircraftGlyphSize);
         var savedJson = System.Text.Json.JsonSerializer.Serialize(settings);
         Assert.DoesNotContain("apiKey", savedJson, StringComparison.OrdinalIgnoreCase);
     }
@@ -174,7 +204,7 @@ public sealed class SettingsStoreTests
     }
 
     [Theory]
-    [InlineData(2.39)]
+    [InlineData(9.55)]
     [InlineData(38.2)]
     [InlineData(WorldMap.MinResolution)]
     [InlineData(WorldMap.MaxZoomOutResolution)]

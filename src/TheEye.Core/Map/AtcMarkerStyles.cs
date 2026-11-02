@@ -21,10 +21,17 @@ public enum AtcMarkerShape
 }
 
 /// <summary>
-/// A single station glyph: the shape, its fill colour and the scale Mapsui uses
-/// to turn the 32x32 vector artwork into screen pixels.
+/// A single station glyph: the shape, its fill colour, the alpha of that fill,
+/// the scale Mapsui uses to turn the 32x32 vector artwork into screen pixels and
+/// whether the contour is dashed (observers only).
 /// </summary>
-public sealed record AtcMarkerStyle(AtcMarkerShape Shape, string Fill, double Scale, string SvgSource);
+public sealed record AtcMarkerStyle(
+    AtcMarkerShape Shape,
+    string Fill,
+    double Scale,
+    string SvgSource,
+    int FillAlpha,
+    bool Dashed = false);
 
 /// <summary>
 /// Builds the fallback glyphs for ATC positions that report a coordinate but no
@@ -104,11 +111,51 @@ public static class AtcMarkerStyles
     public const double OutlineWidth = 1;
 
     /// <summary>
-    /// Alpha of the disc fill, so the airport stays visible through the badge in
-    /// the same way the translucent sector polygons keep the map readable.
-    /// <c>255</c> draws a solid disc, <c>0</c> leaves only the contour.
+    /// Length in screen pixels of the dashes and of the gaps of an observer
+    /// contour. Every other glyph is drawn with a solid contour, so an observer
+    /// is recognisable even where the white fill is all but invisible.
     /// </summary>
-    public const int CircleFillAlpha = 56;
+    public const double ObserverDashLength = 3;
+
+    /// <summary>
+    /// Alpha of the disc fill when the facility is unknown: <c>255</c> draws a
+    /// solid disc, <c>0</c> leaves only the contour. The other facilities have
+    /// their own alpha below, because the badges of one airport are concentric
+    /// and the wider rings are drawn on top of the smaller ones.
+    /// </summary>
+    public const int DefaultFillAlpha = 51;
+
+    /// <summary>
+    /// Fill alpha of the delivery and ground stars (~40%). They sit in the
+    /// middle of the stack, so they can afford the most paint.
+    /// </summary>
+    public const int GroundFillAlpha = 102;
+
+    /// <summary>Fill alpha of the tower disc that wraps the stars (~32%).</summary>
+    public const int TowerFillAlpha = 82;
+
+    /// <summary>Fill alpha of the approach, departure and arrival disc (~25%).</summary>
+    public const int ApproachFillAlpha = 64;
+
+    /// <summary>
+    /// Fill alpha of the control discs and sectors (~15%). A control position
+    /// is the widest ring of a stack and covers the most map, so it is the most
+    /// see-through of them all.
+    /// </summary>
+    public const int ControlFillAlpha = 38;
+
+    /// <summary>Fill alpha of the information disc (~20%).</summary>
+    public const int InformationFillAlpha = 51;
+
+    /// <summary>Fill alpha of the observer disc (~15%): a hint of white, nothing more.</summary>
+    public const int ObserverFillAlpha = 38;
+
+    /// <summary>
+    /// Alpha added to a sector fill on a dark basemap, where a tint needs a
+    /// little more paint before it reads as a tint at all.
+    /// </summary>
+    public const int DarkSectorFillBoost = 12;
+
 
     /// <summary>
     /// Multiplier of a ring drawn around a badge: the selection ring, and the
@@ -145,14 +192,38 @@ public static class AtcMarkerStyles
     public static AtcMarkerStyle For(string? facility, string? callsign, double zoom = 1)
     {
         var (shape, fill, diameter) = ResolveGlyph(facility, callsign);
+        var family = FamilyOf(ResolveToken(facility, callsign));
+        var alpha = FillAlpha(facility, callsign);
+        var dashed = family == AtcMarkerFamily.Observer;
 
         // The glyph fills GlyphBox units of the artwork, so this draws it at
         // exactly `diameter` screen pixels, contour included, at the reference zoom.
         var scale = diameter / GlyphBox * NormalizeZoom(zoom, shape);
         // Keep the SVG source stable as the map zooms, so image caching remains
         // bounded; the symbol scale carries the continuous zoom change.
-        return new AtcMarkerStyle(shape, fill, scale, CreateSvg(shape, fill));
+        return new AtcMarkerStyle(shape, fill, scale, CreateSvg(shape, fill, 1, alpha, dashed), alpha, dashed);
     }
+
+    /// <summary>
+    /// Alpha of the fill of a station, in the 0–255 range. The badges of one
+    /// airport sit on the same coordinate, and the wider ring of each facility
+    /// is drawn on top of the smaller ones, so the facilities that wrap the
+    /// others are painted with less alpha: the ground star keeps its 40% while
+    /// the control sector above it is only a hint of colour. Sector polygons use
+    /// the same numbers, so a controller looks the same whether the feed
+    /// published a shape or only a coordinate.
+    /// </summary>
+    public static int FillAlpha(string? facility, string? callsign) =>
+        FamilyOf(ResolveToken(facility, callsign)) switch
+        {
+            AtcMarkerFamily.Ground => GroundFillAlpha,
+            AtcMarkerFamily.Tower => TowerFillAlpha,
+            AtcMarkerFamily.Approach => ApproachFillAlpha,
+            AtcMarkerFamily.Control => ControlFillAlpha,
+            AtcMarkerFamily.Information => InformationFillAlpha,
+            AtcMarkerFamily.Observer => ObserverFillAlpha,
+            _ => DefaultFillAlpha
+        };
 
     /// <summary>
     /// Raw multiplier that makes the badges follow the map's world scale. It
@@ -283,15 +354,27 @@ public static class AtcMarkerStyles
     /// Builds the inline SVG of a glyph. <paramref name="scale"/> is the
     /// multiplier Mapsui draws the artwork with, so the contour is
     /// <see cref="OutlineWidth"/> screen pixels at that scale.
+    /// <paramref name="fillAlpha"/> is the alpha of the fill (see
+    /// <see cref="FillAlpha"/>) and <paramref name="dashed"/> draws a dashed
+    /// contour, which is how an observer is told apart on a static preview.
     /// </summary>
-    public static string CreateSvg(AtcMarkerShape shape, string fill, double scale = 1) =>
-        $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"32\" viewBox=\"0 0 32 32\">{CreateBody(shape, fill, scale)}</svg>";
+    public static string CreateSvg(
+        AtcMarkerShape shape,
+        string fill,
+        double scale = 1,
+        int fillAlpha = DefaultFillAlpha,
+        bool dashed = false) =>
+        $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"32\" viewBox=\"0 0 32 32\">{CreateBody(shape, fill, scale, fillAlpha, dashed)}</svg>";
 
-    private static string CreateBody(AtcMarkerShape shape, string fill, double scale)
+    private static string CreateBody(AtcMarkerShape shape, string fill, double scale, int fillAlpha, bool dashed)
     {
         // A user unit is one pixel of the 32 px artwork and the artwork is drawn
         // `scale` screen pixels wide per unit, so this contour shows as one pixel.
         var contour = OutlineWidth / Math.Max(scale, 0.01);
+        var dash = dashed
+            ? $" stroke-dasharray=\"{Number(ObserverDashLength / Math.Max(scale, 0.01))} {Number(ObserverDashLength / Math.Max(scale, 0.01))}\""
+            : string.Empty;
+        var opacity = Number(fillAlpha / 255d);
 
         // Half of the glyph footprint, minus half a contour, so the painted edge
         // lands exactly on the footprint and never leaves the viewBox.
@@ -311,15 +394,15 @@ public static class AtcMarkerStyles
             // The group scale multiplies the stroke width too, so it is divided
             // by the inset to still come out as one screen pixel.
             return $"<g transform=\"{transform}\"><path d=\"{StarPathData}\" fill=\"{fill}\" stroke=\"{fill}\" "
-                + $"fill-opacity=\"{Number(CircleFillAlpha / 255d)}\" "
-                + $"stroke-width=\"{Number(contour / inset)}\" stroke-linejoin=\"round\"/></g>";
+                + $"fill-opacity=\"{opacity}\" "
+                + $"stroke-width=\"{Number(contour / inset)}\"{dash} stroke-linejoin=\"round\"/></g>";
         }
 
         // Only the fill of a disc is see-through; the contour uses the full
         // facility colour so the ring stays readable on the map.
         return $"<circle cx=\"16\" cy=\"16\" r=\"{Number(reach)}\" fill=\"{fill}\" "
-            + $"fill-opacity=\"{Number(CircleFillAlpha / 255d)}\" stroke=\"{fill}\" "
-            + $"stroke-width=\"{Number(contour)}\"/>";
+            + $"fill-opacity=\"{opacity}\" stroke=\"{fill}\" "
+            + $"stroke-width=\"{Number(contour)}\"{dash}/>";
     }
 
     private static string Number(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);

@@ -47,6 +47,82 @@ public sealed class AtcMarkerStylesTests
         Assert.Contains("<circle", marker.SvgSource, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void For_ObserverPosition_DrawsAFaintDashedDisc()
+    {
+        var marker = AtcMarkerStyles.For("OBS", "EDDB_OBS");
+
+        // An observer is a hint on the map: a 15% white fill and a dashed
+        // contour, so it never reads like a controller's solid badge.
+        Assert.Equal(AtcMarkerStyles.ObserverFillAlpha, marker.FillAlpha);
+        Assert.InRange(marker.FillAlpha / 255d, 0.13, 0.17);
+        Assert.True(marker.Dashed);
+        Assert.Contains("stroke-dasharray", marker.SvgSource, StringComparison.Ordinal);
+        Assert.Contains($"fill-opacity=\"{Math.Round(marker.FillAlpha / 255d, 3)}\"", marker.SvgSource,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("GND", "EDDB_GND")]
+    [InlineData("TWR", "EDDB_TWR")]
+    [InlineData("APP", "EDDB_APP")]
+    [InlineData("CTR", "EDDB_CTR")]
+    public void For_ControllerPosition_DrawsASolidContour(string facility, string callsign)
+    {
+        var marker = AtcMarkerStyles.For(facility, callsign);
+
+        Assert.False(marker.Dashed);
+        Assert.DoesNotContain("stroke-dasharray", marker.SvgSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FillAlpha_PaintsTheWiderFacilitiesMoreSeeThrough()
+    {
+        var ground = AtcMarkerStyles.FillAlpha("GND", "EDDB_GND");
+        var tower = AtcMarkerStyles.FillAlpha("TWR", "EDDB_TWR");
+        var approach = AtcMarkerStyles.FillAlpha("APP", "EDDB_APP");
+        var control = AtcMarkerStyles.FillAlpha("CTR", "EDDB_CTR");
+
+        // The badges of one airport are concentric and each wider ring is drawn
+        // over the smaller ones, so the widest facility carries the least paint.
+        Assert.True(ground > tower);
+        Assert.True(tower > approach);
+        Assert.True(approach > control);
+        Assert.InRange(ground / 255d, 0.38, 0.42);
+        Assert.InRange(control / 255d, 0.13, 0.17);
+        Assert.Equal(AtcMarkerStyles.DefaultFillAlpha, AtcMarkerStyles.FillAlpha(null, "BIRD"));
+    }
+
+    [Fact]
+    public void CreateAtcRegions_FillsTheSectorWithTheFacilityAlpha()
+    {
+        var stations = new[]
+        {
+            CreatePolygonAtc("EDWW_CTR", "CTR", (52, 13), (52, 14), (53, 14), (53, 13)),
+            CreatePolygonAtc("EDDB_APP", "APP", (52.3, 13.3), (52.3, 13.7), (52.6, 13.7), (52.6, 13.3))
+        };
+
+        var light = IvaoMapLayers.CreateAtcRegions(stations, Palette with { IsDark = false });
+        var dark = IvaoMapLayers.CreateAtcRegions(stations, Palette);
+        var controlLight = light.Features.Single(feature => Equals(feature["Callsign"], "EDWW_CTR"));
+        var approachLight = light.Features.Single(feature => Equals(feature["Callsign"], "EDDB_APP"));
+        var controlDark = dark.Features.Single(feature => Equals(feature["Callsign"], "EDWW_CTR"));
+
+        // A control sector is the most see-through of the shapes; a dark basemap
+        // takes a little more alpha before the tint reads as a tint.
+        Assert.Equal(SectorFill("CTR", AtcMarkerStyles.ControlFillAlpha), FillColorOf(controlLight));
+        Assert.Equal(SectorFill("APP", AtcMarkerStyles.ApproachFillAlpha), FillColorOf(approachLight));
+        Assert.Equal(
+            SectorFill("CTR", AtcMarkerStyles.ControlFillAlpha + AtcMarkerStyles.DarkSectorFillBoost),
+            FillColorOf(controlDark));
+    }
+
+    private static Color SectorFill(string facility, int alpha) =>
+        WorldMap.WithAlpha(WorldMap.Parse(FacilityPalette.ForFacility(facility)), alpha);
+
+    private static Color? FillColorOf(IFeature feature) =>
+        feature.Styles.OfType<VectorStyle>().First().Fill?.Color;
+
     [Theory]
     [InlineData("APP")]
     [InlineData("DEP")]

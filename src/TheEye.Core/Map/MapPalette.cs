@@ -35,8 +35,8 @@ public static class FacilityPalette
     {
         "TWR" => Tower,
         "GND" or "DEL" => Ground,
-        "APP" or "DEP" => Approach,
-        "CTR" or "FSS" => Control,
+        "APP" or "DEP" or "ARR" => Approach,
+        "CTR" or "FSS" or "CEN" => Control,
         "INFO" => Information,
         _ => Default
     };
@@ -48,9 +48,12 @@ public static class FacilityPalette
         "DEL" => "Delivery",
         "APP" => "Approach",
         "DEP" => "Departure",
+        "ARR" => "Arrival",
         "CTR" => "Control",
         "FSS" => "Flight Service",
+        "CEN" => "Control",
         "INFO" => "Information",
+        "OBS" => "Observer",
         _ => string.IsNullOrWhiteSpace(facility) ? "ATC" : facility
     };
 }

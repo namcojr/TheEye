@@ -49,7 +49,45 @@ public sealed class IvaoAtc
     public IvaoSessionUser? User { get; set; }
 
     [JsonIgnore]
-    public string Facility => AtcSession?.Position ?? AtcPosition?.Position ?? Subcenter?.Position ?? "ATC";
+    public string Facility => IsObserver ? ObserverFacility : ReportedFacility;
+
+    /// <summary>
+    /// The facility token IVAO reported for the station, without the observer
+    /// override: <c>atcSession</c> first, then the airport position, then the
+    /// subcenter, and "ATC" when the feed named none.
+    /// </summary>
+    [JsonIgnore]
+    public string ReportedFacility =>
+        AtcSession?.Position ?? AtcPosition?.Position ?? Subcenter?.Position ?? DefaultFacility;
+
+    /// <summary>The facility token every glyph and list prints for an observer.</summary>
+    public const string ObserverFacility = "OBS";
+
+    /// <summary>The facility token used when the feed names no position at all.</summary>
+    public const string DefaultFacility = "ATC";
+
+    /// <summary>
+    /// True when the member observes instead of controlling. IVAO keeps the
+    /// position field of the station being watched, so a member connected as an
+    /// observer would otherwise be drawn and listed as a controller: the
+    /// connection type, the <c>_OBS</c> callsign suffix and the position token
+    /// are all checked, any of which marks the session as an observer.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsObserver =>
+        string.Equals(ConnectionType?.Trim(), ObserverFacility, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(AtcSession?.Position?.Trim(), ObserverFacility, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(AtcPosition?.Position?.Trim(), ObserverFacility, StringComparison.OrdinalIgnoreCase) ||
+        HasObserverSuffix;
+
+    /// <summary>
+    /// True when the callsign ends in <c>_OBS</c>, the suffix IVAO gives the
+    /// callsign of a member who connected to watch a station.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasObserverSuffix => Callsign
+        .Split('_', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) is { Length: > 0 } segments &&
+        string.Equals(segments[^1], ObserverFacility, StringComparison.OrdinalIgnoreCase);
 
     [JsonIgnore]
     public double? Frequency => AtcSession?.Frequency ?? Subcenter?.Frequency;
@@ -89,7 +127,9 @@ public sealed class IvaoAtc
     public bool HasAirport => AtcPosition?.Airport is not null;
 
     [JsonIgnore]
-    public string PositionText => AtcPosition?.Position ?? Subcenter?.Position ?? Facility;
+    public string PositionText => IsObserver
+        ? ObserverFacility
+        : AtcPosition?.Position ?? Subcenter?.Position ?? Facility;
 
     [JsonIgnore]
     public string SectorPointsText => PolygonPoints.Count >= 3 ? PolygonPoints.Count.ToString() : "—";
