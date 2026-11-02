@@ -155,6 +155,26 @@ public static class MapBasemap
     /// <summary>The stored form of a style id: the exact id, or <see cref="Offline"/>.</summary>
     public static string Normalize(string? styleId) => Find(styleId).Id;
 
+    /// <summary>
+    /// The raster styles whose basemap is dark enough that light artwork has to
+    /// be drawn on top of it. The bright OpenStreetMap renders, Positron, Voyager
+    /// and Toner are light; the dark render and the sat imagery are not.
+    /// </summary>
+    private static readonly HashSet<string> DarkStyleIds = new(StringComparer.Ordinal)
+    {
+        "dark-matter",
+        "satellite-hybrid"
+    };
+
+    /// <summary>
+    /// True when the style paints a dark basemap, which decides the colour of
+    /// everything drawn on top of it. <see cref="Offline"/> answers false: that
+    /// map is painted with the theme palette, so only the theme knows whether it
+    /// is dark. Callers that draw markers should ask
+    /// <see cref="AircraftMarkerStyles.IsDarkMap"/> instead.
+    /// </summary>
+    public static bool IsDark(string? styleId) => DarkStyleIds.Contains(Find(styleId).Id);
+
     private static TileSchema CreateSchema()
     {
         var schema = new TileSchema

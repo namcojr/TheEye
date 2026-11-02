@@ -13,6 +13,12 @@ public sealed class PilotItem : ObservableObject
     /// <summary>The colour a row that carries no mark binds, i.e. "no wash".</summary>
     private const string TransparentTint = "#00000000";
 
+    /// <summary>How much the artwork grows while the aircraft is selected.</summary>
+    private const int SelectionGrowth = 6;
+
+    /// <summary>How much the artwork grows while the pointer is over the pin.</summary>
+    private const int HoverGrowth = 6;
+
     private readonly IAircraftIconCache _icons;
     private readonly IImageCache _images;
     private readonly AircraftMotion _motion;
@@ -33,9 +39,11 @@ public sealed class PilotItem : ObservableObject
     private double _y;
     private bool _isVisible;
     private bool _isSelected;
+    private bool _isHovered;
     private bool _isFriend;
     private bool _isSupervisor;
     private string _markerColor = string.Empty;
+    private string _iconColor = AircraftMarkerStyles.LightIcon;
     private int _glyphSize = TheEyeSettings.DefaultAircraftGlyphSize;
 
     public int GlyphSize
@@ -47,15 +55,23 @@ public sealed class PilotItem : ObservableObject
                 TheEyeSettings.MinAircraftGlyphSize, TheEyeSettings.MaxAircraftGlyphSize))) return;
             OnPropertyChanged(nameof(DisplayGlyphSize));
             OnPropertyChanged(nameof(MarkerSize));
-            OnPropertyChanged(nameof(HaloSize));
         }
     }
 
-    public int DisplayGlyphSize => GlyphSize + (IsSelected ? 3 : 0);
+    /// <summary>
+    /// The size of the artwork as drawn: the configured size, three pixels more
+    /// while the aircraft is selected and two pixels more while the pointer is
+    /// over the pin. Hovering grows the pin instead of drawing a halo around it,
+    /// so the aircraft under the pointer stands out without covering the traffic
+    /// next to it. The marker box <see cref="MarkerSize"/> stays at the
+    /// un-hovered size, so a pin never moves when the pointer reaches it.
+    /// </summary>
+    public int DisplayGlyphSize =>
+        GlyphSize +
+        (IsSelected ? SelectionGrowth : 0) +
+        (IsHovered ? HoverGrowth : 0);
 
     public int MarkerSize => Math.Max(26, GlyphSize + 5);
-
-    public int HaloSize => MarkerSize - 1;
 
     public PilotItem(IvaoPilot pilot, IAircraftIconCache icons, IImageCache images, TimeProvider? timeProvider = null)
     {
@@ -187,7 +203,8 @@ public sealed class PilotItem : ObservableObject
 
     /// <summary>
     /// The "#RRGGBB" the map pin is painted with when the aircraft is the user's
-    /// own or a friend's; empty leaves the theme's text colour.
+    /// own or a friend's; empty leaves the colour of the map, which
+    /// <see cref="IconColor"/> carries.
     /// </summary>
     public string MarkerColor
     {
@@ -202,6 +219,17 @@ public sealed class PilotItem : ObservableObject
     }
 
     public bool HasMarkerColor => _markerColor.Length > 0;
+
+    /// <summary>
+    /// The "#RRGGBB" the pin is painted with when it carries no mark of its own.
+    /// The map decides it — white artwork on a dark basemap, dark grey on a light
+    /// one — so a style switch repaints every pin (<see cref="AircraftMarkerStyles"/>).
+    /// </summary>
+    public string IconColor
+    {
+        get => _iconColor;
+        set => SetProperty(ref _iconColor, value ?? AircraftMarkerStyles.LightIcon);
+    }
 
     public bool HasFlightPlan => Plan is not null;
 
@@ -469,8 +497,27 @@ public sealed class PilotItem : ObservableObject
         }
     }
 
+    /// <summary>
+    /// True while the pointer is over the pin. The map view model owns this,
+    /// because both shells report entering and leaving the marker there and
+    /// because a selected aircraft keeps the size of its selection instead.
+    /// </summary>
+    public bool IsHovered
+    {
+        get => _isHovered;
+        set
+        {
+            if (SetProperty(ref _isHovered, value)) OnPropertyChanged(nameof(DisplayGlyphSize));
+        }
+    }
+
+    /// <summary>
+    /// The native tooltip of the pin. The heading is left out on purpose: the
+    /// artwork already points the way, and the row is kept to what the traffic
+    /// list does not print.
+    /// </summary>
     public string Tooltip =>
-        $"{Callsign}  {RouteLabel}\n{Aircraft}  ·  {Altitude}  ·  {Speed}  ·  {Heading}\n{State}";
+        $"{Callsign}  {RouteLabel}\n{Aircraft}  ·  {Altitude}  ·  {Speed}\n{State}";
 
     public void Update(IvaoPilot pilot)
     {

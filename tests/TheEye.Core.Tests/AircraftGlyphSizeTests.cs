@@ -13,7 +13,9 @@ public sealed class AircraftGlyphSizeTests
     [InlineData(20, 20)]
     [InlineData(21, 21)]
     [InlineData(30, 30)]
-    [InlineData(31, 30)]
+    [InlineData(39, 39)]
+    [InlineData(40, 40)]
+    [InlineData(41, 40)]
     public void SettingsNormalizeCloneAndCopySize(int value, int expected)
     {
         var settings = new TheEyeSettings { AircraftGlyphSize = value };
@@ -32,7 +34,7 @@ public sealed class AircraftGlyphSizeTests
         var options = new SettingsViewModel(original.Clone());
         options.AircraftGlyphSize = 30;
         Assert.Equal("30 px", options.AircraftGlyphSizeLabel);
-        Assert.Equal(21, original.AircraftGlyphSize);
+        Assert.Equal(TheEyeSettings.DefaultAircraftGlyphSize, original.AircraftGlyphSize);
         Assert.Equal(30, options.CreateSettings().AircraftGlyphSize);
     }
 
@@ -47,13 +49,31 @@ public sealed class AircraftGlyphSizeTests
         var icon = item.Icon;
         Assert.Equal(size, item.DisplayGlyphSize);
         Assert.Equal(markerSize, item.MarkerSize);
-        Assert.Equal(markerSize - 1, item.HaloSize);
+
+        // Hovering grows the artwork instead of drawing a halo around it, so the
+        // hit area and the position of the pin stay what they were.
+        Assert.Equal(size + 2, Grow(item, hovered: true));
+        Assert.Equal(size, Grow(item, hovered: false));
         item.IsSelected = true;
         Assert.Equal(size + 3, item.DisplayGlyphSize);
-        Assert.True(item.MarkerSize > item.DisplayGlyphSize);
+        Assert.Equal(size + 5, Grow(item, hovered: true));
+        Assert.True(item.MarkerSize >= item.DisplayGlyphSize);
         Assert.Same(icon, item.Icon);
         item.IsSelected = false;
-        Assert.Equal(size, item.DisplayGlyphSize);
+        Assert.Equal(size + 2, item.DisplayGlyphSize);
+        Assert.Equal(size, Grow(item, hovered: false));
+
+        // The artwork of a pin that is both selected and hovered still fits the
+        // box the pin was laid out with, so growing never clips or shifts it.
+        item.IsSelected = true;
+        Grow(item, hovered: true);
+        Assert.True(item.MarkerSize >= item.DisplayGlyphSize);
+    }
+
+    private static int Grow(PilotItem item, bool hovered)
+    {
+        item.IsHovered = hovered;
+        return item.DisplayGlyphSize;
     }
 
     [Fact]
@@ -94,6 +114,48 @@ public sealed class AircraftGlyphSizeTests
         Assert.Equal(30, item.GlyphSize);
         item.SetScreenPosition(100, 200, true);
         Assert.Same(item, map.HitTestPilot(new Mapsui.Manipulations.ScreenPosition(117.5, 217.5)));
+    }
+
+    [Fact]
+    public void MapHoverGrowsOnlyTheHoveredPin()
+    {
+        using var map = new MapViewModel(new Images());
+        var palette = new MapPalette("#16324F", "#1B2A35", "#2F4858", "#6FE3F5", "#4CC9F0", true);
+        map.Initialize(palette, new GeoCoordinate(50, 0), 10000);
+        map.Map!.Navigator.SetSize(800, 600);
+        var pilots = new[]
+        {
+            new IvaoPilot { Id = 1, LastTrack = new IvaoLastTrack { Latitude = 50, Longitude = 0 } },
+            new IvaoPilot { Id = 2, LastTrack = new IvaoLastTrack { Latitude = 51, Longitude = 1 } }
+        };
+        var snapshot = new TheEye.Core.Services.TrackerSnapshot(
+            pilots, [], [], new IvaoConnectionStats(), DateTimeOffset.UtcNow, []);
+        map.UpdateTraffic(snapshot);
+        var first = map.Pilots.Single(item => item.Id == 1);
+        var second = map.Pilots.Single(item => item.Id == 2);
+        var size = first.DisplayGlyphSize;
+
+        map.SetHoveredPilot(first);
+        Assert.True(first.IsHovered);
+        Assert.Equal(size + 2, first.DisplayGlyphSize);
+        Assert.Equal(size, second.DisplayGlyphSize);
+
+        // Moving the pointer to the other pin restores the one it left.
+        map.SetHoveredPilot(second);
+        Assert.False(first.IsHovered);
+        Assert.Equal(size, first.DisplayGlyphSize);
+        Assert.Equal(size + 2, second.DisplayGlyphSize);
+
+        // The selected aircraft keeps the size of its selection while hovered.
+        map.SelectPilot(second, center: false);
+        Assert.False(second.IsHovered);
+        Assert.Equal(size + 3, second.DisplayGlyphSize);
+        map.SetHoveredPilot(second);
+        Assert.Equal(size + 3, second.DisplayGlyphSize);
+
+        map.SetHoveredPilot(null);
+        Assert.False(first.IsHovered);
+        Assert.False(second.IsHovered);
     }
 
     private sealed class Images : IImagePipeline, IAircraftIconCache, IImageCache

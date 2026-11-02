@@ -33,6 +33,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private readonly IImageCache _images;
     private readonly IImagePipeline _pipeline;
     private readonly TimeProvider _clock;
+    private readonly string? _basemapCacheDirectory;
     private GeoCoordinate? _hoverRoutePosition;
     private readonly Dictionary<long, PilotItem> _pilotsById = [];
     private readonly Dictionary<long, AtcItem> _atcById = [];
@@ -98,17 +99,50 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
             if (Map is { } map)
             {
-                MapBasemap.Apply(map, style);
+                MapBasemap.Apply(map, style, _basemapCacheDirectory);
             }
+
+            // The pins are painted white or dark grey depending on the basemap,
+            // so the same switch that swaps the tiles repaints the traffic.
+            UpdateAircraftIconColors();
         }
     }
 
-    public MapViewModel(IImagePipeline images, TimeProvider? timeProvider = null)
+    /// <summary>The colour of the artwork for the basemap and theme currently drawn.</summary>
+    private string AircraftIconColor => _palette is { } palette
+        ? AircraftMarkerStyles.IconColor(palette, _mapStyle)
+        : AircraftMarkerStyles.LightIcon;
+
+    /// <summary>
+    /// Repaints every pin after the basemap or the theme changed. The pins are
+    /// UI elements, so the colour has to be handed to each of them; new traffic
+    /// picks it up when it is created.
+    /// </summary>
+    private void UpdateAircraftIconColors()
+    {
+        var color = AircraftIconColor;
+        foreach (var pilot in Pilots)
+        {
+            pilot.IconColor = color;
+        }
+    }
+
+    /// <summary>
+    /// Wires the map to a theme palette. <paramref name="basemapCacheDirectory"/>
+    /// overrides where the raster styles keep their tiles; the shells leave it
+    /// null so the cache lives in the application data directory, a test points
+    /// it at a temporary one.
+    /// </summary>
+    public MapViewModel(
+        IImagePipeline images,
+        TimeProvider? timeProvider = null,
+        string? basemapCacheDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(images);
 
         _pipeline = images;
         _clock = timeProvider ?? TimeProvider.System;
+        _basemapCacheDirectory = basemapCacheDirectory;
         _icons = images.AircraftIcons;
         _images = images.SessionImages;
         Pilots = [];
@@ -232,10 +266,11 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
         // A saved tile style is restored with the view, so a restart returns to
         // the basemap the user left instead of the offline map.
-        MapBasemap.Apply(map, _mapStyle);
+        MapBasemap.Apply(map, _mapStyle, _basemapCacheDirectory);
 
         map.Navigator.ViewportChanged += OnViewportChanged;
         Map = map;
+        UpdateAircraftIconColors();
         UpdateStationTargets();
         UpdateAirports();
         map.Refresh();
@@ -270,6 +305,10 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         SetLayerEnabled(_atcRegionsLayer, _showAtc);
         SetLayerEnabled(_atcLabelsLayer, _showAtc);
         SetLayerEnabled(_atcStationsLayer, _showAtc);
+
+        // The offline map is painted with the palette, so a theme switch can turn
+        // a dark map light and has to repaint the pins with it.
+        UpdateAircraftIconColors();
         map.Refresh();
     }
 
@@ -346,7 +385,20 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // The pin under the pointer grows by two pixels; the one it left returns
+        // to its own size. Both markers redraw from their own property change.
+        if (_hoveredPilot is { } previous)
+        {
+            previous.IsHovered = false;
+        }
+
         _hoveredPilot = pilot;
+
+        if (pilot is not null)
+        {
+            pilot.IsHovered = true;
+        }
+
         RebuildHoverRouteLayer();
         Map?.Refresh();
     }
@@ -679,7 +731,11 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             }
             else
             {
-                var item = new PilotItem(pilot, _icons, _images, _clock) { GlyphSize = AircraftGlyphSize };
+                var item = new PilotItem(pilot, _icons, _images, _clock)
+                {
+                    GlyphSize = AircraftGlyphSize,
+                    IconColor = AircraftIconColor
+                };
                 _pilotsById.Add(pilot.Id, item);
                 Pilots.Add(item);
             }

@@ -59,6 +59,33 @@ public sealed class MapBasemapTests
         Assert.False(MapBasemap.IsKnown("hybrid"));
     }
 
+    [Theory]
+    [InlineData("dark-matter", true)]
+    [InlineData("  DARK-MATTER ", true)]
+    [InlineData("satellite-hybrid", true)]
+    [InlineData("basic", false)]
+    [InlineData("osm-bright", false)]
+    [InlineData("osm-liberty", false)]
+    [InlineData("openstreetmap", false)]
+    [InlineData("positron", false)]
+    [InlineData("voyager", false)]
+    [InlineData("toner", false)]
+    [InlineData("Offline", false)]
+    [InlineData(null, false)]
+    [InlineData("not-a-style", false)]
+    public void IsDark_NamesTheStylesDrawnOnADarkBasemap(string? style, bool expected) =>
+        Assert.Equal(expected, MapBasemap.IsDark(style));
+
+    [Fact]
+    public void IsDark_LeavesTheOfflineMapToTheTheme()
+    {
+        // The offline map is painted with the theme palette, which MapBasemap
+        // cannot see, so it answers false and the pin colour asks
+        // AircraftMarkerStyles.IsDarkMap instead.
+        Assert.False(MapBasemap.IsDark(MapBasemap.Offline));
+        Assert.True(AircraftMarkerStyles.IsDarkMap(Palette, MapBasemap.Offline));
+    }
+
     [Fact]
     public void Schema_RequestsOneProviderLevelBelowTheViewLevel()
     {

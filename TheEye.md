@@ -116,14 +116,30 @@ Both WPF and Avalonia parse bundled SVG path data into native vector geometry
 once per category. No SVG package or rasterization is needed. Bundled SVGs must
 use only untransformed filled paths and an optional title; unsupported geometry
 or missing resources raise an explicit error. Marker templates preserve the 64x64
-canvas in a Viewbox, rotate only the artwork clockwise by normalized heading,
-and use the theme's TextBrush. OPTIONS > Map layers > Aircraft glyph size sets
-the base size from 20 to 30 pixels in one-pixel steps (default 21). Saving applies
-it immediately and persists `aircraftGlyphSize`; Cancel leaves the map unchanged.
-Selected aircraft are 3 pixels larger. Halos and click areas grow with the glyph,
-while marker centres stay anchored to their coordinates. Ground opacity remains
-unchanged. Heading updates reuse the same geometry;
-type changes and loaded flight plans refresh the category.
+canvas in a Viewbox and rotate only the artwork clockwise by normalized heading.
+
+The colour of that artwork follows the basemap, not the theme: a pin drawn in the
+theme's text colour disappears as soon as the tiles under it have the other
+brightness. `AircraftMarkerStyles` paints it white (`#FFFFFF`) on a dark basemap
+and dark grey (`#1F2933`, not black, so it does not read like a hole next to the
+map's own outlines) on a light one. `MapBasemap.IsDark` names the raster styles
+that are dark (Dark Matter and Hybrid); for `Offline` the palette decides,
+because that map is painted with the theme palette. `MapViewModel` recomputes the
+colour on a style or theme switch and hands it to every pin, and new traffic is
+born with it.
+
+A second copy of the silhouette, turned with the aircraft, offset 1.5 pixels down
+in screen space and painted with the theme's shadow brush, sits under the artwork
+so the pin keeps a contour on a busy basemap. OPTIONS > Map layers > Aircraft
+glyph size sets the base size from 20 to 40 pixels in one-pixel steps (default
+25). Saving applies it immediately and persists `aircraftGlyphSize`; Cancel
+leaves the map unchanged. Selected aircraft are 3 pixels larger. The pointer over
+a pin grows its artwork by 2 pixels instead of drawing a halo, so the aircraft
+under the pointer stands out without covering the traffic next to it; the click
+area (glyph plus 5 pixels) stays with the un-hovered size and marker centres stay
+anchored to their coordinates. Ground opacity remains unchanged. Heading updates
+reuse the same geometry; type changes and loaded flight plans refresh the
+category.
 
 
 ## AIRCRAFT MOVEMENT BETWEEN UPDATES (implemented)
