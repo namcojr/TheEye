@@ -473,7 +473,7 @@ public static class IvaoMapLayers
             {
                 SymbolType = SymbolType.Ellipse,
                 SymbolScale = 0.45,
-                Fill = new Brush(new Color(0, 0, 0, 0)),
+                Fill = new Brush(new Color(0, 127, 255, 55)),
                 Outline = new Pen(WorldMap.WithAlpha(WorldMap.Parse(palette.Accent), 51), 1.2)
             });
             feature.Styles.Add(new LabelStyle
