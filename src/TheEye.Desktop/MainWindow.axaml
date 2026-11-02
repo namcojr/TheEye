@@ -481,14 +481,15 @@
                     <!-- Traffic browser, map and selection pane. The browser is
                          resizable: the splitter writes its width into the
                          settings, so the column comes back at the width the user
-                         left it. The selection pane collapses when nothing is
-                         picked, which hands its room to the map. The column
-                         limits mirror TheEyeSettings.Min/MaxTrafficColumnWidth. -->
+                         left it. The selection pane floats over the right edge of
+                         the map instead of taking a column of its own, so the map
+                         keeps its width and its position when a selection appears
+                         or is cleared. The column limits mirror
+                         TheEyeSettings.Min/MaxTrafficColumnWidth. -->
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="322" MinWidth="248" MaxWidth="560" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
                     <!-- Traffic browser -->
@@ -867,23 +868,30 @@
                         </StackPanel>
 
 
-                        <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="14">
-                            <Button Theme="{StaticResource SquareButton}" ToolTip.Tip="Zoom in"
-                                    AutomationProperties.Name="Zoom in"
-                                    Command="{Binding ZoomInCommand}" Margin="0,0,0,5">
-                                <TextBlock Text="+" FontSize="14" VerticalAlignment="Center" />
-                            </Button>
-                            <Button Theme="{StaticResource SquareButton}" ToolTip.Tip="Zoom out"
-                                    AutomationProperties.Name="Zoom out"
-                                    Command="{Binding ZoomOutCommand}" Margin="0,0,0,5">
-                                <TextBlock Text="−" FontSize="14" VerticalAlignment="Center" />
-                            </Button>
-                            <Button Theme="{StaticResource SquareButton}"
-                                    ToolTip.Tip="Reset the world view"
-                                    AutomationProperties.Name="Reset view"
-                                    Command="{Binding HomeCommand}">
-                                <TextBlock Text="⌂" FontSize="13" VerticalAlignment="Center" />
-                            </Button>
+                        <!-- The selection pane covers the right edge of the map
+                             while something is selected, so the zoom controls step
+                             left by its width instead of hiding under it. -->
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="14">
+                            <Border Width="348" IsVisible="{Binding HasSelection}" />
+                            <StackPanel>
+                                <Button Theme="{StaticResource SquareButton}" ToolTip.Tip="Zoom in"
+                                        AutomationProperties.Name="Zoom in"
+                                        Command="{Binding ZoomInCommand}" Margin="0,0,0,5">
+                                    <TextBlock Text="+" FontSize="14" VerticalAlignment="Center" />
+                                </Button>
+                                <Button Theme="{StaticResource SquareButton}" ToolTip.Tip="Zoom out"
+                                        AutomationProperties.Name="Zoom out"
+                                        Command="{Binding ZoomOutCommand}" Margin="0,0,0,5">
+                                    <TextBlock Text="−" FontSize="14" VerticalAlignment="Center" />
+                                </Button>
+                                <Button Theme="{StaticResource SquareButton}"
+                                        ToolTip.Tip="Reset the world view"
+                                        AutomationProperties.Name="Reset view"
+                                        Command="{Binding HomeCommand}">
+                                    <TextBlock Text="⌂" FontSize="13" VerticalAlignment="Center" />
+                                </Button>
+                            </StackPanel>
                         </StackPanel>
 
                         <Border Classes="map-overlay" HorizontalAlignment="Left"
@@ -895,10 +903,12 @@
 
 
 
-                    <!-- Selection detail pane. It is only there while something is
-                         selected: with nothing picked there is nothing to inspect,
-                         so the column collapses and the map keeps the width. -->
-                    <Border Grid.Column="3" Width="348"
+                    <!-- Selection detail pane. It floats over the right edge of the
+                         map while something is selected, so opening and closing it
+                         never resizes or moves the map underneath; with nothing
+                         picked there is nothing to inspect and it is hidden. -->
+                    <Border Grid.Column="2" Width="348" ZIndex="4"
+                            HorizontalAlignment="Right"
                             IsVisible="{Binding HasSelection}"
                             Background="{DynamicResource PanelBackgroundBrush}"
                             BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0">

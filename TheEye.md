@@ -223,9 +223,10 @@ pixel splitter, the map and the selection pane.
   `MainViewModel.TrafficColumnWidth` owns the value (the Avalonia shell reaches
   the column through `MainGrid.ColumnDefinitions[0]`, because Avalonia does not
   generate a field for a `ColumnDefinition`).
-- The selection pane is only there while something is selected: `HasSelection`
-  collapses it, so the map keeps the width instead of showing an empty
-  "Nothing selected" card.
+- The selection pane floats over the right edge of the map while something is
+  selected and is hidden otherwise, so picking a row or clearing the selection
+  never resizes the map or shifts the geography under it. The map's zoom buttons
+  step left by the width of the pane while it is open, so they stay reachable.
 - The ATC hover label sizes itself to its two lines. It used to be a fixed 56
   pixels tall, which read as a third, blank line under the callsign and frequency.
 
