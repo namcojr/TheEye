@@ -235,9 +235,7 @@ public sealed class PilotItem : ObservableObject
 
     /// <summary>
     /// The plan to read: the full filing once IVAO described it, otherwise the
-    /// trimmed copy embedded in the tracker summary. The live summary carries the
-    /// airports and aircraft but omits the route, so the card fills in the rest as
-    /// soon as <see cref="ApplyFlightPlan"/> has the answer.
+    /// copy embedded in the tracker summary.
     /// </summary>
     private IvaoFlightPlan? Plan => _flightPlan ?? _pilot.FlightPlan;
 
@@ -245,15 +243,15 @@ public sealed class PilotItem : ObservableObject
 
     public string FlightType => Plan?.FlightType is { Length: > 0 } type ? type : MissingFlightPlanValue;
 
-    public string CruisingLevel => _flightPlan?.Level is { Length: > 0 } level ? level : MissingFlightPlanValue;
+    public string CruisingLevel => Plan?.Level is { Length: > 0 } level ? level : MissingFlightPlanValue;
 
-    public string CruisingSpeed => _flightPlan?.Speed is { Length: > 0 } speed ? speed : MissingFlightPlanValue;
+    public string CruisingSpeed => Plan?.Speed is { Length: > 0 } speed ? speed : MissingFlightPlanValue;
 
-    public string EstimatedEnroute => _flightPlan?.EetSeconds is { } eet
+    public string EstimatedEnroute => Plan?.EetSeconds is { } eet
         ? DurationText.FromSeconds(eet)
         : MissingFlightPlanValue;
 
-    public string Endurance => _flightPlan?.EnduranceSeconds is { } endurance
+    public string Endurance => Plan?.EnduranceSeconds is { } endurance
         ? DurationText.FromSeconds(endurance)
         : MissingFlightPlanValue;
 
@@ -262,21 +260,21 @@ public sealed class PilotItem : ObservableObject
     public string Alternate2 => Plan?.Alternate2Icao ?? MissingFlightPlanValue;
 
     /// <summary>The off-block time the flight was filed for, in UTC.</summary>
-    public string FiledDepartureText => _flightPlan?.DepartureTimeUtc is { } time
+    public string FiledDepartureText => Plan?.DepartureTimeUtc is { } time
         ? time.UtcDateTime.ToString("HH:mm") + "z"
         : MissingFlightPlanValue;
 
     /// <summary>When the aircraft actually left the blocks, in UTC.</summary>
-    public string ActualDepartureText => _flightPlan?.ActualDepartureTimeUtc is { } time
+    public string ActualDepartureText => Plan?.ActualDepartureTimeUtc is { } time
         ? time.UtcDateTime.ToString("HH:mm") + "z"
         : MissingFlightPlanValue;
 
-    public string PeopleOnBoardText => _flightPlan?.PeopleOnBoard is { } people ? $"{people:N0}" : MissingFlightPlanValue;
+    public string PeopleOnBoardText => Plan?.PeopleOnBoard is { } people ? $"{people:N0}" : MissingFlightPlanValue;
 
-    public string EquipmentText => _flightPlan?.EquipmentText is { Length: > 0 } equipment ? equipment : MissingFlightPlanValue;
+    public string EquipmentText => Plan?.EquipmentText is { Length: > 0 } equipment ? equipment : MissingFlightPlanValue;
 
     /// <summary>The surveillance capabilities of the filing, e.g. "L B1 D1".</summary>
-    public string TransponderTypeText => _flightPlan?.TransponderText is { Length: > 0 } types ? types : MissingFlightPlanValue;
+    public string TransponderTypeText => Plan?.TransponderText is { Length: > 0 } types ? types : MissingFlightPlanValue;
 
     /// <summary>True once IVAO described the filing, which is what the detail rows need.</summary>
     public bool HasFlightPlanDetails => _flightPlan is not null;
@@ -598,8 +596,8 @@ public sealed class PilotItem : ObservableObject
             return;
         }
 
-        // The live summary omits the filed route. Keep the map's pilot enriched
-        // with the session filing, including after the next summary replaces it.
+        // Keep route and airport data from the summary when the richer filing
+        // omits them, and retain richer airport coordinates when it has them.
         _pilot.FlightPlan ??= new IvaoFlightPlan();
         _pilot.FlightPlan.Route = plan.Route ?? _pilot.FlightPlan.Route;
         _pilot.FlightPlan.Departure = plan.Departure?.Position is not null

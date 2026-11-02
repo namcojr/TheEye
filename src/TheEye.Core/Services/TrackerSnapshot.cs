@@ -17,6 +17,10 @@ public sealed record TrackerSnapshot(
     public int SupervisorCount => Supervisors.Count;
 
     public bool IsPartial => Warnings.Count > 0;
+
+    public IReadOnlyList<string> UserWarnings => Warnings
+        .Where(warning => warning.StartsWith("Repeated ", StringComparison.Ordinal))
+        .ToArray();
 }
 
 public sealed class TrackerRefreshException : Exception
@@ -28,4 +32,8 @@ public sealed class TrackerRefreshException : Exception
     }
 
     public IReadOnlyList<string> Warnings { get; }
+
+    public IReadOnlyList<string> UserWarnings => Warnings
+        .Where(warning => warning.StartsWith("Repeated ", StringComparison.Ordinal))
+        .ToArray();
 }

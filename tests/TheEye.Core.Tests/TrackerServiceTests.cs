@@ -148,6 +148,69 @@ public sealed class TrackerServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_OnlySurfacesRepeatedUnauthorizedFeedFailures()
+    {
+        var clock = new ManualTimeProvider();
+        var handler = new StubHttpMessageHandler(request =>
+            request.RequestUri!.AbsolutePath == SupervisorsPath
+                ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                : TrackerResponse(request.RequestUri.AbsolutePath));
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+        using var service = new TrackerService(api, timeProvider: clock) { IncludeIdentity = true };
+
+        await service.RefreshAsync();
+        Assert.Empty(service.LastSnapshot!.UserWarnings);
+
+        clock.Advance(TimeSpan.FromMinutes(10));
+        await service.RefreshAsync();
+
+        Assert.Single(service.LastSnapshot!.UserWarnings);
+        Assert.StartsWith("Repeated Supervisors:", service.LastSnapshot.UserWarnings[0]);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_DoesNotSurfaceTransientTransportWarnings()
+    {
+        var clock = new ManualTimeProvider();
+        var handler = new StubHttpMessageHandler(request =>
+            request.RequestUri!.AbsolutePath == StatsPath
+                ? throw new HttpRequestException("The request timed out.")
+                : TrackerResponse(request.RequestUri.AbsolutePath));
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+        using var service = new TrackerService(api, timeProvider: clock);
+
+        await service.RefreshAsync();
+
+        Assert.True(service.LastSnapshot!.IsPartial);
+        Assert.Contains(service.LastSnapshot.Warnings, warning => warning.StartsWith("Statistics:", StringComparison.Ordinal));
+        Assert.Empty(service.LastSnapshot.UserWarnings);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_OnlySurfacesRepeatedNotFoundFeedFailures()
+    {
+        var clock = new ManualTimeProvider();
+        var handler = new StubHttpMessageHandler(request =>
+            request.RequestUri!.AbsolutePath == StatsPath
+                ? new HttpResponseMessage(HttpStatusCode.NotFound)
+                : TrackerResponse(request.RequestUri.AbsolutePath));
+        using var httpClient = new HttpClient(handler);
+        using var api = CreateApi(httpClient);
+        using var service = new TrackerService(api, timeProvider: clock);
+
+        await service.RefreshAsync();
+        Assert.Empty(service.LastSnapshot!.UserWarnings);
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await service.RefreshAsync();
+
+        Assert.Single(service.LastSnapshot!.UserWarnings);
+        Assert.StartsWith("Repeated Statistics:", service.LastSnapshot.UserWarnings[0]);
+    }
+
+    [Fact]
     public async Task RefreshAsync_ReusesOptionalFeedsUntilTheirCacheExpires()
     {
         var clock = new ManualTimeProvider();

@@ -845,7 +845,7 @@
                             <Border Background="{DynamicResource PanelBackgroundBrush}"
                                     BorderBrush="{DynamicResource WarningBrush}" BorderThickness="1"
                                     CornerRadius="6" Padding="12,7"
-                                    IsVisible="{Binding HasWarnings}">
+                                    IsVisible="{Binding HasVisibleWarnings}">
                                 <TextBlock Text="{Binding WarningText}"
                                            Foreground="{DynamicResource WarningBrush}" FontSize="11"
                                            TextWrapping="Wrap" MaxWidth="520" />

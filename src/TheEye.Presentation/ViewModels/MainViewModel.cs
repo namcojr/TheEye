@@ -62,6 +62,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _isRefreshing;
     private bool _hasError;
     private bool _hasWarnings;
+    private bool _hasVisibleWarnings;
     private bool _hasTrackNotice;
     private int _pilotCount;
     private int _atcCount;
@@ -385,6 +386,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _hasWarnings;
         private set => SetProperty(ref _hasWarnings, value);
+    }
+
+    public bool HasVisibleWarnings
+    {
+        get => _hasVisibleWarnings;
+        private set => SetProperty(ref _hasVisibleWarnings, value);
     }
 
     /// <summary>
@@ -771,7 +778,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         LastUpdatedText = $"Updated {snapshot.UpdatedAt.ToLocalTime():HH:mm:ss}";
         StatusText = snapshot.IsPartial ? "Live — partial data" : "Live";
         HasWarnings = snapshot.IsPartial;
-        WarningText = string.Join(Environment.NewLine, snapshot.Warnings);
+        HasVisibleWarnings = snapshot.UserWarnings.Count > 0;
+        WarningText = string.Join(Environment.NewLine, snapshot.UserWarnings);
         HasError = false;
         ErrorMessage = string.Empty;
         IsRefreshing = false;
@@ -814,7 +822,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ErrorMessage = exception.Message;
         StatusText = "Offline";
         HasWarnings = exception.Warnings.Count > 0;
-        WarningText = string.Join(Environment.NewLine, exception.Warnings);
+        HasVisibleWarnings = exception.UserWarnings.Count > 0;
+        WarningText = string.Join(Environment.NewLine, exception.UserWarnings);
     }
 
     private void OnMapSelectionChanged(object? sender, EventArgs e)
@@ -958,7 +967,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private async Task RefreshSelectionFlightPlanAsync()
     {
-        if (!IsSignedIn || _flightPlans is not { } flightPlans || Map.SelectedPilot is not { } pilot)
+        if (!IsSignedIn || _flightPlans is not { } flightPlans || Map.SelectedPilot is not { } pilot ||
+            pilot.Pilot.FlightPlan?.HasExtendedDetails == true)
         {
             return;
         }

@@ -312,18 +312,25 @@ public sealed class TrackerService : IDisposable
         }
         catch (IvaoApiException ex) when (ex.IsUnauthorized)
         {
+            var failures = (cached?.Failures ?? 0) + 1;
+            var retryAt = _timeProvider.GetUtcNow() + TimeSpan.FromMinutes(10);
+            var warning = failures >= 2
+                ? $"Repeated {label}: {ex.Message} Next attempt at {retryAt.ToLocalTime():HH:mm:ss}; showing last available data."
+                : null;
             lock (_cacheGate)
             {
-                _feedCache[label] = new CachedFeed(fallback, _timeProvider.GetUtcNow() + TimeSpan.FromMinutes(10), null, 0);
+                _feedCache[label] = new CachedFeed(fallback, retryAt, warning, failures);
             }
 
+            AddWarning(warnings, warning);
             return fallback;
         }
         catch (Exception ex)
         {
             var failures = Math.Min((cached?.Failures ?? 0) + 1, 5);
             var retryDelay = TimeSpan.FromMinutes(Math.Min(Math.Pow(2, failures - 1), 10));
-            var warning = $"{label}: {ex.Message} Next attempt at {(_timeProvider.GetUtcNow() + retryDelay).ToLocalTime():HH:mm:ss}; showing last available data.";
+            var repeatedStatus = ex is IvaoApiException && failures >= 2 ? "Repeated " : string.Empty;
+            var warning = $"{repeatedStatus}{label}: {ex.Message} Next attempt at {(_timeProvider.GetUtcNow() + retryDelay).ToLocalTime():HH:mm:ss}; showing last available data.";
             var value = cached is null ? fallback : (T)cached.Value!;
             lock (_cacheGate)
             {

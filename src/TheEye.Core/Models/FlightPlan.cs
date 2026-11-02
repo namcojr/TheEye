@@ -4,13 +4,12 @@ using TheEye.Core.Json;
 namespace TheEye.Core.Models;
 
 /// <summary>
-/// A flight plan as IVAO holds it. The tracker summaries embed a trimmed copy —
-/// the airports and aircraft, but not the filed route — while
-/// <c>/v2/tracker/sessions/{id}/flightPlans/latest</c> answers with the whole
-/// filing: cruise speed and level, the times, the endurance, the alternate and
-/// the equipment. Every member of the full answer is optional here, because a
-/// revision may leave any of them out and the card shows a dash instead of
-/// losing the rest of the plan.
+/// A flight plan as IVAO holds it. Tracker summaries embed a partial copy with
+/// the current route, airports and aircraft; the
+/// <c>/v2/tracker/sessions/{id}/flightPlans/latest</c> endpoint can add cruise
+/// details, times, endurance, alternates and equipment. Every member is optional
+/// because a revision may leave any of them out and the card shows a dash instead
+/// of losing the rest of the plan.
 /// </summary>
 public sealed class IvaoFlightPlan
 {
@@ -161,6 +160,18 @@ public sealed class IvaoFlightPlan
     /// </summary>
     [JsonIgnore]
     public string TransponderText => CodesOf(AircraftTransponderTypes);
+
+    [JsonIgnore]
+    public bool HasExtendedDetails =>
+        Speed is not null &&
+        Level is not null &&
+        EetSeconds is not null &&
+        EnduranceSeconds is not null &&
+        DepartureTimeSeconds is not null &&
+        ActualDepartureTimeSeconds is not null &&
+        PeopleOnBoard is not null &&
+        AircraftEquipments is not null &&
+        AircraftTransponderTypes is not null;
 
     /// <summary>The codes of one filed list as a single space-separated string.</summary>
     private static string CodesOf(string[]? codes) =>
