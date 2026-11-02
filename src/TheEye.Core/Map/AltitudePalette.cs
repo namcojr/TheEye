@@ -44,9 +44,9 @@ public enum AltitudeBand
 /// </summary>
 public static class AltitudePalette
 {
-    public const string Ground = "#FF0000";
-    public const string Below3000 = "#FF7F00";
-    public const string Below5000 = "#FFFF00";
+    public const string Ground     = "#FF0000";
+    public const string Below3000  = "#FF7F00";
+    public const string Below5000  = "#FFFF00";
     public const string Below10000 = "#7FFF00";
     public const string Below15000 = "#00FF00";
     public const string Below20000 = "#00FF7F";

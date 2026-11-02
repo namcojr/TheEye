@@ -273,7 +273,7 @@ public static class IvaoMapLayers
     /// Width of the trail, in device independent pixels. Two pixels, like WebEye,
     /// keep the altitude colours vivid against the map without hiding it.
     /// </summary>
-    public const double TrailWidth = 2.0;
+    public const double TrailWidth = 1.0;
 
     /// <summary>
     /// Alpha of the estimated trail, i.e. the flown part of the filed route that

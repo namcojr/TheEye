@@ -916,9 +916,14 @@
                                 </DockPanel>
                             </Border>
 
-                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Disabled"
-                                          Padding="16,14,16,18">
-                                <Grid>
+                            <!-- The gutter belongs to the content, not to the
+                                 ScrollViewer: Avalonia measures the scrolled
+                                 child at the unpadded width, so wrapping fields
+                                 such as ROUTE laid themselves out 16px wider
+                                 than the pane and their last word ran under the
+                                 panel border. -->
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <Grid Margin="16,14,16,18">
                                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
                                                 Margin="0,60,0,0"
                                                 IsVisible="{Binding HasSelection, Converter={StaticResource Not}}">
