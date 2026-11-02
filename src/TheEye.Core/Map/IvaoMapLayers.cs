@@ -362,7 +362,7 @@ public static class IvaoMapLayers
 
         return new MemoryLayer(FlightPlanRoutesLayerName)
         {
-            Features = features,
+            Features = features.OrderBy(feature => feature is PointFeature).ToArray(),
             Style = null
         };
     }
@@ -479,7 +479,7 @@ public static class IvaoMapLayers
             feature.Styles.Add(new LabelStyle
             {
                 LabelColumn = "Icao",
-                Font = new Font { FontFamily = "Segoe UI", Size = 8, Bold = true },
+                Font = new Font { FontFamily = "Segoe UI", Size = 10, Bold = true },
                 ForeColor = trafficColor,
                 BackColor = null,
                 Halo = new Pen(land, 2),
@@ -739,14 +739,14 @@ public static class IvaoMapLayers
             feature.Styles.Add(new SymbolStyle
             {
                 SymbolType = SymbolType.Ellipse,
-                SymbolScale = 0.4,
-                Fill = new Brush(new Color(0, 0, 0, 0)),
-                Outline = new Pen(color, 1.2)
+                SymbolScale = 0.3,
+                Fill = new Brush(WorldMap.Parse(palette.Land)),
+                Outline = new Pen(color, 2.0)
             });
             feature.Styles.Add(new LabelStyle
             {
                 LabelColumn = "Waypoint",
-                Font = new Font { FontFamily = "Segoe UI", Size = 8, Bold = true },
+                Font = new Font { FontFamily = "Segoe UI", Size = 10, Bold = true },
                 ForeColor = color,
                 BackColor = null,
                 Halo = new Pen(WorldMap.Parse(palette.Land), 2),

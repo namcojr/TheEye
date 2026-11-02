@@ -7,7 +7,7 @@ namespace TheEye.Core.Tests;
 public sealed class NavigraphRouteResolverTests
 {
     [Fact]
-    public void Resolve_UsesAirwaySequenceToSelectDuplicateFixesAndOmitsIntermediateFixes()
+    public void Resolve_UsesAirwaySequenceToSelectDuplicateFixesAndIncludesIntermediateFixes()
     {
         var resolver = new NavigraphRouteResolver(
             [
@@ -30,10 +30,11 @@ public sealed class NavigraphRouteResolverTests
             "FIXA Q41 FIXB DCT FIXC",
             departure: new GeoCoordinate(50, 10));
 
-        Assert.Equal(["FIXA", "FIXB", "FIXC"], route.Select(waypoint => waypoint.Identifier));
+        Assert.Equal(["FIXA", "AIRWAYMID", "FIXB", "FIXC"], route.Select(waypoint => waypoint.Identifier));
         Assert.Equal(new GeoCoordinate(50, 10), route[0].Position);
-        Assert.Equal(new GeoCoordinate(51, 11), route[1].Position);
-        Assert.Equal(new GeoCoordinate(52, 12), route[2].Position);
+        Assert.Equal(new GeoCoordinate(50.5, 10.5), route[1].Position);
+        Assert.Equal(new GeoCoordinate(51, 11), route[2].Position);
+        Assert.Equal(new GeoCoordinate(52, 12), route[3].Position);
     }
 
     [Fact]
@@ -52,8 +53,9 @@ public sealed class NavigraphRouteResolverTests
 
         var route = resolver.Resolve("ENTRY UL9A EXIT");
 
-        Assert.Equal(["ENTRY", "EXIT"], route.Select(waypoint => waypoint.Identifier));
-        Assert.Equal(new GeoCoordinate(10, 0), route[1].Position);
+        Assert.Equal(["ENTRY", "MID", "EXIT"], route.Select(waypoint => waypoint.Identifier));
+        Assert.Equal(new GeoCoordinate(10, 1), route[1].Position);
+        Assert.Equal(new GeoCoordinate(10, 0), route[2].Position);
     }
 
     [Fact]
@@ -69,9 +71,10 @@ public sealed class NavigraphRouteResolverTests
 
         var route = resolver.Resolve("ENTRY Q41 EXIT");
 
-        Assert.Equal(["ENTRY", "EXIT"], route.Select(waypoint => waypoint.Identifier));
+        Assert.Equal(["ENTRY", "UNFILED", "EXIT"], route.Select(waypoint => waypoint.Identifier));
         Assert.Equal(new GeoCoordinate(50, 0), route[0].Position);
-        Assert.Equal(new GeoCoordinate(51, 1), route[1].Position);
+        Assert.Equal(new GeoCoordinate(50.5, 0.5), route[1].Position);
+        Assert.Equal(new GeoCoordinate(51, 1), route[2].Position);
     }
 
     [Fact]
@@ -103,8 +106,9 @@ public sealed class NavigraphRouteResolverTests
         var resolver = NavigraphRouteResolver.Load(path);
 
         var route = resolver.Resolve("FIXA Q41 FIXB", new GeoCoordinate(50, 0));
-        Assert.Equal(["FIXA", "FIXB"], route.Select(waypoint => waypoint.Identifier));
-        Assert.Equal(new GeoCoordinate(51, 1), route[1].Position);
+        Assert.Equal(["FIXA", "MID", "FIXB"], route.Select(waypoint => waypoint.Identifier));
+        Assert.Equal(new GeoCoordinate(50.5, 0.5), route[1].Position);
+        Assert.Equal(new GeoCoordinate(51, 1), route[2].Position);
     }
 
     private static void CreateDatabase(string path)

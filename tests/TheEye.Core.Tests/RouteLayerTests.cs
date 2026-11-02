@@ -167,15 +167,39 @@ public sealed class RouteLayerTests
             Assert.Single(line.Styles.OfType<VectorStyle>()).Line!.PenStyle == PenStyle.Dash);
         var coordinates = forwardLine.Geometry!.Coordinates;
 
-        Assert.Equal(4, coordinates.Length);
+        Assert.Equal(5, coordinates.Length);
         Assert.Equal(IvaoMapLayers.ForwardRouteWidth, PenWidth(forwardLine));
         Assert.Null(forwardLine.Styles.OfType<VectorStyle>().Single().Outline);
         Assert.Equal(WorldMap.Project(new GeoCoordinate(52, 5.5)).X, coordinates[0].X, 5);
+        Assert.Equal(WorldMap.Project(new GeoCoordinate(52, 5.5)).X, coordinates[1].X, 5);
         Assert.Equal(WorldMap.Project(new GeoCoordinate(52, 8)).X, coordinates[^1].X, 5);
-        Assert.Equal(["FIXA", "FIXB", "FIXC"], layer.Features
+        Assert.Equal(["FIXA", "HIDDEN", "FIXB", "FIXC"], layer.Features
             .OfType<PointFeature>()
             .Where(feature => feature["Waypoint"] is not null)
             .Select(feature => (string)feature["Waypoint"]!));
+        Assert.All(layer.Features.OfType<PointFeature>(), feature =>
+        {
+            var style = Assert.Single(feature.Styles.OfType<SymbolStyle>());
+            Assert.Equal(WorldMap.Parse(Palette.Land), style.Fill!.Color);
+            Assert.Equal(255, style.Fill.Color!.Value.A);
+        });
+    }
+
+    [Fact]
+    public void CreateFlightPlanRoutes_DrawsAllWaypointMarkersAfterAllDashedLines()
+    {
+        var pilot = Pilot();
+        pilot.FlightPlan!.Route = "FIXA";
+        var resolver = new NavigraphRouteResolver(
+            [("FIXA", new GeoCoordinate(52, 5))], []);
+
+        var layer = IvaoMapLayers.CreateFlightPlanRoutes([pilot, pilot], Palette, resolver);
+        var features = layer.Features.ToList();
+
+        Assert.Equal(2, TrailLines(layer).Count);
+        Assert.Equal(2, features.OfType<PointFeature>().Count());
+        Assert.All(features.Take(2), feature => Assert.IsType<GeometryFeature>(feature));
+        Assert.All(features.Skip(2), feature => Assert.IsType<PointFeature>(feature));
     }
 
     [Fact]

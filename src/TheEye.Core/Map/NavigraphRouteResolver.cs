@@ -8,8 +8,7 @@ public sealed record RouteWaypoint(string Identifier, GeoCoordinate Position);
 
 /// <summary>
 /// Reads user-provided Navigraph waypoint and airway data and resolves the fixes
-/// explicitly filed in an IVAO route. Airway intermediate fixes are deliberately
-/// omitted: only the filed entry and exit fixes are returned.
+/// in an IVAO route, including intermediate fixes along filed airways.
 /// </summary>
 public sealed class NavigraphRouteResolver
 {
@@ -217,9 +216,10 @@ public sealed class NavigraphRouteResolver
                         previousIdentifier,
                         nextIdentifier,
                         resolved.Count > 0 ? resolved[^1].Position : null,
-                        out var entry,
-                        out var exit))
+                        out var entryIndex,
+                        out var exitIndex))
                 {
+                    var entry = airway[entryIndex];
                     if (resolved.Count > 0 && resolved[^1].Identifier.Equals(previousIdentifier, StringComparison.OrdinalIgnoreCase))
                     {
                         resolved[^1] = resolved[^1] with { Position = entry.Position };
@@ -229,7 +229,15 @@ public sealed class NavigraphRouteResolver
                         resolved.Add(new RouteWaypoint(previousIdentifier, entry.Position));
                     }
 
-                    AddIfNew(resolved, new RouteWaypoint(nextIdentifier, exit.Position));
+                    var direction = entryIndex < exitIndex ? 1 : -1;
+                    for (var airwayIndex = entryIndex + direction;
+                         airwayIndex != exitIndex + direction;
+                         airwayIndex += direction)
+                    {
+                        var point = airway[airwayIndex];
+                        AddIfNew(resolved, new RouteWaypoint(point.Identifier, point.Position));
+                    }
+
                     index = nextIndex;
                 }
 
@@ -312,12 +320,12 @@ public sealed class NavigraphRouteResolver
         string entryIdentifier,
         string exitIdentifier,
         GeoCoordinate? previousPosition,
-        out AirwayCandidate entry,
-        out AirwayCandidate exit)
+        out int entryIndex,
+        out int exitIndex)
     {
         var bestScore = double.PositiveInfinity;
-        entry = default;
-        exit = default;
+        entryIndex = -1;
+        exitIndex = -1;
 
         for (var first = 0; first < airway.Count; first++)
         {
@@ -339,8 +347,8 @@ public sealed class NavigraphRouteResolver
                 if (score < bestScore)
                 {
                     bestScore = score;
-                    entry = airway[first];
-                    exit = airway[second];
+                    entryIndex = first;
+                    exitIndex = second;
                 }
             }
 
@@ -357,8 +365,8 @@ public sealed class NavigraphRouteResolver
                 if (score < bestScore)
                 {
                     bestScore = score;
-                    entry = airway[first];
-                    exit = airway[second];
+                    entryIndex = first;
+                    exitIndex = second;
                 }
             }
         }
