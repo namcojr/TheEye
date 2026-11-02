@@ -1,3 +1,16 @@
+THINGS TO ADD / CORRECTIONS
+===========================
+
+- Analyze the possibility to add more detailed maps.
+- Analyse the possibility of, in the aircraft line, to draw waypoints from its route (small open circle with
+the waypoint label name). Forward route will show a dashed line through the following waypoints. Users will provide
+navdata
+- Facility opacity changes to less opaque versions
+
+
+
+-----------------------------------------------------------------------------------------------------------------------
+
 TheEye is a new project to replicate IVAO's aircraft and ATC web application that will display all traffic online from both pilots and ATC (Air traffic controllers). Example payloads are below.
 
 The application should run natively in windows and linux, we are currently building the windows version here and after it is working and feature-locked, we will clone the project on a linux machine to proceed with its native version implementation.
@@ -83,14 +96,6 @@ the public API.
         return null;
     }
 }```
-
-THINGS TO ADD / CORRECTIONS
-===========================
-
-- Analyze the possibility to add more detailed maps.
-- Analyse the possibility of, in the aircraft line, to draw waypoints from its route (small open circle with
-the waypoint label name). Forward route will show a dashed line through the following waypoints. Users will provide
-navdata
 
 ## AIRCRAFT SVG GLYPHS (implemented)
 ==================================
