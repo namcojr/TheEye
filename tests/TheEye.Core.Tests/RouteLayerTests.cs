@@ -136,9 +136,9 @@ public sealed class RouteLayerTests
         Assert.Equal(2, features.OfType<PointFeature>().Count());
         var airportMarker = features.OfType<PointFeature>().First();
         var airportStyle = Assert.Single(airportMarker.Styles.OfType<SymbolStyle>());
-        Assert.Equal(0.8, airportStyle.SymbolScale);
-        Assert.Equal(51, airportStyle.Fill!.Color!.Value.A);
-        Assert.Equal(51, airportStyle.Outline!.Color.A);
+        Assert.Equal(1.0, airportStyle.SymbolScale);
+        Assert.Equal(89, airportStyle.Fill!.Color!.Value.A);
+        Assert.Equal(89, airportStyle.Outline!.Color.A);
     }
 
     [Fact]
@@ -168,6 +168,7 @@ public sealed class RouteLayerTests
         var coordinates = forwardLine.Geometry!.Coordinates;
 
         Assert.Equal(4, coordinates.Length);
+        Assert.Equal(IvaoMapLayers.ForwardRouteWidth, PenWidth(forwardLine));
         Assert.Null(forwardLine.Styles.OfType<VectorStyle>().Single().Outline);
         Assert.Equal(WorldMap.Project(new GeoCoordinate(52, 5.5)).X, coordinates[0].X, 5);
         Assert.Equal(WorldMap.Project(new GeoCoordinate(52, 8)).X, coordinates[^1].X, 5);

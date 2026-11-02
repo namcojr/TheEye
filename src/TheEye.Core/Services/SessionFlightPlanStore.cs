@@ -5,8 +5,8 @@ namespace TheEye.Core.Services;
 
 /// <summary>
 /// Fetches the newest flight plan of a single session on demand. The tracker
-/// summary the list is built from carries the airports and the route only, so
-/// the rest of the filing — the times, the endurance, the alternate and the
+/// summary the list is built from carries the airports but omits the route, so
+/// the route and rest of the filing — the times, the endurance, the alternate and the
 /// equipment — is asked for the aircraft the user has selected and cached for a
 /// minute. A pilot amends a plan rarely, and the answer is only shown, never
 /// counted on, so a minute-old revision is as good as a fresh one.

@@ -16,6 +16,7 @@ public static class IvaoMapLayers
     public const string AtcLabelsLayerName = "IVAO sector labels";
     public const string AtcStationsLayerName = "IVAO ATC stations";
     public const string RouteLayerName = "Route";
+    public const string LiveTrailLayerName = "Live trail";
     public const string FlightPlanRoutesLayerName = "Flight plan routes";
     public const string HoverRouteLayerName = "Hover route";
     public const string SelectedAtcLayerName = "Selected ATC";
@@ -277,10 +278,15 @@ public static class IvaoMapLayers
     }
 
     /// <summary>
-    /// Width of the trail, in device independent pixels. One and a half pixels,
-    /// keep the altitude colours vivid against the map without hiding it.
+    /// Width of the solid flown trail and hover legs, in device independent pixels.
     /// </summary>
     public const double TrailWidth = 2.0;
+
+    /// <summary>Width of the dashed future route, in device independent pixels.</summary>
+    public const double ForwardRouteWidth = 2.0;
+
+    public const double RouteAirportScale = 1.0;
+    public const int RouteAirportAlpha = 89;
 
     /// <summary>
     /// Alpha of the estimated trail, i.e. the flown part of the filed route that
@@ -323,17 +329,34 @@ public static class IvaoMapLayers
         };
     }
 
+    public static MemoryLayer CreateLiveTrail(IvaoPilot? pilot, GeoCoordinate? displayPosition)
+    {
+        var features = new List<IFeature>();
+        if (pilot?.LastTrack is { Position: { } reported } live &&
+            displayPosition is { IsValid: true } position && position != reported)
+        {
+            AddTrail(features, FlightTrail.BuildSegments(
+                [
+                    new TrailPoint(reported, live.Altitude, live.OnGround == true),
+                    new TrailPoint(position, live.Altitude, live.OnGround == true)
+                ]), recorded: false);
+        }
+
+        return new MemoryLayer(LiveTrailLayerName) { Features = features, Style = null };
+    }
+
     public static MemoryLayer CreateFlightPlanRoutes(
         IEnumerable<IvaoPilot> pilots,
         MapPalette palette,
-        NavigraphRouteResolver? navData)
+        NavigraphRouteResolver? navData,
+        GeoCoordinate? displayPosition = null)
     {
         var features = new List<IFeature>();
         if (navData is not null)
         {
             foreach (var pilot in pilots)
             {
-                AddForwardRouteFeatures(features, pilot, palette, navData, pilot.LastTrack?.Position);
+                AddForwardRouteFeatures(features, pilot, palette, navData, displayPosition ?? pilot.LastTrack?.Position);
             }
         }
 
@@ -348,7 +371,6 @@ public static class IvaoMapLayers
         IvaoPilot? pilot,
         MapPalette palette,
         GeoCoordinate? displayPosition = null,
-        NavigraphRouteResolver? navData = null,
         bool showAirportLabels = true)
     {
         var features = new List<IFeature>();
@@ -360,9 +382,7 @@ public static class IvaoMapLayers
                 AddLeg(departure, position);
             }
 
-            var hasResolvedForwardRoute = navData is not null &&
-                navData.Resolve(pilot.FlightPlan?.Route, pilot.FlightPlan?.Departure?.Position).Count > 0;
-            if (!hasResolvedForwardRoute && pilot.FlightPlan?.Arrival?.Position is { } arrival)
+            if (pilot.FlightPlan?.Arrival?.Position is { } arrival)
             {
                 AddLeg(position, arrival);
             }
@@ -648,7 +668,7 @@ public static class IvaoMapLayers
         var feature = new GeometryFeature { Geometry = new LineString(coordinates.ToArray()) };
         feature.Styles.Add(new VectorStyle
         {
-            Line = new Pen(color, TrailWidth)
+            Line = new Pen(color, dashed ? ForwardRouteWidth : TrailWidth)
             {
                 PenStyle = dashed ? PenStyle.Dash : PenStyle.Solid
             },
@@ -707,7 +727,7 @@ public static class IvaoMapLayers
             }
         }
 
-        for (var index = 1; index < path.Count; index++)
+        for (var index = 0; index < path.Count; index++)
         {
             if (string.IsNullOrWhiteSpace(path[index].Identifier))
             {
@@ -812,9 +832,9 @@ public static class IvaoMapLayers
         feature.Styles.Add(new SymbolStyle
         {
             SymbolType = SymbolType.Ellipse,
-            SymbolScale = 0.8,
-            Fill = new Brush(WorldMap.WithAlpha(color, 51)),
-            Outline = new Pen(WorldMap.WithAlpha(WorldMap.Parse(palette.Land), 51), 1.5)
+            SymbolScale = RouteAirportScale,
+            Fill = new Brush(WorldMap.WithAlpha(color, RouteAirportAlpha)),
+            Outline = new Pen(WorldMap.WithAlpha(WorldMap.Parse(palette.Land), RouteAirportAlpha), 1.5)
         });
         if (!showLabel)
         {

@@ -978,7 +978,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (Map.SelectedPilot is { } currentPilot && currentPilot.Id == sessionId)
         {
-            currentPilot.ApplyFlightPlan(result);
+            Map.SetSelectionFlightPlan(result);
         }
     }
 

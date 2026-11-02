@@ -315,12 +315,34 @@ Filed route waypoints are resolved from a user-provided Navigraph AIRAC
 read-only from the app-data directory at `TheEyeIVAO\NavData\db.s3db` (for example,
 `%APPDATA%\TheEyeIVAO\NavData\db.s3db` on Windows). The database is not included
 with the application or in source control; users must obtain and place their own
-copy there. The app uses the airway sequence to resolve route entry and exit fixes,
+copy there. The live public summary omits the filed route string. Signing in and
+selecting an aircraft loads its full session flight plan; that answer immediately
+updates the map as well as the card, and its route is retained across traffic
+refreshes for as long as that aircraft remains connected. No flight-plan request
+is made for every aircraft just to populate the map.
+The app uses the airway sequence to resolve route entry and exit fixes,
 omits intermediate airway fixes, draws all filed waypoints as open, labelled
-circles for every aircraft, and draws each aircraft's remaining route as a dashed
-line. Route strokes have no outline pen. Without usable navdata, route waypoints
-and forward routes are simply omitted; the selected aircraft's flown trail
-continues to work as before.
+circles for the selected aircraft and draws its remaining route as a dashed line.
+Deselection, switching to another aircraft or controller, and disconnecting clear
+the previous route and waypoints; cached plans remain available for reselection.
+Route strokes have no outline pen. Without usable navdata,
+route waypoints and forward routes are simply omitted; the selected aircraft's
+flown trail continues to work as before.
+
+To adjust line thickness, edit `src\TheEye.Core\Map\IvaoMapLayers.cs` and rebuild:
+`TrailWidth` controls the solid flown trail and hover legs; `ForwardRouteWidth`
+controls the dashed future route. Both default to `2.0` device-independent pixels;
+larger values make the lines thicker.
+
+Departure/arrival circles use `RouteAirportScale` (`1.0`, 25% larger than before)
+and `RouteAirportAlpha` (`89`, approximately 35% opacity) in the same file.
+Both selection and hover previews use these styles.
+
+Between feed updates, a translucent altitude-coloured connector extends from
+the last reported aircraft position to its animated position. It updates without
+rebuilding the recorded history, splits at the antimeridian, and stops when the
+aircraft prediction stops (after 60 seconds). The dashed future route starts at
+the animated position too. Prediction does not modify recorded telemetry.
 
 
 ## APPLICATION ICON (implemented)

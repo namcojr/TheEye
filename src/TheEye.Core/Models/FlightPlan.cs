@@ -5,7 +5,7 @@ namespace TheEye.Core.Models;
 
 /// <summary>
 /// A flight plan as IVAO holds it. The tracker summaries embed a trimmed copy —
-/// the airports, the route and the aircraft — while
+/// the airports and aircraft, but not the filed route — while
 /// <c>/v2/tracker/sessions/{id}/flightPlans/latest</c> answers with the whole
 /// filing: cruise speed and level, the times, the endurance, the alternate and
 /// the equipment. Every member of the full answer is optional here, because a

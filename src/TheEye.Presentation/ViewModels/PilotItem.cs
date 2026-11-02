@@ -235,8 +235,8 @@ public sealed class PilotItem : ObservableObject
 
     /// <summary>
     /// The plan to read: the full filing once IVAO described it, otherwise the
-    /// trimmed copy embedded in the tracker summary. The summary only carries the
-    /// airports, the aircraft and the route, so the card fills in the rest as
+    /// trimmed copy embedded in the tracker summary. The live summary carries the
+    /// airports and aircraft but omits the route, so the card fills in the rest as
     /// soon as <see cref="ApplyFlightPlan"/> has the answer.
     /// </summary>
     private IvaoFlightPlan? Plan => _flightPlan ?? _pilot.FlightPlan;
@@ -524,6 +524,7 @@ public sealed class PilotItem : ObservableObject
         var userChanged = _pilot.User?.Id != pilot.User?.Id;
         _motion.Update(pilot.LastTrack);
         _pilot = pilot;
+        ApplyMapFlightPlan();
         Refresh();
         if (userChanged)
         {
@@ -584,9 +585,29 @@ public sealed class PilotItem : ObservableObject
         if (result.FlightPlan is { } plan)
         {
             _flightPlan = plan;
+            ApplyMapFlightPlan();
         }
 
         Refresh();
+    }
+
+    private void ApplyMapFlightPlan()
+    {
+        if (_flightPlan is not { } plan)
+        {
+            return;
+        }
+
+        // The live summary omits the filed route. Keep the map's pilot enriched
+        // with the session filing, including after the next summary replaces it.
+        _pilot.FlightPlan ??= new IvaoFlightPlan();
+        _pilot.FlightPlan.Route = plan.Route ?? _pilot.FlightPlan.Route;
+        _pilot.FlightPlan.Departure = plan.Departure?.Position is not null
+            ? plan.Departure
+            : _pilot.FlightPlan.Departure ?? plan.Departure;
+        _pilot.FlightPlan.Arrival = plan.Arrival?.Position is not null
+            ? plan.Arrival
+            : _pilot.FlightPlan.Arrival ?? plan.Arrival;
     }
 
     private void Refresh()

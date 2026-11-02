@@ -1,6 +1,8 @@
 using Mapsui.Extensions;
 using Mapsui.Layers;
 using Mapsui.Manipulations;
+using Mapsui.Nts;
+using Mapsui.Styles;
 using TheEye.Core.Maps;
 using TheEye.Core.Models;
 using TheEye.Core.Services;
@@ -231,6 +233,87 @@ public sealed class AircraftMotionTests
         Assert.Empty(model.Pilots);
         Assert.Empty(Assert.IsType<MemoryLayer>(
             model.Map.Layers.Single(layer => layer.Name == IvaoMapLayers.HoverRouteLayerName)).Features);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(179.99)]
+    public void SelectedTrailFollowsPredictedAircraftWithoutRebuildingHistory(double longitude)
+    {
+        var clock = new Clock();
+        var resolver = new NavigraphRouteResolver(
+            [("FIXA", new GeoCoordinate(0, longitude)), ("FIXB", new GeoCoordinate(1, longitude))], []);
+        using var model = new MapViewModel(new Images(), clock, navDataResolver: () => resolver);
+        model.Initialize(new MapPalette("#16324F", "#1B2A35", "#2F4858", "#6FE3F5", "#4CC9F0", true),
+            new GeoCoordinate(0, longitude), 100);
+        var pilot = new IvaoPilot
+        {
+            Id = 1,
+            LastTrack = Track(clock, longitude: longitude),
+            FlightPlan = new IvaoFlightPlan { Route = "FIXA DCT FIXB" }
+        };
+        model.UpdateTraffic(Snapshot());
+        model.SelectPilot(model.Pilots[0], center: false);
+        model.SetSelectionTracks(
+            [
+                new IvaoPilotTrack { Latitude = -0.01, Longitude = longitude, Altitude = 30000 },
+                new IvaoPilotTrack { Latitude = 0, Longitude = longitude, Altitude = 30000 }
+            ]);
+        var history = Layer(IvaoMapLayers.RouteLayerName);
+        Assert.Empty(Layer(IvaoMapLayers.LiveTrailLayerName).Features);
+        clock.Advance(30);
+        model.AdvanceAircraft();
+
+        Assert.Same(history, Layer(IvaoMapLayers.RouteLayerName));
+        AssertEndpoints();
+        Assert.Equal(longitude, pilot.LastTrack.Longitude);
+        var connector = Layer(IvaoMapLayers.LiveTrailLayerName);
+        var lines = connector.Features.OfType<GeometryFeature>().ToArray();
+        Assert.Equal(longitude == 0 ? 1 : 2, lines.Length);
+        Assert.All(lines, line =>
+        {
+            var pen = line.Styles.OfType<VectorStyle>().Single().Line!;
+            Assert.Equal(IvaoMapLayers.TrailWidth, pen.Width);
+            Assert.Equal(IvaoMapLayers.EstimatedTrailAlpha, pen.Color.A);
+        });
+
+        clock.Advance(31);
+        model.AdvanceAircraft();
+        var frozen = Layer(IvaoMapLayers.LiveTrailLayerName);
+        clock.Advance(30);
+        model.AdvanceAircraft();
+        Assert.Same(frozen, Layer(IvaoMapLayers.LiveTrailLayerName));
+
+        pilot.LastTrack = Track(clock, longitude: longitude == 0 ? 0.2 : -179.8);
+        model.UpdateTraffic(Snapshot());
+        clock.Advance(1);
+        model.AdvanceAircraft();
+        AssertEndpoints();
+
+        model.ClearSelection();
+        Assert.Empty(Layer(IvaoMapLayers.LiveTrailLayerName).Features);
+        Assert.Empty(Layer(IvaoMapLayers.FlightPlanRoutesLayerName).Features);
+        model.AdvanceAircraft();
+        Assert.Empty(Layer(IvaoMapLayers.LiveTrailLayerName).Features);
+
+        TrackerSnapshot Snapshot() => new([pilot], [], [], new IvaoConnectionStats(), clock.GetUtcNow(), []);
+        MemoryLayer Layer(string name) =>
+            Assert.IsType<MemoryLayer>(model.Map!.Layers.Single(layer => layer.Name == name));
+        void AssertEndpoints()
+        {
+            var predicted = WorldMap.Project(model.Pilots[0].MapPosition!.Value);
+            var connectorLines = Layer(IvaoMapLayers.LiveTrailLayerName).Features.OfType<GeometryFeature>().ToArray();
+            var end = connectorLines[^1].Geometry!.Coordinates[^1];
+            Assert.Equal(predicted.X, end.X, 5);
+            Assert.Equal(predicted.Y, end.Y, 5);
+            var start = connectorLines[0].Geometry!.Coordinates[0];
+            var reported = WorldMap.Project(pilot.LastTrack!.Position!.Value);
+            Assert.Equal(reported.X, start.X, 5);
+            Assert.Equal(reported.Y, start.Y, 5);
+            var future = Layer(IvaoMapLayers.FlightPlanRoutesLayerName).Features.OfType<GeometryFeature>().First();
+            Assert.Equal(predicted.X, future.Geometry!.Coordinates[0].X, 5);
+            Assert.Equal(predicted.Y, future.Geometry.Coordinates[0].Y, 5);
+        }
     }
 
     private static IvaoLastTrack Track(Clock clock, double latitude = 0, double longitude = 0,

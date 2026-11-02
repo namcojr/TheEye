@@ -36,6 +36,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private readonly string? _basemapCacheDirectory;
     private readonly Func<NavigraphRouteResolver?>? _navDataResolver;
     private GeoCoordinate? _hoverRoutePosition;
+    private GeoCoordinate? _selectedRoutePosition;
     private readonly Dictionary<long, PilotItem> _pilotsById = [];
     private readonly Dictionary<long, AtcItem> _atcById = [];
     private IReadOnlySet<long> _supervisorUserIds = new HashSet<long>();
@@ -47,6 +48,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private ILayer? _atcLabelsLayer;
     private ILayer? _atcStationsLayer;
     private ILayer? _routeLayer;
+    private ILayer? _liveTrailLayer;
     private ILayer? _flightPlanRoutesLayer;
     private ILayer? _hoverRouteLayer;
     private PilotItem? _hoveredPilot;
@@ -281,6 +283,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         _atcLabelsLayer = IvaoMapLayers.CreateAtcLabels([], palette);
         _atcStationsLayer = CreateStationLayer([]);
         _routeLayer = new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };
+        _liveTrailLayer = IvaoMapLayers.CreateLiveTrail(null, null);
         _flightPlanRoutesLayer = IvaoMapLayers.CreateFlightPlanRoutes([], palette, navData: null);
         _hoverRouteLayer = IvaoMapLayers.CreateHoverRoute(null, palette);
         _selectedAtcLayer = IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), palette);
@@ -293,6 +296,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         map.Layers.Add(_atcLabelsLayer);
         map.Layers.Add(_atcStationsLayer);
         map.Layers.Add(_routeLayer);
+        map.Layers.Add(_liveTrailLayer);
         map.Layers.Add(_flightPlanRoutesLayer);
         map.Layers.Add(_hoverRouteLayer);
         map.Layers.Add(_selectedAtcLayer);
@@ -393,6 +397,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             SetHoveredAtc(null);
         }
         UpdatePilotPositions();
+        RebuildRouteLayer();
         RebuildFlightPlanRoutesLayer();
         RebuildHoverRouteLayer();
         _airportsKey = string.Empty;
@@ -533,6 +538,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         RebuildRouteLayer();
+        RebuildFlightPlanRoutesLayer();
 
         if (pilot is not null && center)
         {
@@ -593,6 +599,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         RebuildRouteLayer();
+        RebuildFlightPlanRoutesLayer();
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -624,6 +631,20 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         RebuildRouteLayer();
+        Map?.Refresh();
+    }
+
+    public void SetSelectionFlightPlan(SessionFlightPlanResult result)
+    {
+        if (SelectedPilot is not { } pilot)
+        {
+            return;
+        }
+
+        pilot.ApplyFlightPlan(result);
+        RebuildRouteLayer();
+        RebuildFlightPlanRoutesLayer();
+        RebuildHoverRouteLayer();
         Map?.Refresh();
     }
 
@@ -889,11 +910,19 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     {
         if (_disposed || !_showPilots) return;
         UpdatePilotPositions();
+        var refresh = false;
+        if (SelectedPilot?.MapPosition != _selectedRoutePosition)
+        {
+            RebuildLiveTrailLayer();
+            RebuildFlightPlanRoutesLayer();
+            refresh = true;
+        }
         if (_hoveredPilot is { } pilot && pilot.MapPosition != _hoverRoutePosition)
         {
             RebuildHoverRouteLayer();
-            Map?.Refresh();
+            refresh = true;
         }
+        if (refresh) Map?.Refresh();
     }
 
     private void UpdatePilotPositions()
@@ -1076,7 +1105,6 @@ public sealed class MapViewModel : ObservableObject, IDisposable
                 _hoveredPilot?.Pilot,
                 _palette ?? DefaultPalette,
                 _hoverRoutePosition,
-                _navDataResolver?.Invoke(),
                 showAirportLabels: false));
     }
 
@@ -1084,9 +1112,17 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     {
         ReplaceLayer(ref _flightPlanRoutesLayer,
             IvaoMapLayers.CreateFlightPlanRoutes(
-                Pilots.Select(item => item.Pilot),
+                SelectedPilot is { } pilot ? [pilot.Pilot] : [],
                 _palette ?? DefaultPalette,
-                _navDataResolver?.Invoke()));
+                _navDataResolver?.Invoke(),
+                SelectedPilot?.MapPosition));
+    }
+
+    private void RebuildLiveTrailLayer()
+    {
+        _selectedRoutePosition = SelectedPilot?.MapPosition;
+        ReplaceLayer(ref _liveTrailLayer,
+            IvaoMapLayers.CreateLiveTrail(SelectedPilot?.Pilot, _selectedRoutePosition));
     }
 
     /// <summary>
@@ -1109,6 +1145,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             : new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };
 
         ReplaceLayer(ref _routeLayer, layer);
+        RebuildLiveTrailLayer();
     }
 
     private void ReplaceLayer(ref ILayer? field, ILayer replacement)
