@@ -212,8 +212,9 @@ including the checked PILOTS / ATC switches and the Save settings button.
 ## MAIN WINDOW LAYOUT (implemented)
 =================================
 
-Both shells lay the main view out in four columns: the traffic browser, a four
-pixel splitter, the map and the selection pane.
+Both shells lay the main view out in three columns: the traffic browser, a four
+pixel splitter and the map. The selection pane is not a column of its own; it
+floats over the right edge of the map while something is selected.
 
 - The traffic browser is resizable. The splitter writes the width of the column
   into `trafficColumnWidth` when the drag ends, so the next launch opens with the

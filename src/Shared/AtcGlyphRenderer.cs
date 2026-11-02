@@ -50,8 +50,9 @@ public sealed class AtcGlyphRenderer : ISkiaStyleRenderer, IFeatureSize
         var color = WorldMap.Parse(glyph.RingColor ?? marker.Fill);
 
         // The contour of an observer is dashed, in screen pixels like its width,
-        // so the dashed ring stays dashed at every zoom.
-        using var dashEffect = marker.Dashed
+        // so the dashed ring stays dashed at every zoom. The supervisor and
+        // selection rings stay solid: they mark the member, not the facility.
+        using var dashEffect = marker.Dashed && !ring
             ? SKPathEffect.CreateDash(
                 [(float)AtcMarkerStyles.ObserverDashLength, (float)AtcMarkerStyles.ObserverDashLength], 0)
             : null;
