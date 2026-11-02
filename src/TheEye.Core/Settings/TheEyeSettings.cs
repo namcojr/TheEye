@@ -96,6 +96,13 @@ public sealed class TheEyeSettings
 
     public string Theme { get; set; } = TheEyeThemes.Dark;
 
+    /// <summary>
+    /// The basemap the map is drawn with. <see cref="MapBasemap.Offline"/> keeps
+    /// the bundled country map; any other id streams that raster style from
+    /// IVAO's tile service.
+    /// </summary>
+    public string MapStyle { get; set; } = MapBasemap.Offline;
+
     public int RefreshSeconds { get; set; } = 30;
 
     public bool ShowPilots { get; set; } = true;
@@ -233,6 +240,7 @@ public sealed class TheEyeSettings
         OAuthExpiresAt = OAuthExpiresAt,
         OAuthAccount = OAuthAccount,
         Theme = Theme,
+        MapStyle = MapStyle,
         RefreshSeconds = RefreshSeconds,
         AircraftGlyphSize = AircraftGlyphSize,
         ShowPilots = ShowPilots,
@@ -257,6 +265,7 @@ public sealed class TheEyeSettings
         OAuthExpiresAt = other.OAuthExpiresAt;
         OAuthAccount = other.OAuthAccount;
         Theme = other.Theme;
+        MapStyle = other.MapStyle;
         RefreshSeconds = other.RefreshSeconds;
         AircraftGlyphSize = other.AircraftGlyphSize;
         ShowPilots = other.ShowPilots;
@@ -285,6 +294,7 @@ public sealed class TheEyeSettings
         OAuthExpiresAt = OAuthExpiresAt?.Trim() ?? string.Empty;
         OAuthAccount = OAuthAccount?.Trim() ?? string.Empty;
         Theme = TheEyeThemes.Normalize(Theme);
+        MapStyle = MapBasemap.Normalize(MapStyle);
         AircraftGlyphSize = Math.Clamp(AircraftGlyphSize, MinAircraftGlyphSize, MaxAircraftGlyphSize);
 
         OwnAircraftColor = AircraftHighlightColors.Find(OwnAircraftColor)?.Name ?? AircraftHighlightColors.DefaultOwn;

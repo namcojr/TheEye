@@ -100,6 +100,26 @@
 
                     <Border Style="{StaticResource Divider}" Margin="0,10,0,0" />
 
+                    <TextBlock Text="MAP STYLE" Style="{StaticResource SectionTitle}" Margin="0,18,0,0" />
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,5,0,9" TextWrapping="Wrap"
+                               Text="Offline draws an offline map and needs no connection, other maps are streamed and require internet connectivity." />
+                    <ItemsControl ItemsSource="{Binding MapStyleOptions}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <RadioButton Style="{StaticResource ChoiceButton}" GroupName="MapStyle"
+                                             Content="{Binding Label}" Margin="0,0,8,8"
+                                             IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Style="{StaticResource Divider}" Margin="0,10,0,0" />
+
                     <TextBlock Text="AIRCRAFT COLOURS" Style="{StaticResource SectionTitle}" Margin="0,18,0,0" />
                     <TextBlock Style="{StaticResource MutedText}" Margin="0,5,0,0" TextWrapping="Wrap"
                                Text="Your own aircraft (when signed in) and your friends' aircraft stand out on the map. Your own colour wins if you are on your friend list." />

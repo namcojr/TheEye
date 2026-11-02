@@ -8,6 +8,9 @@
 
   <ItemGroup>
     <PackageReference Include="Mapsui.Nts" Version="5.1.0" />
+    <!-- The raster tile layer the optional online basemap is built on. Mapsui's
+         core package has no tile support; this one brings BruTile with it. -->
+    <PackageReference Include="Mapsui.Tiling" Version="5.1.0" />
   </ItemGroup>
 
   <ItemGroup>

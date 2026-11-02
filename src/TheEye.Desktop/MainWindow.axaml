@@ -916,7 +916,7 @@
                                 </DockPanel>
                             </Border>
 
-                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Disabled"
                                           Padding="16,14,16,18">
                                 <Grid>
                                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"

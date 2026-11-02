@@ -470,6 +470,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Map.ShowAtc = _settings.ShowAtc;
         Map.CenterOnMapClick = _settings.CenterOnMapClick;
         Map.AircraftGlyphSize = _settings.AircraftGlyphSize;
+        Map.MapStyle = _settings.MapStyle;
     }
 
     public async Task StartAsync()
@@ -542,6 +543,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Map.ShowAtc = _settings.ShowAtc;
         Map.CenterOnMapClick = _settings.CenterOnMapClick;
         Map.AircraftGlyphSize = _settings.AircraftGlyphSize;
+        Map.MapStyle = _settings.MapStyle;
         RefreshFriendMarks();
         OnPropertyChanged(nameof(ShowPilots));
         OnPropertyChanged(nameof(ShowAtc));

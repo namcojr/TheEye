@@ -65,6 +65,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private string _airportsKey = string.Empty;
     private bool _disposed;
     private int _aircraftGlyphSize = TheEyeSettings.DefaultAircraftGlyphSize;
+    private string _mapStyle = MapBasemap.Offline;
 
     public int AircraftGlyphSize
     {
@@ -75,6 +76,30 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             if (!SetProperty(ref _aircraftGlyphSize, size)) return;
             foreach (var pilot in Pilots) pilot.GlyphSize = size;
             UpdatePilotPositions();
+        }
+    }
+
+    /// <summary>
+    /// The basemap the map is drawn with. <see cref="MapBasemap.Offline"/> paints
+    /// the bundled country map; every other id streams that raster style from
+    /// IVAO's tile service and hides the bundled fill in the meantime. The traffic
+    /// layers ignore this, so a style switch leaves the aircraft where they are.
+    /// </summary>
+    public string MapStyle
+    {
+        get => _mapStyle;
+        set
+        {
+            var style = MapBasemap.Normalize(value);
+            if (!SetProperty(ref _mapStyle, style))
+            {
+                return;
+            }
+
+            if (Map is { } map)
+            {
+                MapBasemap.Apply(map, style);
+            }
         }
     }
 
@@ -204,6 +229,10 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         SetLayerEnabled(_atcRegionsLayer, _showAtc);
         SetLayerEnabled(_atcLabelsLayer, _showAtc);
         SetLayerEnabled(_atcStationsLayer, _showAtc);
+
+        // A saved tile style is restored with the view, so a restart returns to
+        // the basemap the user left instead of the offline map.
+        MapBasemap.Apply(map, _mapStyle);
 
         map.Navigator.ViewportChanged += OnViewportChanged;
         Map = map;
@@ -623,6 +652,11 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         if (Map is not null)
         {
             Map.Navigator.ViewportChanged -= OnViewportChanged;
+
+            // The tile layer owns the client that downloads its tiles, and Map
+            // does not dispose layers: taking the basemap off through the offline
+            // style releases it before the map goes away.
+            MapBasemap.Apply(Map, MapBasemap.Offline);
             Map.Dispose();
             Map = null;
         }

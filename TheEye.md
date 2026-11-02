@@ -1,16 +1,3 @@
-THINGS TO ADD / CORRECTIONS
-===========================
-
-- Analyze the possibility to add more detailed maps.
-- Analyse the possibility of, in the aircraft line, to draw waypoints from its route (small open circle with
-the waypoint label name). Forward route will show a dashed line through the following waypoints. Users will provide
-navdata
-- Facility opacity changes to less opaque versions
-
-
-
------------------------------------------------------------------------------------------------------------------------
-
 TheEye is a new project to replicate IVAO's aircraft and ATC web application that will display all traffic online from both pilots and ATC (Air traffic controllers). Example payloads are below.
 
 The application should run natively in windows and linux, we are currently building the windows version here and after it is working and feature-locked, we will clone the project on a linux machine to proceed with its native version implementation.
@@ -451,3 +438,50 @@ Production direction remains undecided: streamed raster tiles with temporary
 caching use provider-supplied colours; streamed vector tiles or targeted vector
 overlays can use the application's local palettes. This experiment persists its
 requested sample outputs only; it does not add a persistent runtime tile cache.
+
+## ONLINE BASEMAP (implemented, evaluation only)
+
+The map can draw a raster basemap under the traffic. It is a diagnostic feature:
+the bundled Natural Earth map stays the default (`Offline`), and every other
+choice is a MapTiler style streamed through the proxy WebEye uses. No key ships
+with the app, and the tiles belong to IVAO/MapTiler, so this is for local use
+while comparing themes, not for distribution.
+
+Settings > Map style lists `Offline` and nine styles: Basic, Bright, Liberty,
+International, Positron, Voyager, Dark Matter, Toner and Hybrid.
+
+### Endpoint and request shape
+
+```
+https://maps-maptiler.ivao.aero/api/maps/{style}/{z}/{x}/{y}.webp
+```
+
+Measured on 2026-11-02: without a `Referer` of `https://webeye.ivao.aero/` the
+proxy answers `301` instead of a tile; with it the tile comes back `200`
+`image/webp`, 512x512, RIFF/VP8. A style name alone is enough to tell the
+styles apart (`basic`, `osm-bright`, `osm-liberty`, `openstreetmap`, `positron`,
+`voyager`, `dark-matter`, `toner`, `satellite-hybrid`); no key is involved.
+`HttpTileSource` therefore sets the referrer and `TheEye/1.0 (...)` on every
+request, because BruTile refuses to send one that names no application.
+
+### 512 px tiles against a 256 px zoom ladder
+
+`WorldMap` builds its zoom levels from `MaxResolution / 2^level`, the 256 px
+ladder. The proxy serves 512 px tiles, so its level `z` covers the same ground
+as view level `z + 1`: the schema uses `UnitsPerPixel = MaxResolution / 2^(level + 1)`
+with `tileWidth = tileHeight = 512`, which makes `{z}` in the URL equal the view
+level minus one. Levels 2 to 14 are the ones the navigator asks for; the schema
+carries 0 to 14 and the extents of the pannable world, north row first, so the
+tiles line up with the offline geometry. A Lisbon mosaic fetched through the
+schema (view level 12, z11, x972/y784) lands on the city itself.
+
+### Caching and fallback
+
+`FileCache` under `%AppData%\TheEyeIVAO\tilecache\<style>`, seven-day expiry, so
+a tile is refetched after a week. BruTile's cache has no size limit, so the
+folder is trimmed to 256 MB (oldest first) whenever a style is switched on. A
+style hides the `Countries` and `Country labels` layers instead of removing
+them, so `Offline` brings the bundled map back instantly. The layer carries the
+attribution `(c) MapTiler (c) OpenStreetMap contributors`; the map itself still
+has no attribution widget, which must be added before this is ever shown to
+anyone else.

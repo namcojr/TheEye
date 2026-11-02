@@ -1,4 +1,5 @@
 using TheEye.Core.Api;
+using TheEye.Core.Maps;
 using TheEye.Core.Settings;
 using TheEye.Presentation.Theming;
 
@@ -63,6 +64,28 @@ public sealed class SettingsViewModel : ObservableObject
             ?? IntervalOptions[2];
         interval.IsSelected = true;
 
+        // The basemap lives beside the theme: the shell palette recolours the
+        // traffic layers, the map style decides what is drawn underneath them.
+        MapStyleOptions = MapBasemap.Styles
+            .Select(style => new MapStyleOption(style.Id, style.Label))
+            .ToList();
+
+        foreach (var option in MapStyleOptions)
+        {
+            option.PropertyChanged += (_, _) =>
+            {
+                if (option.IsSelected)
+                {
+                    SelectMapStyle(option);
+                }
+            };
+        }
+
+        var mapStyle = MapStyleOptions.FirstOrDefault(option =>
+            string.Equals(option.Id, MapBasemap.Normalize(Draft.MapStyle), StringComparison.Ordinal))
+            ?? MapStyleOptions[0];
+        mapStyle.IsSelected = true;
+
         OwnColorOptions = CreateColorOptions(Draft.OwnAircraftColor, color => Draft.OwnAircraftColor = color);
         FriendColorOptions = CreateColorOptions(Draft.FriendAircraftColor, color => Draft.FriendAircraftColor = color);
         UpdateColorAvailability();
@@ -86,6 +109,9 @@ public sealed class SettingsViewModel : ObservableObject
     public string AircraftGlyphSizeLabel => $"{AircraftGlyphSize} px";
 
     public IReadOnlyList<ThemeOption> ThemeOptions { get; }
+
+    /// <summary>The basemaps the map can be drawn with, offline first.</summary>
+    public IReadOnlyList<MapStyleOption> MapStyleOptions { get; }
 
     public IReadOnlyList<IntervalOption> IntervalOptions { get; }
 
@@ -168,6 +194,20 @@ public sealed class SettingsViewModel : ObservableObject
     {
         Draft.Theme = selected.Name;
         foreach (var option in ThemeOptions)
+        {
+            if (!ReferenceEquals(option, selected))
+            {
+                option.IsSelected = false;
+            }
+        }
+
+        OnPropertyChanged(nameof(Draft));
+    }
+
+    private void SelectMapStyle(MapStyleOption selected)
+    {
+        Draft.MapStyle = selected.Id;
+        foreach (var option in MapStyleOptions)
         {
             if (!ReferenceEquals(option, selected))
             {
@@ -307,6 +347,29 @@ public sealed class IntervalOption : ObservableObject
     }
 
     public int Seconds { get; }
+
+    public string Label { get; }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value);
+    }
+}
+
+/// <summary>One basemap in the map style list: the stored id and the label the shells show.</summary>
+public sealed class MapStyleOption : ObservableObject
+{
+    private bool _isSelected;
+
+    public MapStyleOption(string id, string label)
+    {
+        Id = id;
+        Label = label;
+    }
+
+    /// <summary>The value persisted in <c>TheEyeSettings.MapStyle</c>.</summary>
+    public string Id { get; }
 
     public string Label { get; }
 
