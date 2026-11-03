@@ -181,6 +181,12 @@ public sealed class AirportLayerTests
         Assert.True(model.HasMapTooltip);
         Assert.Contains("EGLL", model.MapTooltipText);
         Assert.Null(model.HoveredAtc);
+
+        var airportScreen = new ScreenPosition(screen.X, screen.Y);
+        model.SelectAt(WorldMap.Project(airport.Position), airportScreen);
+
+        Assert.Equal(airport.Icao, model.SelectedAirport?.Icao);
+        Assert.Null(model.SelectedPilot);
     }
 
     private static void AssertRouteHasNoAirportLabels(MapViewModel model, string name)

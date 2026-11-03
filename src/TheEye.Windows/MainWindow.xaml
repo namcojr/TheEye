@@ -468,6 +468,96 @@
                 </Border>
             </StackPanel>
         </DataTemplate>
+
+        <DataTemplate x:Key="AirportDetailTemplate">
+            <StackPanel>
+                <TextBlock Text="{Binding Icao}" Style="{StaticResource DetailValueMono}"
+                           FontSize="22" FontWeight="Bold" />
+                <TextBlock Text="{Binding DisplayName}" Style="{StaticResource MutedText}"
+                           Margin="0,2,0,0" TextWrapping="Wrap" />
+                <Border Style="{StaticResource Divider}" Margin="0,12,0,12" />
+                <TextBlock Text="METAR" Style="{StaticResource DetailLabel}" />
+                <TextBlock Text="{Binding DataContext.AirportMetarStatus, RelativeSource={RelativeSource AncestorType=Window}}"
+                           Style="{StaticResource MutedText}" FontSize="9" Margin="0,2,0,0" />
+                <TextBlock Text="{Binding DataContext.AirportMetarText, RelativeSource={RelativeSource AncestorType=Window}}"
+                           Style="{StaticResource DetailValueMono}" Margin="0,5,0,0" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding DataContext.AirportLocationText, RelativeSource={RelativeSource AncestorType=Window}}"
+                           Style="{StaticResource MutedText}" Margin="0,7,0,0" TextWrapping="Wrap"
+                           Visibility="{Binding DataContext.HasAirportLocation, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock Text="POSITION" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding Position.Latitude, StringFormat={}{0:0.0000}}"
+                                   Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="LONGITUDE" Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding Position.Longitude, StringFormat={}{0:0.0000}}"
+                                   Style="{StaticResource DetailValueMono}" />
+                    </StackPanel>
+                </Grid>
+                <Border Style="{StaticResource Divider}" Margin="0,12,0,12"
+                        Visibility="{Binding HasRunways, Converter={StaticResource BoolToVisibility}}" />
+                <TextBlock Text="RUNWAYS" Style="{StaticResource DetailLabel}"
+                           Visibility="{Binding HasRunways, Converter={StaticResource BoolToVisibility}}" />
+                <ItemsControl ItemsSource="{Binding Runways}"
+                              Visibility="{Binding HasRunways, Converter={StaticResource BoolToVisibility}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource FlatCard}" Margin="0,7,0,0" Padding="10,8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding RunwayDesignations}"
+                                                   Style="{StaticResource DetailValueMono}" FontWeight="Bold" />
+                                        <TextBlock Text="{Binding HeadingText}" Style="{StaticResource MutedText}"
+                                                   Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                                        <TextBlock Text="{Binding LengthText}" Style="{StaticResource DetailValueMono}"
+                                                   HorizontalAlignment="Right" />
+                                        <TextBlock Text="{Binding WidthText}" Style="{StaticResource MutedText}"
+                                                   Margin="0,2,0,0" HorizontalAlignment="Right" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="No runway data available" Style="{StaticResource MutedText}"
+                           Margin="0,6,0,0" Visibility="{Binding HasRunways, Converter={StaticResource InverseBoolToVisibility}}" />
+                <Border Style="{StaticResource Divider}" Margin="0,12,0,12"
+                        Visibility="{Binding DataContext.HasSelectedAirportAtc, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+                <TextBlock Text="ACTIVE ATC" Style="{StaticResource DetailLabel}"
+                           Visibility="{Binding DataContext.HasSelectedAirportAtc, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+                <ItemsControl ItemsSource="{Binding DataContext.SelectedAirportAtc, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Callsign}" Style="{StaticResource DetailValueMono}" />
+                                    <TextBlock Text="{Binding FacilityName}" Style="{StaticResource MutedText}"
+                                               Margin="0,1,0,0" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding Frequency}"
+                                           Style="{StaticResource DetailValueMono}" VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
     </Window.Resources>
 
     <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
@@ -989,6 +1079,7 @@
                                         VerticalAlignment="Center"
                                         Content="{Binding FriendActionText}"
                                         Command="{Binding ToggleFriendCommand}"
+                                        Visibility="{Binding HasMemberSelection, Converter={StaticResource BoolToVisibility}}"
                                         AutomationProperties.Name="Toggle friend"
                                         ToolTip="Follow this member: their callsign carries a star in the lists and they are collected on the FRIENDS tab" />
                                 <StackPanel VerticalAlignment="Center">
@@ -1017,6 +1108,9 @@
                                 <ContentControl Content="{Binding SelectedAtc}"
                                                 ContentTemplate="{StaticResource AtcDetailTemplate}"
                                                 Visibility="{Binding SelectedAtc, Converter={StaticResource NullToVisibility}}" />
+                                <ContentControl Content="{Binding SelectedAirport}"
+                                                ContentTemplate="{StaticResource AirportDetailTemplate}"
+                                                Visibility="{Binding SelectedAirport, Converter={StaticResource NullToVisibility}}" />
                             </Grid>
                         </ScrollViewer>
                     </Grid>

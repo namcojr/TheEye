@@ -378,6 +378,83 @@
                 </Border>
             </StackPanel>
         </DataTemplate>
+
+        <DataTemplate x:Key="AirportDetailTemplate">
+            <StackPanel>
+                <TextBlock Text="{Binding Icao}" Classes="mono" FontSize="22" FontWeight="Bold" />
+                <TextBlock Text="{Binding DisplayName}" Classes="muted" Margin="0,2,0,0"
+                           TextWrapping="Wrap" />
+                <Border Classes="divider" Margin="0,12,0,12" />
+
+                <TextBlock Text="METAR" Classes="detail-label" />
+                <TextBlock Text="{Binding $parent[Window].DataContext.AirportMetarStatus}"
+                           Classes="muted" FontSize="9" Margin="0,2,0,0" />
+                <TextBlock Text="{Binding $parent[Window].DataContext.AirportMetarText}"
+                           Classes="mono value" Margin="0,5,0,0" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding $parent[Window].DataContext.AirportLocationText}"
+                           Classes="muted" Margin="0,7,0,0" TextWrapping="Wrap"
+                           IsVisible="{Binding $parent[Window].DataContext.HasAirportLocation}" />
+
+                <Grid ColumnDefinitions="*,*">
+                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock Text="POSITION" Classes="detail-label" />
+                        <TextBlock Text="{Binding Position.Latitude, StringFormat='{}{0:0.0000}'}"
+                                   Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="LONGITUDE" Classes="detail-label" />
+                        <TextBlock Text="{Binding Position.Longitude, StringFormat='{}{0:0.0000}'}"
+                                   Classes="mono value" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Classes="divider" Margin="0,12,0,12"
+                        IsVisible="{Binding HasRunways}" />
+                <TextBlock Text="RUNWAYS" Classes="detail-label" IsVisible="{Binding HasRunways}" />
+                <ItemsControl ItemsSource="{Binding Runways}" IsVisible="{Binding HasRunways}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Classes="flat-card" Margin="0,7,0,0" Padding="10,8">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding RunwayDesignations}" Classes="mono value"
+                                                   FontWeight="Bold" />
+                                        <TextBlock Text="{Binding HeadingText}" Classes="muted" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                                        <TextBlock Text="{Binding LengthText}" Classes="mono value"
+                                                   HorizontalAlignment="Right" />
+                                        <TextBlock Text="{Binding WidthText}" Classes="muted" Margin="0,2,0,0"
+                                                   HorizontalAlignment="Right" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="No runway data available" Classes="muted" Margin="0,6,0,0"
+                           IsVisible="{Binding HasRunways, Converter={StaticResource InverseBoolConverter}}" />
+
+                <Border Classes="divider" Margin="0,12,0,12"
+                        IsVisible="{Binding $parent[Window].DataContext.HasSelectedAirportAtc}" />
+                <TextBlock Text="ACTIVE ATC" Classes="detail-label"
+                           IsVisible="{Binding $parent[Window].DataContext.HasSelectedAirportAtc}" />
+                <ItemsControl ItemsSource="{Binding $parent[Window].DataContext.SelectedAirportAtc}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Callsign}" Classes="mono value" />
+                                    <TextBlock Text="{Binding FacilityName}" Classes="muted" Margin="0,1,0,0" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding Frequency}" Classes="mono value"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
     </Window.Resources>
 
     <Window.Styles>
@@ -920,6 +997,7 @@
                                             VerticalAlignment="Center"
                                             Content="{Binding FriendActionText}"
                                             Command="{Binding ToggleFriendCommand}"
+                                            IsVisible="{Binding HasMemberSelection}"
                                             AutomationProperties.Name="Toggle friend"
                                             ToolTip.Tip="Follow this member: their callsign carries a star in the lists and they are collected on the FRIENDS tab" />
                                     <StackPanel VerticalAlignment="Center">
@@ -952,6 +1030,9 @@
                                     <ContentControl Content="{Binding SelectedAtc}"
                                                     ContentTemplate="{StaticResource AtcDetailTemplate}"
                                                     IsVisible="{Binding SelectedAtc, Converter={StaticResource IsNotNull}}" />
+                                    <ContentControl Content="{Binding SelectedAirport}"
+                                                    ContentTemplate="{StaticResource AirportDetailTemplate}"
+                                                    IsVisible="{Binding SelectedAirport, Converter={StaticResource IsNotNull}}" />
                                 </Grid>
                             </ScrollViewer>
                         </Grid>

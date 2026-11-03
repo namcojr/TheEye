@@ -31,6 +31,41 @@ public sealed record AirportRunway(GeoCoordinate Threshold, GeoCoordinate End, d
             return Math.Sqrt(northSouth * northSouth + eastWest * eastWest);
         }
     }
+
+    public double TrueHeadingDegrees
+    {
+        get
+        {
+            var startLatitude = Threshold.Latitude * Math.PI / 180;
+            var endLatitude = End.Latitude * Math.PI / 180;
+            var longitudeDelta = (End.Longitude - Threshold.Longitude) * Math.PI / 180;
+            var y = Math.Sin(longitudeDelta) * Math.Cos(endLatitude);
+            var x = Math.Cos(startLatitude) * Math.Sin(endLatitude) -
+                    Math.Sin(startLatitude) * Math.Cos(endLatitude) * Math.Cos(longitudeDelta);
+            return (Math.Atan2(y, x) * 180 / Math.PI + 360) % 360;
+        }
+    }
+
+    public string RunwayDesignations
+    {
+        get
+        {
+            var first = (int)Math.Round(TrueHeadingDegrees / 10, MidpointRounding.AwayFromZero) % 36;
+            if (first == 0)
+            {
+                first = 36;
+            }
+
+            var reciprocal = first <= 18 ? first + 18 : first - 18;
+            return $"{first:00}/{reciprocal:00}";
+        }
+    }
+
+    public string LengthText => $"{LengthMetres:N0} m  ·  {LengthMetres * 3.28084:N0} ft";
+
+    public string WidthText => $"{WidthMetres:0} m";
+
+    public string HeadingText => $"{TrueHeadingDegrees:000}°T";
 }
 
 /// <summary>

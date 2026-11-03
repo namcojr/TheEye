@@ -2,6 +2,7 @@ using Mapsui.Extensions;
 using Mapsui.Manipulations;
 using TheEye.Core.Maps;
 using TheEye.Core.Models;
+using TheEye.Core.Reference;
 using TheEye.Core.Services;
 using TheEye.Presentation.Services;
 using TheEye.Presentation.ViewModels;
@@ -167,6 +168,51 @@ public sealed class AtcStationHitTestTests
 
         model.ShowAtc = false;
         model.SelectAt(placement.Point, position);
+        Assert.Null(model.SelectedAtc);
+    }
+
+    [Fact]
+    public void SelectAt_RepeatedClickOnSingleAirportStationOpensAirportSelection()
+    {
+        var airport = AirportReference.Find("EGLL")!;
+        var tower = CreateAtc("EGLL_TWR", "TWR", id: 1);
+        tower.AtcPosition!.Airport = new IvaoAirport
+        {
+            Icao = airport.Icao,
+            Latitude = airport.Position.Latitude,
+            Longitude = airport.Position.Longitude
+        };
+        var pilot = new IvaoPilot
+        {
+            Id = 3,
+            Callsign = "EGLLTEST",
+            LastTrack = new IvaoLastTrack { Latitude = 51.4706, Longitude = -0.45 },
+            FlightPlan = new IvaoFlightPlan
+            {
+                Departure = new IvaoAirport
+                {
+                    Icao = airport.Icao,
+                    Latitude = airport.Position.Latitude,
+                    Longitude = airport.Position.Longitude
+                }
+            }
+        };
+        using var model = new MapViewModel(new Images()) { CenterOnMapClick = false, ShowPilots = false };
+        model.Initialize(new MapPalette("#000000", "#111111", "#222222", "#FFFFFF", "#FFFFFF", true),
+            airport.Position, 1000);
+        model.Map!.Navigator.SetSize(800, 600);
+        model.UpdateTraffic(new TrackerSnapshot([pilot], [tower], [], new IvaoConnectionStats(),
+            DateTimeOffset.UtcNow, []));
+
+        var mapPoint = WorldMap.Project(airport.Position);
+        var screen = model.Map.Navigator.Viewport.WorldToScreen(mapPoint);
+        var screenPosition = new ScreenPosition(screen.X, screen.Y);
+
+        model.SelectAt(mapPoint, screenPosition);
+        Assert.Equal("EGLL_TWR", model.SelectedAtc?.Callsign);
+        model.SelectAt(mapPoint, screenPosition);
+
+        Assert.Equal(airport.Icao, model.SelectedAirport?.Icao);
         Assert.Null(model.SelectedAtc);
     }
 

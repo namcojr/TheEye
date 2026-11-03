@@ -56,6 +56,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private ILayer? _airportLayer;
     private PilotItem? _selectedPilot;
     private AtcItem? _selectedAtc;
+    private AirportRecord? _selectedAirport;
     private AtcItem? _hoveredAtc;
     private double _atcHoverX;
     private double _atcHoverY;
@@ -184,6 +185,12 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     {
         get => _selectedAtc;
         private set => SetProperty(ref _selectedAtc, value);
+    }
+
+    public AirportRecord? SelectedAirport
+    {
+        get => _selectedAirport;
+        private set => SetProperty(ref _selectedAirport, value);
     }
 
     public AtcItem? HoveredAtc
@@ -548,6 +555,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             ReplaceLayer(ref _selectedAtcLayer, IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), _palette ?? DefaultPalette));
         }
 
+        SelectedAirport = null;
         SelectedPilot = pilot;
         _selectionTracks = [];
         _selectionTracksPending = pilot is not null;
@@ -595,6 +603,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             previous.IsSelected = false;
         }
 
+        SelectedAirport = null;
         SelectedAtc = atc;
         _selectionTracks = [];
 
@@ -629,6 +638,36 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         {
             SelectAtc(null);
         }
+
+        SelectAirport(null);
+    }
+
+    public void SelectAirport(AirportRecord? airport)
+    {
+        if (ReferenceEquals(SelectedAirport, airport))
+        {
+            return;
+        }
+
+        if (SelectedPilot is { } previousPilot)
+        {
+            previousPilot.IsSelected = false;
+            SelectedPilot = null;
+        }
+
+        if (SelectedAtc is { } previousAtc)
+        {
+            previousAtc.IsSelected = false;
+            SelectedAtc = null;
+            ReplaceLayer(ref _selectedAtcLayer, IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), _palette ?? DefaultPalette));
+        }
+
+        SelectedAirport = airport;
+        _selectionTracks = [];
+        _selectionTracksPending = false;
+        RebuildRouteLayer();
+        RebuildFlightPlanRoutesLayer();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -676,6 +715,12 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     {
         if (HitTestPilot(screenPosition) is { } pilot)
         {
+            if (ReferenceEquals(SelectedPilot, pilot) && HitTestAirport(screenPosition) is { } overlappingAirport)
+            {
+                SelectAirport(overlappingAirport);
+                return;
+            }
+
             SelectPilot(pilot, CenterOnMapClick);
             return;
         }
@@ -686,11 +731,45 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             : null;
         if (atc is not null && _atcById.TryGetValue(atc.Id, out var item))
         {
+            if (ReferenceEquals(SelectedAtc, item) &&
+                HitTestAirport(screenPosition) is { } stationAirport &&
+                string.Equals(item.AirportIcao, stationAirport.Icao, StringComparison.OrdinalIgnoreCase))
+            {
+                SelectAirport(stationAirport);
+                return;
+            }
+
             SelectAtc(item, CenterOnMapClick);
             return;
         }
 
+        if (HitTestAirport(screenPosition) is { } airport)
+        {
+            SelectAirport(airport);
+            return;
+        }
+
         ClearSelection();
+    }
+
+    private AirportRecord? HitTestAirport(ScreenPosition position)
+    {
+        AirportRecord? best = null;
+        var bestDistanceSquared = 9d * 9d;
+
+        foreach (var target in _trafficAirportTargets)
+        {
+            var dx = target.X - position.X;
+            var dy = target.Y - position.Y;
+            var distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared <= bestDistanceSquared)
+            {
+                bestDistanceSquared = distanceSquared;
+                best = target.Airport;
+            }
+        }
+
+        return best;
     }
 
     public PilotItem? HitTestPilot(ScreenPosition position)
@@ -1086,6 +1165,12 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             .ToArray();
         IReadOnlyList<AirportRecord> visibleTrafficAirports = _showAirports ? trafficAirports : [];
         UpdateTrafficAirportTargets(visibleTrafficAirports);
+        if (SelectedAirport is { } selectedAirport &&
+            !visibleTrafficAirports.Any(airport => airport.Icao == selectedAirport.Icao))
+        {
+            SelectAirport(null);
+        }
+
         var key = $"{_showAirports}|{string.Join('|', visibleTrafficAirports.Select(airport => airport.Icao))}";
         if (key == _airportsKey)
         {

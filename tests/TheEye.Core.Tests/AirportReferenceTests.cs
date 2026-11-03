@@ -110,6 +110,23 @@ public sealed class AirportReferenceTests
     }
 
     [Fact]
+    public void Runway_ExposesTrueHeadingAndReciprocalDesignations()
+    {
+        var eastbound = new AirportRunway(new GeoCoordinate(0, 0), new GeoCoordinate(0, 1), 45);
+        var northbound = new AirportRunway(new GeoCoordinate(51, 0), new GeoCoordinate(52, 0), 60);
+        var southbound = new AirportRunway(new GeoCoordinate(1, 0), new GeoCoordinate(0, 0), 45);
+
+        Assert.Equal(90, eastbound.TrueHeadingDegrees, 0);
+        Assert.Equal("09/27", eastbound.RunwayDesignations);
+        Assert.Equal("36/18", northbound.RunwayDesignations);
+        Assert.Equal("18/36", southbound.RunwayDesignations);
+        Assert.Equal("090°T", eastbound.HeadingText);
+        Assert.Equal("45 m", eastbound.WidthText);
+        Assert.Contains("m", eastbound.LengthText);
+        Assert.Contains("ft", eastbound.LengthText);
+    }
+
+    [Fact]
     public void Airport_LongestRunway_PicksTheStripThatMatters()
     {
         var airport = new AirportRecord(

@@ -1,7 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.Text.Json;
 using TheEye.Core.Api;
 using TheEye.Core.Maps;
 using TheEye.Core.Models;
+using TheEye.Core.Reference;
 using TheEye.Core.Services;
 using TheEye.Core.Settings;
 using TheEye.Presentation.Collections;
@@ -23,6 +26,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly FilteredCollection<PilotItem> _pilotsView;
     private readonly FilteredCollection<AtcItem> _atcView;
     private readonly AsyncRelayCommand _refreshCommand;
+    private readonly AviationWeatherClient _weather = new();
 
     // The SUP and FRIENDS lists are not traffic: the supervisor feed is its own
     // answer, and a friend is a VID that may be flying, controlling, supervising
@@ -46,6 +50,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private FriendItem? _selectedFriend;
     private SupervisorItem? _selectedSupervisor;
     private bool _syncingSelection;
+    private CancellationTokenSource? _airportMetarRequest;
+    private string _airportMetarText = string.Empty;
+    private string _airportMetarStatus = string.Empty;
 
     // Avalonia lists drop and re-pick their selection on a Reset; that write-back must not re-select (and re-centre).
     private bool _rebuildingLists;
@@ -87,6 +94,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // traffic panels show.
         _pilotsView = new FilteredCollection<PilotItem>(Map.Pilots, FilterPilot);
         _atcView = new FilteredCollection<AtcItem>(Map.Atc, FilterAtc);
+        Map.Pilots.CollectionChanged += OnPilotCollectionChanged;
+        Map.Atc.CollectionChanged += OnAtcCollectionChanged;
 
         // The SUP and FRIENDS tabs are narrowed by the same search box: the
         // supervisor list in particular is long enough to need it.
@@ -176,7 +185,63 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool HasSelection => SelectedPilot is not null || SelectedAtc is not null;
+    public AirportRecord? SelectedAirport => Map.SelectedAirport;
+
+    public string AirportMetarText
+    {
+        get => _airportMetarText;
+        private set => SetProperty(ref _airportMetarText, value);
+    }
+
+    public string AirportMetarStatus
+    {
+        get => _airportMetarStatus;
+        private set => SetProperty(ref _airportMetarStatus, value);
+    }
+
+    public string AirportLocationText
+    {
+        get
+        {
+            if (FindSelectedAirportPayload() is not { } payload)
+            {
+                return string.Empty;
+            }
+
+            var details = new List<string>();
+            if (!string.IsNullOrWhiteSpace(payload.Iata) &&
+                !string.Equals(payload.Iata, payload.Icao, StringComparison.OrdinalIgnoreCase))
+            {
+                details.Add(payload.Iata);
+            }
+
+            if (!string.IsNullOrWhiteSpace(payload.City))
+            {
+                details.Add(payload.City);
+            }
+
+            if (!string.IsNullOrWhiteSpace(payload.CountryId))
+            {
+                details.Add(DivisionCatalog.Name(payload.CountryId) is { Length: > 0 } country
+                    ? country
+                    : payload.CountryId);
+            }
+
+            return string.Join(" · ", details);
+        }
+    }
+
+    public bool HasAirportLocation => AirportLocationText.Length > 0;
+
+    public IEnumerable<AtcItem> SelectedAirportAtc => SelectedAirport is { } airport
+        ? Map.Atc.Where(atc => atc.HasAirport && string.Equals(atc.AirportIcao, airport.Icao, StringComparison.OrdinalIgnoreCase))
+        : [];
+
+    public bool HasSelectedAirportAtc => SelectedAirportAtc.Any();
+
+    public bool HasMemberSelection => SelectedPilot is not null || SelectedAtc is not null;
+
+    public bool HasSelection => HasMemberSelection || SelectedAirport is not null;
 
     /// <summary>
     /// The row of the FRIENDS tab that was picked. Selecting a friend frames the
@@ -646,6 +711,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _disposed = true;
         _theme.ThemeChanged -= OnThemeChanged;
         Map.SelectionChanged -= OnMapSelectionChanged;
+        Map.Pilots.CollectionChanged -= OnPilotCollectionChanged;
+        Map.Atc.CollectionChanged -= OnAtcCollectionChanged;
+        _airportMetarRequest?.Cancel();
+        _airportMetarRequest?.Dispose();
+        _weather.Dispose();
         _tracker?.Dispose();
         _session?.Dispose();
         _api?.Dispose();
@@ -853,6 +923,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             OnPropertyChanged(nameof(SelectedPilot));
             OnPropertyChanged(nameof(SelectedAtc));
+            OnPropertyChanged(nameof(SelectedAirport));
+            OnPropertyChanged(nameof(SelectedAirportAtc));
+            OnPropertyChanged(nameof(HasSelectedAirportAtc));
+            OnPropertyChanged(nameof(AirportLocationText));
+            OnPropertyChanged(nameof(HasAirportLocation));
             RaiseSelectionDependentChanges();
         }
         finally
@@ -863,9 +938,100 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // The reason the previous selection had no trail says nothing about this
         // one, and the answer for it is not in yet.
         TrackNotice = string.Empty;
+        _ = RefreshAirportMetarAsync();
         _ = RefreshSelectionTracksAsync();
         _ = RefreshSelectionDetailAsync();
         _ = RefreshSelectionFlightPlanAsync();
+    }
+
+    private async Task RefreshAirportMetarAsync()
+    {
+        _airportMetarRequest?.Cancel();
+        _airportMetarRequest?.Dispose();
+        _airportMetarRequest = null;
+
+        if (SelectedAirport is not { } airport)
+        {
+            AirportMetarText = string.Empty;
+            AirportMetarStatus = string.Empty;
+            return;
+        }
+
+        var request = _airportMetarRequest = new CancellationTokenSource();
+        AirportMetarText = string.Empty;
+        AirportMetarStatus = "Loading METAR";
+
+        try
+        {
+            var report = await _weather.GetMetarAsync(airport.Icao, request.Token);
+            if (!ReferenceEquals(_airportMetarRequest, request))
+            {
+                return;
+            }
+
+            AirportMetarText = report ?? string.Empty;
+            AirportMetarStatus = report is null ? "No current report available" : "AVIATION WEATHER CENTER";
+        }
+        catch (OperationCanceledException) when (request.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+            if (ReferenceEquals(_airportMetarRequest, request))
+            {
+                AirportMetarStatus = "METAR unavailable";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            if (ReferenceEquals(_airportMetarRequest, request))
+            {
+                AirportMetarStatus = "METAR unavailable";
+            }
+        }
+        catch (JsonException)
+        {
+            if (ReferenceEquals(_airportMetarRequest, request))
+            {
+                AirportMetarStatus = "METAR unavailable";
+            }
+        }
+    }
+
+    private void OnAtcCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(SelectedAirportAtc));
+        OnPropertyChanged(nameof(HasSelectedAirportAtc));
+        OnPropertyChanged(nameof(AirportLocationText));
+        OnPropertyChanged(nameof(HasAirportLocation));
+    }
+
+    private void OnPilotCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(AirportLocationText));
+        OnPropertyChanged(nameof(HasAirportLocation));
+    }
+
+    private IvaoAirport? FindSelectedAirportPayload()
+    {
+        if (SelectedAirport is not { } airport)
+        {
+            return null;
+        }
+
+        static bool Matches(IvaoAirport? candidate, string icao) =>
+            candidate is not null && string.Equals(candidate.Icao, icao, StringComparison.OrdinalIgnoreCase);
+
+        return Map.Atc.Select(atc => atc.Atc.AtcPosition?.Airport)
+                   .FirstOrDefault(candidate => Matches(candidate, airport.Icao))
+            ?? Map.Pilots.SelectMany(pilot => new[]
+                {
+                    pilot.Pilot.FlightPlan?.Departure,
+                    pilot.Pilot.FlightPlan?.Arrival,
+                    pilot.Pilot.FlightPlan?.Alternative,
+                    pilot.Pilot.FlightPlan?.Alternative2
+                })
+                .FirstOrDefault(candidate => Matches(candidate, airport.Icao));
     }
 
     /// <summary>
@@ -1225,6 +1391,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void RaiseSelectionDependentChanges()
     {
+        OnPropertyChanged(nameof(HasMemberSelection));
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(IsSelectionSupervisor));
         OnPropertyChanged(nameof(IsSelectionFriend));
