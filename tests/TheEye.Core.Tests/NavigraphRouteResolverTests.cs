@@ -96,6 +96,75 @@ public sealed class NavigraphRouteResolverTests
         Assert.Equal(new GeoCoordinate(10, 1), route[1].Position);
     }
 
+    [Theory]
+    [InlineData("40N040W", 40, -40)]
+    [InlineData("40S040W", -40, -40)]
+    [InlineData("40N040E", 40, 40)]
+    [InlineData("40S040E", -40, 40)]
+    [InlineData("41n030w/M084F320", 41, -30)]
+    [InlineData("00N000E", 0, 0)]
+    [InlineData("90N180W", 90, -180)]
+    [InlineData("90S180E", -90, 180)]
+    public void Resolve_ParsesCoordinateWaypointsWithoutNavdata(string token, double latitude, double longitude)
+    {
+        var resolver = new NavigraphRouteResolver([], []);
+
+        var waypoint = Assert.Single(resolver.Resolve(token));
+
+        Assert.Equal(token.Split('/')[0].ToUpperInvariant(), waypoint.Identifier);
+        Assert.Equal(new GeoCoordinate(latitude, longitude), waypoint.Position);
+    }
+
+    [Theory]
+    [InlineData("91N040W")]
+    [InlineData("40S181E")]
+    [InlineData("99N999W")]
+    [InlineData("4N040W")]
+    [InlineData("40N40W")]
+    [InlineData("40X040W")]
+    [InlineData("40N040X")]
+    [InlineData("4AN040W")]
+    [InlineData("40N04AW")]
+    [InlineData("+4N040W")]
+    [InlineData("40N+40W")]
+    [InlineData("40N040WEXTRA")]
+    [InlineData("ALYNA4")]
+    public void Resolve_SkipsMalformedCoordinatesAndUnknownProcedures(string token)
+    {
+        var resolver = new NavigraphRouteResolver([], []);
+
+        Assert.Empty(resolver.Resolve(token));
+    }
+
+    [Fact]
+    public void Resolve_PreservesCoordinatesAndNamedFixesInTransatlanticRoute()
+    {
+        var resolver = new NavigraphRouteResolver(
+            [
+                ("ELNUB", new GeoCoordinate(42, -10)),
+                ("ERPES", new GeoCoordinate(42, -15)),
+                ("RNGRS", new GeoCoordinate(35, -65)),
+                ("ENAPI", new GeoCoordinate(35, -66)),
+                ("ALOBI", new GeoCoordinate(35, -67)),
+                ("SNAGY", new GeoCoordinate(35, -68)),
+                ("CASPR", new GeoCoordinate(35, -69)),
+                ("ADOOR", new GeoCoordinate(35, -70)),
+                ("HIBAC", new GeoCoordinate(35, -71))
+            ], []);
+
+        var route = resolver.Resolve(
+            "ELNUB DCT ERPES/M084F300 DCT 41N020W 41N030W/M084F320 40N040W 38N050W 36N060W/M084F340 DCT RNGRS DCT ENAPI DCT ALOBI DCT SNAGY/N0493F340 DCT CASPR DCT ADOOR DCT HIBAC ALYNA4");
+
+        Assert.Equal(
+            ["ELNUB", "ERPES", "41N020W", "41N030W", "40N040W", "38N050W", "36N060W",
+                "RNGRS", "ENAPI", "ALOBI", "SNAGY", "CASPR", "ADOOR", "HIBAC"],
+            route.Select(waypoint => waypoint.Identifier));
+        Assert.Equal(
+            [new GeoCoordinate(41, -20), new GeoCoordinate(41, -30), new GeoCoordinate(40, -40),
+                new GeoCoordinate(38, -50), new GeoCoordinate(36, -60)],
+            route.Skip(2).Take(5).Select(waypoint => waypoint.Position));
+    }
+
     [Fact]
     public void Load_ReadsRouteTablesFromAReadOnlyNavigraphDatabase()
     {

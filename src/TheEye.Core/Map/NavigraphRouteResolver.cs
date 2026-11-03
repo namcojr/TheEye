@@ -200,6 +200,12 @@ public sealed class NavigraphRouteResolver
                 continue;
             }
 
+            if (TryParseRouteCoordinate(token, out var coordinate))
+            {
+                AddIfNew(resolved, new RouteWaypoint(token, coordinate));
+                continue;
+            }
+
             if (_airways.TryGetValue(token, out var airway))
             {
                 var previousIndex = PreviousWaypointToken(tokens, index);
@@ -420,6 +426,30 @@ public sealed class NavigraphRouteResolver
         {
             waypoints.Add(waypoint);
         }
+    }
+
+    private static bool TryParseRouteCoordinate(string token, out GeoCoordinate position)
+    {
+        position = default;
+        if (token.Length != 7 || token[2] is not ('N' or 'S') || token[6] is not ('E' or 'W'))
+        {
+            return false;
+        }
+
+        var latitudeDigits = token.AsSpan(0, 2);
+        var longitudeDigits = token.AsSpan(3, 3);
+        if (latitudeDigits.ContainsAnyExceptInRange('0', '9') ||
+            longitudeDigits.ContainsAnyExceptInRange('0', '9'))
+        {
+            return false;
+        }
+
+        var latitude = int.Parse(latitudeDigits, System.Globalization.CultureInfo.InvariantCulture);
+        var longitude = int.Parse(longitudeDigits, System.Globalization.CultureInfo.InvariantCulture);
+        position = new GeoCoordinate(
+            token[2] == 'S' ? -latitude : latitude,
+            token[6] == 'W' ? -longitude : longitude);
+        return position.IsValid;
     }
 
     private static bool IsWaypointToken(string token) =>
