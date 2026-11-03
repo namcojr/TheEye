@@ -350,13 +350,6 @@
                     </StackPanel>
                 </Grid>
 
-                <Border Classes="divider" Margin="0,12,0,12" />
-
-                <TextBlock Text="STATION POSITION" Classes="detail-label" />
-                <TextBlock Text="{Binding PositionText}" Classes="mono value" Margin="0,3,0,0" />
-                <TextBlock Text="{Binding AirportName}" Classes="muted" Margin="0,8,0,0"
-                           TextWrapping="Wrap" IsVisible="{Binding HasAirport}" />
-
                 <!-- Connection: the client and server the controller is on -->
                 <Border Classes="flat-card" Margin="0,12,0,0" Padding="11,9"
                         IsVisible="{Binding HasProfile}">
@@ -830,7 +823,9 @@
                             <ToggleButton Content="PILOTS" IsChecked="{Binding ShowPilots, Mode=TwoWay}"
                                           Margin="0,0,6,0" ToolTip.Tip="Show or hide aircraft" />
                             <ToggleButton Content="ATC" IsChecked="{Binding ShowAtc, Mode=TwoWay}"
-                                          ToolTip.Tip="Show or hide controllers, sectors and stations" />
+                                          Margin="0,0,6,0" ToolTip.Tip="Show or hide controllers, sectors and stations" />
+                            <ToggleButton Content="AIRPORTS" IsChecked="{Binding ShowAirports, Mode=TwoWay}"
+                                          ToolTip.Tip="Show or hide airports with active traffic" />
                         </StackPanel>
 
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,14">

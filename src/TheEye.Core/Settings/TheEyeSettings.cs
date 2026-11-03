@@ -126,6 +126,8 @@ public sealed class TheEyeSettings
     /// <summary>Draws every controller layer: sectors, sector labels and station badges.</summary>
     public bool ShowAtc { get; set; } = true;
 
+    public bool ShowAirports { get; set; } = true;
+
     /// <summary>
     /// Moves the map onto whatever is picked on the map itself: an aircraft
     /// marker, a station badge or a sector. Picking a row in the traffic lists
@@ -262,6 +264,7 @@ public sealed class TheEyeSettings
         TrafficColumnWidth = TrafficColumnWidth,
         ShowPilots = ShowPilots,
         ShowAtc = ShowAtc,
+        ShowAirports = ShowAirports,
         CenterOnMapClick = CenterOnMapClick,
         MapLatitude = MapLatitude,
         MapLongitude = MapLongitude,
@@ -288,6 +291,7 @@ public sealed class TheEyeSettings
         TrafficColumnWidth = other.TrafficColumnWidth;
         ShowPilots = other.ShowPilots;
         ShowAtc = other.ShowAtc;
+        ShowAirports = other.ShowAirports;
         CenterOnMapClick = other.CenterOnMapClick;
         MapLatitude = other.MapLatitude;
         MapLongitude = other.MapLongitude;

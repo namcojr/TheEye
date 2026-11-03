@@ -18,6 +18,7 @@ public sealed class SettingsStoreTests
         Assert.Equal(TheEyeSettings.DefaultAircraftGlyphSize, settings.AircraftGlyphSize);
         Assert.True(settings.ShowPilots);
         Assert.True(settings.ShowAtc);
+        Assert.True(settings.ShowAirports);
         Assert.True(settings.CenterOnMapClick);
         Assert.Equal(45, settings.MapLatitude);
         Assert.Equal(10, settings.MapLongitude);
@@ -95,6 +96,7 @@ public sealed class SettingsStoreTests
             AircraftGlyphSize = 30,
             ShowPilots = false,
             ShowAtc = false,
+            ShowAirports = false,
             CenterOnMapClick = false,
             MapLatitude = 52.31,
             MapLongitude = 4.76,
@@ -109,6 +111,7 @@ public sealed class SettingsStoreTests
         Assert.Equal(30, loaded.AircraftGlyphSize);
         Assert.False(loaded.ShowPilots);
         Assert.False(loaded.ShowAtc);
+        Assert.False(loaded.ShowAirports);
         Assert.False(loaded.CenterOnMapClick);
         Assert.Equal(52.31, loaded.MapLatitude);
         Assert.Equal(4.76, loaded.MapLongitude);
@@ -148,19 +151,23 @@ public sealed class SettingsStoreTests
     }
 
     [Fact]
-    public void CloneAndCopyFrom_CarryTheMapClickOption()
+    public void CloneAndCopyFrom_CarryMapDisplayOptions()
     {
-        var original = new TheEyeSettings { CenterOnMapClick = false };
+        var original = new TheEyeSettings { CenterOnMapClick = false, ShowAirports = false };
 
         var clone = original.Clone();
         clone.CenterOnMapClick = true;
+        clone.ShowAirports = true;
 
         Assert.False(original.CenterOnMapClick);
+        Assert.False(original.ShowAirports);
         Assert.True(clone.CenterOnMapClick);
+        Assert.True(clone.ShowAirports);
 
         original.CopyFrom(clone);
 
         Assert.True(original.CenterOnMapClick);
+        Assert.True(original.ShowAirports);
     }
 
     [Fact]

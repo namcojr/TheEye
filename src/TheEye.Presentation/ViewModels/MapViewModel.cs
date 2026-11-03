@@ -64,6 +64,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private double _mapTooltipY;
     private bool _showPilots = true;
     private bool _showAtc = true;
+    private bool _showAirports = true;
     private IReadOnlyList<IvaoAtc> _atc = [];
     private IReadOnlyList<IvaoPilotTrack> _selectionTracks = [];
     private bool _selectionTracksPending;
@@ -269,6 +270,24 @@ public sealed class MapViewModel : ObservableObject, IDisposable
                 SetLayerEnabled(_atcLabelsLayer, value);
                 SetLayerEnabled(_atcStationsLayer, value);
                 if (!value) SetHoveredAtc(null);
+            }
+        }
+    }
+
+    public bool ShowAirports
+    {
+        get => _showAirports;
+        set
+        {
+            if (SetProperty(ref _showAirports, value))
+            {
+                _airportsKey = string.Empty;
+                if (!value)
+                {
+                    MapTooltipText = null;
+                }
+
+                UpdateAirports();
             }
         }
     }
@@ -1061,8 +1080,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             .Select(airport => airport!)
             .DistinctBy(airport => airport.Icao)
             .ToArray();
-        UpdateTrafficAirportTargets(trafficAirports);
-        var key = string.Join('|', trafficAirports.Select(airport => airport.Icao));
+        IReadOnlyList<AirportRecord> visibleTrafficAirports = _showAirports ? trafficAirports : [];
+        UpdateTrafficAirportTargets(visibleTrafficAirports);
+        var key = $"{_showAirports}|{string.Join('|', visibleTrafficAirports.Select(airport => airport.Icao))}";
         if (key == _airportsKey)
         {
             return;
@@ -1070,7 +1090,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
         _airportsKey = key;
         ReplaceLayer(ref _airportLayer, IvaoMapLayers.CreateAirports(
-            [], _palette, viewport.Resolution, showRunways: false, trafficAirports: trafficAirports));
+            [], _palette, viewport.Resolution, showRunways: false, trafficAirports: visibleTrafficAirports));
         map.Refresh();
     }
 

@@ -299,6 +299,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    public bool ShowAirports
+    {
+        get => Map.ShowAirports;
+        set
+        {
+            if (Map.ShowAirports == value)
+            {
+                return;
+            }
+
+            Map.ShowAirports = value;
+            _settings.ShowAirports = value;
+            OnPropertyChanged();
+        }
+    }
+
     public string SearchText
     {
         get => _searchText;
@@ -500,6 +516,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         Map.ShowPilots = _settings.ShowPilots;
         Map.ShowAtc = _settings.ShowAtc;
+        Map.ShowAirports = _settings.ShowAirports;
         Map.CenterOnMapClick = _settings.CenterOnMapClick;
         Map.AircraftGlyphSize = _settings.AircraftGlyphSize;
         Map.MapStyle = _settings.MapStyle;
@@ -573,6 +590,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         Map.ShowPilots = _settings.ShowPilots;
         Map.ShowAtc = _settings.ShowAtc;
+        Map.ShowAirports = _settings.ShowAirports;
         Map.CenterOnMapClick = _settings.CenterOnMapClick;
         Map.AircraftGlyphSize = _settings.AircraftGlyphSize;
         Map.MapStyle = _settings.MapStyle;
@@ -580,6 +598,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RefreshFriendMarks();
         OnPropertyChanged(nameof(ShowPilots));
         OnPropertyChanged(nameof(ShowAtc));
+        OnPropertyChanged(nameof(ShowAirports));
         OnPropertyChanged(nameof(IsSignedIn));
         OnPropertyChanged(nameof(ConnectionDescription));
         OnPropertyChanged(nameof(RefreshDescription));
@@ -603,6 +622,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _settings.MapResolution = resolution;
         _settings.ShowPilots = Map.ShowPilots;
         _settings.ShowAtc = Map.ShowAtc;
+        _settings.ShowAirports = Map.ShowAirports;
         _settings.TrafficColumnWidth = TrafficColumnWidth;
 
         try
