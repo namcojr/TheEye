@@ -12,6 +12,8 @@
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
+    <!-- OpenTK.GLWpfControl arrives transitively via Mapsui.Wpf/SkiaSharp.Views.WPF and only targets .NET Framework; it runs fine on .NET. -->
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
