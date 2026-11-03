@@ -410,28 +410,80 @@
 
                 <Border Classes="divider" Margin="0,12,0,12"
                         IsVisible="{Binding HasRunways}" />
-                <TextBlock Text="RUNWAYS" Classes="detail-label" IsVisible="{Binding HasRunways}" />
-                <ItemsControl ItemsSource="{Binding Runways}" IsVisible="{Binding HasRunways}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Classes="flat-card" Margin="0,7,0,0" Padding="10,8">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding RunwayDesignations}" Classes="mono value"
-                                                   FontWeight="Bold" />
-                                        <TextBlock Text="{Binding HeadingText}" Classes="muted" Margin="0,2,0,0" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1" HorizontalAlignment="Right">
-                                        <TextBlock Text="{Binding LengthText}" Classes="mono value"
-                                                   HorizontalAlignment="Right" />
-                                        <TextBlock Text="{Binding WidthText}" Classes="muted" Margin="0,2,0,0"
-                                                   HorizontalAlignment="Right" />
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding HasRunways}">
+                    <TextBlock Text="RUNWAYS" Classes="detail-label" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" Classes="runway-selector" Width="142"
+                              Background="{DynamicResource PanelAltBackgroundBrush}"
+                              Foreground="{DynamicResource TextBrush}"
+                              BorderBrush="{DynamicResource BorderBrush}"
+                              ItemsSource="{Binding $parent[Window].DataContext.SelectedAirportRunwayEnds}"
+                              SelectedItem="{Binding $parent[Window].DataContext.SelectedRunwayEnd}"
+                              MinHeight="32">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayText}" Classes="mono value"
+                                           Foreground="{DynamicResource TextBrush}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+                <Border Classes="flat-card" Height="170" Margin="0,7,0,0" ClipToBounds="True"
+                        IsVisible="{Binding HasRunways}">
+                    <Grid>
+                        <TextBlock Text="N" Classes="muted" FontSize="10" Margin="8,6,0,0"
+                                   HorizontalAlignment="Left" VerticalAlignment="Top" />
+                        <Border Width="150" Height="32" BorderThickness="1"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            Background="{DynamicResource PanelBackgroundBrush}" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <RotateTransform Angle="{Binding $parent[Window].DataContext.RunwayDiagramRotation}" />
+                            </Border.RenderTransform>
+                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="7,2">
+                                <TextBlock Text="{Binding $parent[Window].DataContext.SelectedRunwayEnd.Designation}"
+                                       Classes="mono value" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                                <Border Grid.Column="1" Height="2" Background="{DynamicResource MutedTextBrush}" Margin="5,0"
+                                        VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2"
+                                           Text="{Binding $parent[Window].DataContext.SelectedRunwayEnd.ReciprocalDesignation}"
+                                       Classes="mono value" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+                <Grid ColumnDefinitions="*,*,*" Margin="0,8,0,0" IsVisible="{Binding HasRunways}">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="TRUE HEADING" Classes="detail-label" />
+                        <TextBlock Text="{Binding $parent[Window].DataContext.SelectedRunwayEnd.HeadingText}"
+                                   Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="LENGTH" Classes="detail-label" />
+                        <TextBlock Text="{Binding $parent[Window].DataContext.SelectedRunwayEnd.LengthText}"
+                                   Classes="mono value" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="WIDTH" Classes="detail-label" />
+                        <TextBlock Text="{Binding $parent[Window].DataContext.SelectedRunwayEnd.WidthText}"
+                                   Classes="mono value" />
+                    </StackPanel>
+                </Grid>
+                <TextBlock Text="{Binding $parent[Window].DataContext.RunwayWindDirectionText}"
+                           Classes="muted" Margin="0,10,0,0" IsVisible="{Binding HasRunways}" />
+                <Grid ColumnDefinitions="*,*" Margin="0,5,0,0" IsVisible="{Binding HasRunways}">
+                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock Text="CROSSWIND" Classes="detail-label" />
+                        <TextBlock Text="{Binding $parent[Window].DataContext.RunwayCrosswindText}"
+                                   Classes="mono value" FontSize="16" FontWeight="Bold" />
+                        <TextBlock Text="{Binding $parent[Window].DataContext.RunwayCrosswindSideText}"
+                                   Classes="muted" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="{Binding $parent[Window].DataContext.RunwayAlongWindLabel}"
+                                   Classes="detail-label" />
+                        <TextBlock Text="{Binding $parent[Window].DataContext.RunwayAlongWindText}"
+                                   Classes="mono value" FontSize="16" FontWeight="Bold" />
+                    </StackPanel>
+                </Grid>
                 <TextBlock Text="No runway data available" Classes="muted" Margin="0,6,0,0"
                            IsVisible="{Binding HasRunways, Converter={StaticResource InverseBoolConverter}}" />
 

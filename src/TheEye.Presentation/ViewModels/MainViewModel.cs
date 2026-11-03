@@ -53,6 +53,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _airportMetarRequest;
     private string _airportMetarText = string.Empty;
     private string _airportMetarStatus = string.Empty;
+    private IReadOnlyList<RunwayEndOption> _selectedAirportRunwayEnds = [];
+    private RunwayEndOption? _selectedRunwayEnd;
 
     // Avalonia lists drop and re-pick their selection on a Reset; that write-back must not re-select (and re-centre).
     private bool _rebuildingLists;
@@ -187,10 +189,73 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public AirportRecord? SelectedAirport => Map.SelectedAirport;
 
+    public IReadOnlyList<RunwayEndOption> SelectedAirportRunwayEnds => _selectedAirportRunwayEnds;
+
+    public RunwayEndOption? SelectedRunwayEnd
+    {
+        get => _selectedRunwayEnd;
+        set
+        {
+            if (SetProperty(ref _selectedRunwayEnd, value))
+            {
+                RaiseRunwayWindChanges();
+            }
+        }
+    }
+
+    public string RunwayWindDirectionText
+    {
+        get
+        {
+            if (!TryGetRunwayWind(out var wind))
+            {
+                return "Wind unavailable";
+            }
+
+            return wind.HasVariableDirection
+                ? $"VRB / {wind.SpeedKnots:0} kt"
+                : $"{wind.DirectionDegrees:000}°T / {wind.SpeedKnots:0} kt";
+        }
+    }
+
+    public double RunwayDiagramRotation => (SelectedRunwayEnd?.TrueHeadingDegrees ?? 90) - 90;
+
+    public string RunwayCrosswindText => TryGetRunwayWind(out var wind)
+        ? wind.HasVariableDirection
+            ? "Variable"
+            : TryGetRunwayComponents(out var components) ? $"{components.CrosswindKnots:0.0} kt" : "--"
+        : "--";
+
+    public string RunwayCrosswindSideText => TryGetRunwayWind(out var wind) && wind.HasVariableDirection
+        ? "Direction unknown"
+        : TryGetRunwayComponents(out var components) && components.CrosswindKnots > 0
+            ? components.CrosswindFromRight ? "From right" : "From left"
+            : string.Empty;
+
+    public string RunwayAlongWindLabel => TryGetRunwayWind(out var wind) && wind.HasVariableDirection
+        ? "HEADWIND / TAILWIND"
+        : TryGetRunwayComponents(out var components) && components.TailwindKnots > 0
+            ? "TAILWIND"
+            : "HEADWIND";
+
+    public string RunwayAlongWindText => TryGetRunwayWind(out var wind)
+        ? wind.HasVariableDirection
+            ? "Variable"
+            : TryGetRunwayComponents(out var components)
+                ? $"{(components.TailwindKnots > 0 ? components.TailwindKnots : components.HeadwindKnots):0.0} kt"
+                : "--"
+        : "--";
+
     public string AirportMetarText
     {
         get => _airportMetarText;
-        private set => SetProperty(ref _airportMetarText, value);
+        private set
+        {
+            if (SetProperty(ref _airportMetarText, value))
+            {
+                RaiseRunwayWindChanges();
+            }
+        }
     }
 
     public string AirportMetarStatus
@@ -924,6 +989,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(SelectedPilot));
             OnPropertyChanged(nameof(SelectedAtc));
             OnPropertyChanged(nameof(SelectedAirport));
+            UpdateSelectedAirportRunways();
             OnPropertyChanged(nameof(SelectedAirportAtc));
             OnPropertyChanged(nameof(HasSelectedAirportAtc));
             OnPropertyChanged(nameof(AirportLocationText));
@@ -942,6 +1008,65 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _ = RefreshSelectionTracksAsync();
         _ = RefreshSelectionDetailAsync();
         _ = RefreshSelectionFlightPlanAsync();
+    }
+
+    private void UpdateSelectedAirportRunways()
+    {
+        var previous = _selectedRunwayEnd;
+        var airport = SelectedAirport;
+        _selectedAirportRunwayEnds = airport is null ? [] : CreateRunwayEnds(airport);
+        OnPropertyChanged(nameof(SelectedAirportRunwayEnds));
+
+        SelectedRunwayEnd = _selectedAirportRunwayEnds.FirstOrDefault(option =>
+            previous is not null && option.Runway == previous.Runway && option.Designation == previous.Designation)
+            ?? _selectedAirportRunwayEnds.FirstOrDefault(option => option.Runway == airport?.LongestRunway)
+            ?? _selectedAirportRunwayEnds.FirstOrDefault();
+    }
+
+    private static IReadOnlyList<RunwayEndOption> CreateRunwayEnds(AirportRecord airport) =>
+        airport.Runways
+            .OrderByDescending(runway => runway.LengthMetres)
+            .SelectMany(runway =>
+            {
+                var designations = runway.RunwayDesignations.Split('/');
+                return new[]
+                {
+                    new RunwayEndOption(designations[0], runway.TrueHeadingDegrees, runway),
+                    new RunwayEndOption(designations[1], (runway.TrueHeadingDegrees + 180) % 360, runway)
+                };
+            })
+            .ToArray();
+
+    private bool TryGetRunwayWind(out MetarWind wind)
+    {
+        var parsed = MetarWindCalculator.Parse(AirportMetarText);
+        wind = parsed.GetValueOrDefault();
+        return SelectedRunwayEnd is not null && parsed.HasValue;
+    }
+
+    private bool TryGetRunwayComponents(out RunwayWindComponents components)
+    {
+        if (SelectedRunwayEnd is not null && TryGetRunwayWind(out var wind))
+        {
+            if (MetarWindCalculator.Calculate(wind, SelectedRunwayEnd.TrueHeadingDegrees) is { } calculated)
+            {
+                components = calculated;
+                return true;
+            }
+        }
+
+        components = default;
+        return false;
+    }
+
+    private void RaiseRunwayWindChanges()
+    {
+        OnPropertyChanged(nameof(RunwayDiagramRotation));
+        OnPropertyChanged(nameof(RunwayWindDirectionText));
+        OnPropertyChanged(nameof(RunwayCrosswindText));
+        OnPropertyChanged(nameof(RunwayCrosswindSideText));
+        OnPropertyChanged(nameof(RunwayAlongWindLabel));
+        OnPropertyChanged(nameof(RunwayAlongWindText));
     }
 
     private async Task RefreshAirportMetarAsync()
