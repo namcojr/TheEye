@@ -69,7 +69,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private IReadOnlyList<IvaoPilotTrack> _selectionTracks = [];
     private bool _selectionTracksPending;
     private IReadOnlyList<IvaoMapLayers.AtcStationPlacement> _stationPlacements = [];
-    private readonly List<AtcStationHitTarget> _stationTargets = [];
+    private AtcStationHitTarget[] _stationTargets = [];
     private readonly List<(AirportRecord Airport, double X, double Y)> _trafficAirportTargets = [];
     private double _stationZoom = 1;
     private string _airportsKey = string.Empty;
@@ -1007,22 +1007,24 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     /// </summary>
     private void UpdateStationTargets()
     {
-        _stationTargets.Clear();
         if (Map is not { } map)
         {
+            _stationTargets = [];
             return;
         }
 
         var viewport = map.Navigator.Viewport;
         if (viewport.Width <= 0 || viewport.Height <= 0)
         {
+            _stationTargets = [];
             return;
         }
 
+        var targets = new List<AtcStationHitTarget>(_stationPlacements.Count);
         foreach (var placement in _stationPlacements)
         {
             var screen = viewport.WorldToScreen(placement.Point);
-            _stationTargets.Add(new AtcStationHitTarget(
+            targets.Add(new AtcStationHitTarget(
                 placement.Station,
                 screen.X,
                 screen.Y,
@@ -1031,6 +1033,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
                     AtcMarkerStyles.ZoomScale(viewport.Resolution))),
                 AtcMarkerStyles.SortOrder(placement.Station.Facility, placement.Station.Callsign)));
         }
+
+        _stationTargets = targets.ToArray();
     }
 
     /// <summary>
