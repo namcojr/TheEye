@@ -485,7 +485,7 @@
                     </StackPanel>
                 </Grid>
                 <TextBlock Text="No runway data available" Classes="muted" Margin="0,6,0,0"
-                           IsVisible="{Binding HasRunways, Converter={StaticResource InverseBoolConverter}}" />
+                           IsVisible="{Binding HasRunways, Converter={StaticResource Not}}" />
 
                 <Border Classes="divider" Margin="0,12,0,12"
                         IsVisible="{Binding $parent[Window].DataContext.HasSelectedAirportAtc}" />
