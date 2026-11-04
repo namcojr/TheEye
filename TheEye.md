@@ -465,6 +465,22 @@ script after UI changes to ship a new build. Settings keep living in
 `~/.config/TheEyeIVAO/settings.json` and crashes in `~/.config/TheEyeIVAO/crash.log`,
 independently of where the payload was installed.
 
+## LINUX PACKAGES FOR DISTRIBUTION (implemented)
+===============================================
+
+`tools/package-linux.sh` builds packages for machines without .NET. The payload is
+self-contained (`--self-contained true`), so the runtime ships inside:
+
+- `dist/TheEye-<date>-<commit>-linux-x64.tar.gz` (~48 MB) — `./the-eye` runs it
+  in place; `./install.sh` puts it in `~/.local/opt/the-eye` with a menu entry and
+  icons (no root); `./uninstall.sh` removes it and keeps the settings.
+- `dist/TheEye-<date>-<commit>-x86_64.AppImage` — one file; `chmod +x`, then run.
+  Needs `appimagetool`: taken from `$APPIMAGETOOL` or `PATH`, otherwise downloaded once
+  into `~/.cache/the-eye-build`. `--no-appimage` skips it.
+
+Both launchers set `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1` when `libicu` is
+missing, so minimal installs still start.
+
 
 ## LISBON OFFLINE VECTOR SAMPLE (evaluation only)
 ================================================
