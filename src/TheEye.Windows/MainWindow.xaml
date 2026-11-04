@@ -514,7 +514,8 @@
                               SelectedItem="{Binding DataContext.SelectedRunwayEnd, RelativeSource={RelativeSource AncestorType=Window}}">
                         <ComboBox.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding DisplayText}" Style="{StaticResource DetailValueMono}" />
+                                <TextBlock Text="{Binding DisplayText}" Style="{StaticResource DetailValueMono}"
+                                           Margin="0" VerticalAlignment="Center" />
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
