@@ -20,6 +20,7 @@
     <ProjectReference Include="..\..\src\TheEye.Core\TheEye.Core.csproj" />
     <ProjectReference Include="..\..\src\TheEye.Presentation\TheEye.Presentation.csproj" />
     <Compile Include="..\..\src\Shared\AtcGlyphRenderer.cs" Link="Rendering\AtcGlyphRenderer.cs" />
+    <Compile Include="..\..\src\Shared\RunwayDiagramRenderer.cs" Link="Rendering\RunwayDiagramRenderer.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,6 +1,7 @@
 <Window x:Class="TheEye.Windows.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:TheEye.Windows.Controls"
         xmlns:mapsui="clr-namespace:Mapsui.UI.Wpf;assembly=Mapsui.UI.Wpf"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="The Eye of IVAO"
@@ -508,7 +509,7 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="RUNWAYS" Style="{StaticResource DetailLabel}" VerticalAlignment="Center" />
-                    <ComboBox Grid.Column="1" Style="{StaticResource RunwaySelector}" Width="142"
+                    <ComboBox Grid.Column="1" Style="{StaticResource RunwaySelector}" Width="142" Height="20"
                               ItemsSource="{Binding DataContext.SelectedAirportRunwayEnds, RelativeSource={RelativeSource AncestorType=Window}}"
                               SelectedItem="{Binding DataContext.SelectedRunwayEnd, RelativeSource={RelativeSource AncestorType=Window}}">
                         <ComboBox.ItemTemplate>
@@ -518,33 +519,15 @@
                         </ComboBox.ItemTemplate>
                     </ComboBox>
                 </Grid>
-                <Border Style="{StaticResource FlatCard}" Height="170" Margin="0,7,0,0" ClipToBounds="True"
+                <Border Style="{StaticResource FlatCard}" Height="230" Padding="0" Margin="0,7,0,0" ClipToBounds="True"
                         Visibility="{Binding HasRunways, Converter={StaticResource BoolToVisibility}}">
-                    <Grid>
-                        <TextBlock Text="N" Style="{StaticResource MutedText}" FontSize="10" Margin="8,6,0,0"
-                                   HorizontalAlignment="Left" VerticalAlignment="Top" />
-                        <Border Width="150" Height="32" BorderThickness="1"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            Background="{DynamicResource PanelBackgroundBrush}" RenderTransformOrigin="0.5,0.5">
-                            <Border.RenderTransform>
-                                <RotateTransform Angle="{Binding DataContext.RunwayDiagramRotation, RelativeSource={RelativeSource AncestorType=Window}}" />
-                            </Border.RenderTransform>
-                            <Grid Margin="7,2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding DataContext.SelectedRunwayEnd.Designation, RelativeSource={RelativeSource AncestorType=Window}}"
-                                       Style="{StaticResource DetailValueMono}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                                <Border Grid.Column="1" Height="2" Background="{DynamicResource MutedTextBrush}" Margin="5,0"
-                                        VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="2"
-                                           Text="{Binding DataContext.SelectedRunwayEnd.ReciprocalDesignation, RelativeSource={RelativeSource AncestorType=Window}}"
-                                       Style="{StaticResource DetailValueMono}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
-                    </Grid>
+                    <controls:RunwayDiagram State="{Binding DataContext.RunwayDiagram, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            TextBrush="{DynamicResource TextBrush}"
+                                            MutedTextBrush="{DynamicResource MutedTextBrush}"
+                                            AccentBrush="{DynamicResource AccentBrush}"
+                                            HeadwindBrush="{DynamicResource SuccessBrush}"
+                                            TailwindBrush="{DynamicResource ErrorBrush}"
+                                            HaloBrush="{DynamicResource PanelAltBackgroundBrush}" />
                 </Border>
                 <Grid Margin="0,8,0,0" Visibility="{Binding HasRunways, Converter={StaticResource BoolToVisibility}}">
                     <Grid.ColumnDefinitions>
@@ -584,10 +567,29 @@
                                    Style="{StaticResource MutedText}" />
                     </StackPanel>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="{Binding DataContext.RunwayAlongWindLabel, RelativeSource={RelativeSource AncestorType=Window}}"
-                                   Style="{StaticResource DetailLabel}" />
+                        <TextBlock Text="{Binding DataContext.RunwayAlongWindLabel, RelativeSource={RelativeSource AncestorType=Window}}">
+                            <TextBlock.Style>
+                                <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource DetailLabel}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataContext.IsRunwayTailwind, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <TextBlock Text="{Binding DataContext.RunwayAlongWindText, RelativeSource={RelativeSource AncestorType=Window}}"
-                                   Style="{StaticResource DetailValueMono}" FontSize="16" FontWeight="Bold" />
+                                   FontSize="16" FontWeight="Bold">
+                            <TextBlock.Style>
+                                <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource DetailValueMono}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataContext.IsRunwayTailwind, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
                 </Grid>
                 <TextBlock Text="No runway data available" Style="{StaticResource MutedText}"

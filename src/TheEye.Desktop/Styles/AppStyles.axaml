@@ -66,6 +66,11 @@
         <Setter Property="Margin" Value="0,0,0,9" />
     </Style>
 
+    <!-- A tailwind on the selected runway end is the one wind value that must stand out. -->
+    <Style Selector="TextBlock.tailwind">
+        <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+    </Style>
+
     <Style Selector="Border.card">
         <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
@@ -127,10 +132,14 @@
         <Setter Property="FontSize" Value="11.5" />
     </Style>
 
+    <!-- Fluent gives every ComboBox MinHeight 32 and 5/7 px of vertical padding;
+         both have to go for a compact selector, or MinHeight beats Height. -->
     <Style Selector="ComboBox.runway-selector">
         <Setter Property="Background" Value="{DynamicResource PanelAltBackgroundBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="8,0,0,0" />
     </Style>
 
     <Style Selector="ComboBoxItem">

@@ -218,7 +218,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public double RunwayDiagramRotation => (SelectedRunwayEnd?.TrueHeadingDegrees ?? 90) - 90;
+    public RunwayDiagramState? RunwayDiagram => SelectedRunwayEnd is null
+        ? null
+        : RunwayDiagramState.Create(SelectedRunwayEnd, MetarWindCalculator.Parse(AirportMetarText));
+
+    /// <summary>The wind pushes from behind on the selected runway end.</summary>
+    public bool IsRunwayTailwind => TryGetRunwayComponents(out var components) && components.TailwindKnots > 0;
 
     public string RunwayCrosswindText => TryGetRunwayWind(out var wind)
         ? wind.HasVariableDirection
@@ -1061,7 +1066,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void RaiseRunwayWindChanges()
     {
-        OnPropertyChanged(nameof(RunwayDiagramRotation));
+        OnPropertyChanged(nameof(RunwayDiagram));
+        OnPropertyChanged(nameof(IsRunwayTailwind));
         OnPropertyChanged(nameof(RunwayWindDirectionText));
         OnPropertyChanged(nameof(RunwayCrosswindText));
         OnPropertyChanged(nameof(RunwayCrosswindSideText));

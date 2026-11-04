@@ -412,43 +412,30 @@
                         IsVisible="{Binding HasRunways}" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding HasRunways}">
                     <TextBlock Text="RUNWAYS" Classes="detail-label" VerticalAlignment="Center" />
-                    <ComboBox Grid.Column="1" Classes="runway-selector" Width="142"
+                    <ComboBox Grid.Column="1" Classes="runway-selector" Width="142" Height="20"
                               Background="{DynamicResource PanelAltBackgroundBrush}"
                               Foreground="{DynamicResource TextBrush}"
                               BorderBrush="{DynamicResource BorderBrush}"
                               ItemsSource="{Binding $parent[Window].DataContext.SelectedAirportRunwayEnds}"
-                              SelectedItem="{Binding $parent[Window].DataContext.SelectedRunwayEnd}"
-                              MinHeight="32">
+                              SelectedItem="{Binding $parent[Window].DataContext.SelectedRunwayEnd}">
                         <ComboBox.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding DisplayText}" Classes="mono value"
+                                <TextBlock Text="{Binding DisplayText}" Classes="mono value" Margin="0"
+                                           VerticalAlignment="Center"
                                            Foreground="{DynamicResource TextBrush}" />
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
                 </Grid>
-                <Border Classes="flat-card" Height="170" Margin="0,7,0,0" ClipToBounds="True"
+                <Border Classes="flat-card" Height="230" Padding="0" Margin="0,7,0,0" ClipToBounds="True"
                         IsVisible="{Binding HasRunways}">
-                    <Grid>
-                        <TextBlock Text="N" Classes="muted" FontSize="10" Margin="8,6,0,0"
-                                   HorizontalAlignment="Left" VerticalAlignment="Top" />
-                        <Border Width="150" Height="32" BorderThickness="1"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            Background="{DynamicResource PanelBackgroundBrush}" RenderTransformOrigin="0.5,0.5">
-                            <Border.RenderTransform>
-                                <RotateTransform Angle="{Binding $parent[Window].DataContext.RunwayDiagramRotation}" />
-                            </Border.RenderTransform>
-                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="7,2">
-                                <TextBlock Text="{Binding $parent[Window].DataContext.SelectedRunwayEnd.Designation}"
-                                       Classes="mono value" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                                <Border Grid.Column="1" Height="2" Background="{DynamicResource MutedTextBrush}" Margin="5,0"
-                                        VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="2"
-                                           Text="{Binding $parent[Window].DataContext.SelectedRunwayEnd.ReciprocalDesignation}"
-                                       Classes="mono value" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
-                    </Grid>
+                    <controls:RunwayDiagram State="{Binding $parent[Window].DataContext.RunwayDiagram}"
+                                            TextBrush="{DynamicResource TextBrush}"
+                                            MutedTextBrush="{DynamicResource MutedTextBrush}"
+                                            AccentBrush="{DynamicResource AccentBrush}"
+                                            HeadwindBrush="{DynamicResource SuccessBrush}"
+                                            TailwindBrush="{DynamicResource ErrorBrush}"
+                                            HaloBrush="{DynamicResource PanelAltBackgroundBrush}" />
                 </Border>
                 <Grid ColumnDefinitions="*,*,*" Margin="0,8,0,0" IsVisible="{Binding HasRunways}">
                     <StackPanel Grid.Column="0">
@@ -479,9 +466,11 @@
                     </StackPanel>
                     <StackPanel Grid.Column="1">
                         <TextBlock Text="{Binding $parent[Window].DataContext.RunwayAlongWindLabel}"
-                                   Classes="detail-label" />
+                                   Classes="detail-label"
+                                   Classes.tailwind="{Binding $parent[Window].DataContext.IsRunwayTailwind}" />
                         <TextBlock Text="{Binding $parent[Window].DataContext.RunwayAlongWindText}"
-                                   Classes="mono value" FontSize="16" FontWeight="Bold" />
+                                   Classes="mono value" FontSize="16" FontWeight="Bold"
+                                   Classes.tailwind="{Binding $parent[Window].DataContext.IsRunwayTailwind}" />
                     </StackPanel>
                 </Grid>
                 <TextBlock Text="No runway data available" Classes="muted" Margin="0,6,0,0"
