@@ -1473,10 +1473,10 @@
                                 Background="{DynamicResource PanelBackgroundBrush}"
                                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="FRIENDS:" FontSize="9" VerticalAlignment="Center" />
+                                <TextBlock Text="FRIENDS" FontSize="9" VerticalAlignment="Center" />
                                 <Border Width="8" Height="8" Margin="5,0,10,0"
                                         Background="#FF38BDF8" />
-                                <TextBlock Text="SUP:" FontSize="9" VerticalAlignment="Center" />
+                                <TextBlock Text="SUPERVISORS" FontSize="9" VerticalAlignment="Center" />
                                 <Border Width="8" Height="8" Margin="5,0,0,0"
                                         Background="#FFE84393" />
                             </StackPanel>
