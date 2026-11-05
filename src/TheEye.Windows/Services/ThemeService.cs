@@ -76,13 +76,17 @@ public static class ThemeService
             ToHex(GetColor("MapBorderColor")),
             ToHex(GetColor("MapLabelColor")),
             ToHex(GetColor("AccentColor")),
-            dark);
+            dark,
+            ToHex(GetColor("TextColor")),
+            ToHexWithAlpha(GetColor("ShadowColor")));
     }
 
     public static Color GetColor(string key) =>
         Application.Current?.TryFindResource(key) is Color color ? color : Colors.Gray;
 
     public static string ToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    private static string ToHexWithAlpha(Color color) => $"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";
 
     public static int ToColorRef(Color color) => color.R | (color.G << 8) | (color.B << 16);
 

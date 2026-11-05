@@ -14,6 +14,19 @@ namespace TheEye.Rendering;
 /// <summary>Shared by the WPF and Avalonia shells; contours are drawn in screen pixels.</summary>
 public sealed class AtcGlyphRenderer : ISkiaStyleRenderer, IFeatureSize
 {
+    private static readonly SKPath StarPath = CreateStarPath();
+
+    private static readonly SKPathEffect ObserverDash = SKPathEffect.CreateDash(
+        [(float)AtcMarkerStyles.ObserverDashLength, (float)AtcMarkerStyles.ObserverDashLength], 0);
+
+    // Reused between glyphs. A shell renders on one thread, but the tests render
+    // in parallel, so each thread keeps its own pair.
+    [ThreadStatic]
+    private static SKPaint? _fill;
+
+    [ThreadStatic]
+    private static SKPaint? _outline;
+
     public static void Register() =>
         MapRenderer.RegisterStyleRenderer(typeof(AtcGlyphStyle), new AtcGlyphRenderer());
 
@@ -28,69 +41,68 @@ public sealed class AtcGlyphRenderer : ISkiaStyleRenderer, IFeatureSize
             ? 16 * marker.Scale * AtcMarkerStyles.RingScale
             : 15 * marker.Scale);
         var reach = radius - width / 2;
-        using var path = new SKPath();
-        if (ring || marker.Shape == AtcMarkerShape.Circle)
-        {
-            path.AddCircle(0, 0, reach);
-        }
-        else
-        {
-            using var star = SKPath.ParseSvgPathData(AtcMarkerStyles.StarPathData);
-            star.Transform(SKMatrix.CreateTranslation(-16, -16));
-            star.Transform(SKMatrix.CreateScale(reach / 16, reach / 16));
-            if (marker.Shape == AtcMarkerShape.RotatedStar)
-            {
-                star.Transform(SKMatrix.CreateRotationDegrees(45));
-            }
-
-            path.AddPath(star);
-        }
 
         var opacity = (float)(layer.Opacity * glyph.Opacity);
         var color = WorldMap.Parse(glyph.RingColor ?? marker.Fill);
+        var fill = _fill ??= new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
+        fill.Color = WorldMap.WithAlpha(color, marker.FillAlpha).ToSkia(opacity);
 
         // The contour of an observer is dashed, in screen pixels like its width,
         // so the dashed ring stays dashed at every zoom. The supervisor and
         // selection rings stay solid: they mark the member, not the facility.
-        using var dashEffect = marker.Dashed && !ring
-            ? SKPathEffect.CreateDash(
-                [(float)AtcMarkerStyles.ObserverDashLength, (float)AtcMarkerStyles.ObserverDashLength], 0)
-            : null;
-        using var fill = new SKPaint
+        var outline = _outline ??= new SKPaint
         {
-            Color = WorldMap.WithAlpha(color, marker.FillAlpha).ToSkia(opacity),
-            Style = SKPaintStyle.Fill,
-            IsAntialias = true
-        };
-        using var outline = new SKPaint
-        {
-            Color = color.ToSkia(opacity),
-            StrokeWidth = width,
             Style = SKPaintStyle.Stroke,
             StrokeJoin = SKStrokeJoin.Round,
-            IsAntialias = true,
-            PathEffect = dashEffect
+            IsAntialias = true
         };
+        outline.Color = color.ToSkia(opacity);
+        outline.StrokeWidth = width;
+        outline.PathEffect = marker.Dashed && !ring ? ObserverDash : null;
+
+        var circle = ring || marker.Shape == AtcMarkerShape.Circle;
+        using var star = circle ? null : StarAt(reach, marker.Shape);
         feature.CoordinateVisitor((x, y, _) =>
         {
-            var point = viewport.WorldToScreen(new MPoint(x, y));
+            var (screenX, screenY) = viewport.WorldToScreenXY(x, y);
             canvas.Save();
-            try
+            canvas.Translate((float)screenX, (float)screenY);
+            if (circle)
             {
-                canvas.Translate((float)point.X, (float)point.Y);
                 if (!ring)
                 {
-                    canvas.DrawPath(path, fill);
+                    canvas.DrawCircle(0, 0, reach, fill);
                 }
 
-                canvas.DrawPath(path, outline);
+                canvas.DrawCircle(0, 0, reach, outline);
             }
-            finally
+            else
             {
-                canvas.Restore();
+                canvas.DrawPath(star!, fill);
+                canvas.DrawPath(star!, outline);
             }
+
+            canvas.Restore();
         });
         return true;
+    }
+
+    private static SKPath StarAt(float reach, AtcMarkerShape shape)
+    {
+        var scale = SKMatrix.CreateScale(reach / 16, reach / 16);
+        var matrix = shape == AtcMarkerShape.RotatedStar
+            ? SKMatrix.CreateRotationDegrees(45).PreConcat(scale)
+            : scale;
+        var path = new SKPath();
+        StarPath.Transform(matrix, path);
+        return path;
+    }
+
+    private static SKPath CreateStarPath()
+    {
+        var star = SKPath.ParseSvgPathData(AtcMarkerStyles.StarPathData);
+        star.Transform(SKMatrix.CreateTranslation(-16, -16));
+        return star;
     }
 
     public bool NeedsFeature => false;

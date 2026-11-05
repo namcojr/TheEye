@@ -16,6 +16,7 @@ public sealed class FilteredCollection<T> : ObservableCollection<T>
     private readonly ObservableCollection<T> _source;
     private Func<T, bool> _filter;
     private IComparer<T>? _comparer;
+    private bool _deferred;
 
     public FilteredCollection(ObservableCollection<T> source, Func<T, bool>? filter = null)
     {
@@ -51,7 +52,27 @@ public sealed class FilteredCollection<T> : ObservableCollection<T>
     /// <summary>Re-runs the predicate, e.g. after an item's search text changed.</summary>
     public void Refresh() => Rebuild();
 
-    private void OnSourceChanged(object? sender, NotifyCollectionChangedEventArgs e) => Rebuild();
+    /// <summary>
+    /// Holds off the rebuild while the source takes a batch of changes. A traffic
+    /// refresh adds and removes aircraft one by one, and a rebuild per change would
+    /// run the filter over the whole list and reset the bound grid for each of them.
+    /// </summary>
+    public void BeginUpdate() => _deferred = true;
+
+    /// <summary>Ends <see cref="BeginUpdate"/> and brings the projection up to date.</summary>
+    public void EndUpdate()
+    {
+        _deferred = false;
+        Rebuild();
+    }
+
+    private void OnSourceChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (!_deferred)
+        {
+            Rebuild();
+        }
+    }
 
     /// <summary>
     /// Rebuilds the projection in one reset notification: adding thousands of
@@ -73,6 +94,13 @@ public sealed class FilteredCollection<T> : ObservableCollection<T>
         if (_comparer is not null)
         {
             matched.Sort(_comparer);
+        }
+
+        // Most refreshes change the rows rather than the list. The rows announce
+        // their own changes, so a reset would only make the grid rebuild itself.
+        if (matched.SequenceEqual(Items))
+        {
+            return;
         }
 
         Items.Clear();

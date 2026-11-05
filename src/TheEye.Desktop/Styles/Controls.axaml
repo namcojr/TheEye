@@ -134,61 +134,6 @@
          over a pin grows its artwork by two pixels instead of drawing a halo, so
          the pin under the pointer stands out without covering its neighbours;
          the map view model sets IsHovered and the artwork resizes itself. -->
-    <ControlTheme x:Key="PilotMarkerButton" TargetType="Button">
-        <Setter Property="Width" Value="{Binding MarkerSize}" />
-        <Setter Property="Height" Value="{Binding MarkerSize}" />
-        <Setter Property="Padding" Value="0" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Focusable" Value="False" />
-        <Setter Property="Template">
-            <ControlTemplate>
-                <!-- The near-transparent fill keeps the whole pin clickable
-                     on Avalonia, which only hit-tests what a control draws. -->
-                <Grid Width="{Binding MarkerSize}" Height="{Binding MarkerSize}" Background="#01000000">
-                    <!-- The same silhouette, turned with the aircraft and then
-                         pushed a pixel and a half down in screen space: a small
-                         drop shadow that lifts the pin off a busy basemap. -->
-                    <Grid IsHitTestVisible="False">
-                        <Grid.RenderTransform>
-                            <TranslateTransform Y="1.5" />
-                        </Grid.RenderTransform>
-                        <Viewbox Name="Shadow"
-                                 Width="{Binding DisplayGlyphSize}"
-                                 Height="{Binding DisplayGlyphSize}"
-                                 RenderTransformOrigin="50%,50%">
-                            <Viewbox.RenderTransform>
-                                <RotateTransform Angle="{Binding HeadingDegrees}" />
-                            </Viewbox.RenderTransform>
-                            <Canvas Width="64" Height="64">
-                                <Path Data="{Binding Icon}" Fill="{DynamicResource ShadowBrush}" />
-                            </Canvas>
-                        </Viewbox>
-                    </Grid>
-                    <Viewbox Name="Icon"
-                           Width="{Binding DisplayGlyphSize}"
-                           Height="{Binding DisplayGlyphSize}"
-                           Opacity="{Binding IsOnGround, Converter={StaticResource BoolToDouble}, ConverterParameter='0.72,1'}"
-                           RenderTransformOrigin="50%,50%">
-                        <Viewbox.RenderTransform>
-                            <RotateTransform Angle="{Binding HeadingDegrees}" />
-                        </Viewbox.RenderTransform>
-                        <Canvas Width="64" Height="64">
-                            <Path Data="{Binding Icon}" Fill="{Binding IconColor, Converter={StaticResource HexToBrush}}"
-                                  IsVisible="{Binding !HasMarkerColor}" />
-                            <Path Data="{Binding Icon}" Fill="{Binding MarkerColor, Converter={StaticResource HexToBrush}}"
-                                  IsVisible="{Binding HasMarkerColor}" />
-                        </Canvas>
-                    </Viewbox>
-                </Grid>
-            </ControlTemplate>
-        </Setter>
-        <Style Selector="^:pressed">
-            <Setter Property="Opacity" Value="0.8" />
-        </Style>
-    </ControlTheme>
-
     <!-- The pill choices in Settings: intervals and themes. -->
     <ControlTheme x:Key="ChoiceButton" TargetType="RadioButton">
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />

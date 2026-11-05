@@ -2,7 +2,9 @@ namespace TheEye.Core.Maps;
 
 /// <summary>
 /// Theme colours handed to Mapsui. Keeping them as hex strings avoids a
-/// dependency on Mapsui in the settings layer.
+/// dependency on Mapsui in the settings layer. <paramref name="Text"/> and
+/// <paramref name="Shadow"/> paint the aircraft callsigns and the drop shadow of
+/// their pins; left out, they fall back to the map label colour and a soft black.
 /// </summary>
 public sealed record MapPalette(
     string Water,
@@ -10,7 +12,9 @@ public sealed record MapPalette(
     string Border,
     string Label,
     string Accent,
-    bool IsDark);
+    bool IsDark,
+    string? Text = null,
+    string? Shadow = null);
 
 public static class FacilityPalette
 {

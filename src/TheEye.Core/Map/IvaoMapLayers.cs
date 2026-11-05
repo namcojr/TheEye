@@ -81,7 +81,8 @@ public static class IvaoMapLayers
         return new MemoryLayer(AtcRegionsLayerName)
         {
             Features = features,
-            Style = null
+            Style = null,
+            SortFeatures = WorldMap.KeepOrder
         };
     }
 
@@ -132,7 +133,8 @@ public static class IvaoMapLayers
         return new MemoryLayer(AtcLabelsLayerName)
         {
             Features = features,
-            Style = null
+            Style = null,
+            SortFeatures = WorldMap.KeepOrder
         };
     }
 
@@ -159,13 +161,12 @@ public static class IvaoMapLayers
         var features = new List<IFeature>();
         var stacks = placements.GroupBy(placement =>
             (X: Math.Round(placement.Point.X), Y: Math.Round(placement.Point.Y)));
-        var labels = new Dictionary<IFeature, (LabelStyle Style, AtcStationPlacement[] Members, int Line)>();
         foreach (var stack in stacks)
         {
-            var members = stack.ToArray();
-            for (var index = 0; index < members.Length; index++)
+            var members = new StationStack(stack.ToArray());
+            for (var index = 0; index < members.Placements.Length; index++)
             {
-                var placement = members[index];
+                var placement = members.Placements[index];
                 // The badges are concentric, so the labels only move down; the
                 // stacked line of the station decides how far.
                 var labelOffsetY = placement.LabelOffsetY;
@@ -204,7 +205,7 @@ public static class IvaoMapLayers
                     CollisionDetection = true,
                     MaxVisible = AtcLabelMaxResolution
                 };
-                labels.Add(feature, (label, members, index));
+                feature[StationLabelKey] = new StationLabel(label, members, index);
                 features.Add(feature);
             }
         }
@@ -212,16 +213,60 @@ public static class IvaoMapLayers
         return new MemoryLayer(AtcStationsLayerName)
         {
             Features = features,
-            Style = new ThemeStyle((feature, viewport) =>
-            {
-                var (label, members, line) = labels[feature];
-                var currentZoom = AtcMarkerStyles.ZoomScale(viewport.Resolution);
-                var widestScale = members.Max(member =>
-                    AtcMarkerStyles.For(member.Station.Facility, member.Station.Callsign, currentZoom).Scale);
-                label.Offset = new Offset(0, AtcMarkerStyles.StackedLabelOffset(widestScale, line).Y);
-                return label;
-            })
+            Style = StationLabels,
+            SortFeatures = WorldMap.KeepOrder
         };
+    }
+
+    private const string StationLabelKey = "StationLabel";
+
+    /// <summary>
+    /// Places the callsign of a station under its stack for the viewport being
+    /// drawn. Everything it needs travels with the feature, so a frame that
+    /// starts while the layer is being given new features still finds it.
+    /// </summary>
+    private static readonly ThemeStyle StationLabels = new((feature, viewport) =>
+    {
+        var label = (StationLabel)feature[StationLabelKey]!;
+        var offset = AtcMarkerStyles.StackedLabelOffset(label.Stack.WidestScale(viewport.Resolution), label.Line).Y;
+        if (label.Style.Offset.Y != offset)
+        {
+            label.Style.Offset = new Offset(0, offset);
+        }
+
+        return label.Style;
+    });
+
+    private sealed record StationLabel(LabelStyle Style, StationStack Stack, int Line);
+
+    /// <summary>
+    /// The badges of one airport. Every label of the stack asks for the widest
+    /// glyph, so the answer is kept for the resolution it was worked out at.
+    /// </summary>
+    private sealed class StationStack(AtcStationPlacement[] placements)
+    {
+        private (double Resolution, double Scale) _widest = (double.NaN, 0);
+
+        public AtcStationPlacement[] Placements { get; } = placements;
+
+        public double WidestScale(double resolution)
+        {
+            var widest = _widest;
+            if (widest.Resolution == resolution)
+            {
+                return widest.Scale;
+            }
+
+            var zoom = AtcMarkerStyles.ZoomScale(resolution);
+            var scale = 0d;
+            foreach (var member in Placements)
+            {
+                scale = Math.Max(scale, AtcMarkerStyles.For(member.Station.Facility, member.Station.Callsign, zoom).Scale);
+            }
+
+            _widest = (resolution, scale);
+            return scale;
+        }
     }
 
     /// <summary>
@@ -325,7 +370,8 @@ public static class IvaoMapLayers
         return new MemoryLayer(RouteLayerName)
         {
             Features = features,
-            Style = null
+            Style = null,
+            SortFeatures = WorldMap.KeepOrder
         };
     }
 
@@ -342,7 +388,12 @@ public static class IvaoMapLayers
                 ]), recorded: false);
         }
 
-        return new MemoryLayer(LiveTrailLayerName) { Features = features, Style = null };
+        return new MemoryLayer(LiveTrailLayerName)
+        {
+            Features = features,
+            Style = null,
+            SortFeatures = WorldMap.KeepOrder
+        };
     }
 
     public static MemoryLayer CreateFlightPlanRoutes(
@@ -363,7 +414,8 @@ public static class IvaoMapLayers
         return new MemoryLayer(FlightPlanRoutesLayerName)
         {
             Features = features.OrderBy(feature => feature is PointFeature).ToArray(),
-            Style = null
+            Style = null,
+            SortFeatures = WorldMap.KeepOrder
         };
     }
 
@@ -398,7 +450,12 @@ public static class IvaoMapLayers
             }
         }
 
-        return new MemoryLayer(HoverRouteLayerName) { Features = features, Style = null };
+        return new MemoryLayer(HoverRouteLayerName)
+        {
+            Features = features,
+            Style = null,
+            SortFeatures = WorldMap.KeepOrder
+        };
     }
 
     /// <summary>
@@ -464,35 +521,40 @@ public static class IvaoMapLayers
             features.Add(code);
         }
 
+        // One style pair for every airport: the renderer caches its paints and text
+        // per style, and hundreds of equal copies would each pay for that.
         var trafficColor = WorldMap.WithAlpha(WorldMap.Parse(palette.Accent), 128);
+        var trafficMarker = new SymbolStyle
+        {
+            SymbolType = SymbolType.Ellipse,
+            SymbolScale = 0.45,
+            Fill = new Brush(new Color(0, 127, 255, 55)),
+            Outline = new Pen(WorldMap.WithAlpha(WorldMap.Parse(palette.Accent), 51), 1.2)
+        };
+        var trafficLabel = new LabelStyle
+        {
+            LabelColumn = "Icao",
+            Font = new Font { FontFamily = "Segoe UI", Size = 10, Bold = true },
+            ForeColor = trafficColor,
+            BackColor = null,
+            Halo = new Pen(land, 2),
+            Offset = new Offset(0, -10),
+            CollisionDetection = true
+        };
         foreach (var airport in (trafficAirports ?? []).DistinctBy(airport => airport.Icao))
         {
             var feature = new PointFeature(WorldMap.Project(airport.Position));
             feature["Icao"] = airport.Icao;
-            feature.Styles.Add(new SymbolStyle
-            {
-                SymbolType = SymbolType.Ellipse,
-                SymbolScale = 0.45,
-                Fill = new Brush(new Color(0, 127, 255, 55)),
-                Outline = new Pen(WorldMap.WithAlpha(WorldMap.Parse(palette.Accent), 51), 1.2)
-            });
-            feature.Styles.Add(new LabelStyle
-            {
-                LabelColumn = "Icao",
-                Font = new Font { FontFamily = "Segoe UI", Size = 10, Bold = true },
-                ForeColor = trafficColor,
-                BackColor = null,
-                Halo = new Pen(land, 2),
-                Offset = new Offset(0, -10),
-                CollisionDetection = true
-            });
+            feature.Styles.Add(trafficMarker);
+            feature.Styles.Add(trafficLabel);
             features.Add(feature);
         }
 
         return new MemoryLayer(AirportsLayerName)
         {
             Features = features,
-            Style = null
+            Style = null,
+            SortFeatures = WorldMap.KeepOrder
         };
     }
 
@@ -562,7 +624,8 @@ public static class IvaoMapLayers
         return new MemoryLayer(SelectedAtcLayerName)
         {
             Features = features,
-            Style = null
+            Style = null,
+            SortFeatures = WorldMap.KeepOrder
         };
     }
 

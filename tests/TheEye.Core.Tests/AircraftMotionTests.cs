@@ -217,7 +217,8 @@ public sealed class AircraftMotionTests
         var item = model.Pilots.Single();
         var reportedText = item.PositionText;
         model.SetHoveredPilot(item);
-        var hover = model.Map.Layers.Single(layer => layer.Name == IvaoMapLayers.HoverRouteLayerName);
+        var hover = Assert.IsType<MemoryLayer>(
+            model.Map.Layers.Single(layer => layer.Name == IvaoMapLayers.HoverRouteLayerName)).Features;
         var oldX = item.X;
         clock.Advance(10);
         model.AdvanceAircraft();
@@ -225,7 +226,8 @@ public sealed class AircraftMotionTests
         var screen = model.Map.Navigator.Viewport.WorldToScreen(WorldMap.Project(item.MapPosition!.Value));
         Assert.Equal(screen.X, item.X + item.MarkerSize / 2d, 6);
         Assert.Same(item, model.HitTestPilot(new ScreenPosition(screen.X, screen.Y)));
-        Assert.NotSame(hover, model.Map.Layers.Single(layer => layer.Name == IvaoMapLayers.HoverRouteLayerName));
+        Assert.NotSame(hover, Assert.IsType<MemoryLayer>(
+            model.Map.Layers.Single(layer => layer.Name == IvaoMapLayers.HoverRouteLayerName)).Features);
         Assert.Equal(reportedText, item.PositionText);
         Assert.Equal(0, pilot.LastTrack.Longitude);
         model.UpdateTraffic(new TrackerSnapshot([], [], [], new IvaoConnectionStats(), clock.GetUtcNow(), []));
@@ -259,12 +261,12 @@ public sealed class AircraftMotionTests
                 new IvaoPilotTrack { Latitude = -0.01, Longitude = longitude, Altitude = 30000 },
                 new IvaoPilotTrack { Latitude = 0, Longitude = longitude, Altitude = 30000 }
             ]);
-        var history = Layer(IvaoMapLayers.RouteLayerName);
+        var history = Layer(IvaoMapLayers.RouteLayerName).Features;
         Assert.Empty(Layer(IvaoMapLayers.LiveTrailLayerName).Features);
         clock.Advance(30);
         model.AdvanceAircraft();
 
-        Assert.Same(history, Layer(IvaoMapLayers.RouteLayerName));
+        Assert.Same(history, Layer(IvaoMapLayers.RouteLayerName).Features);
         AssertEndpoints();
         Assert.Equal(longitude, pilot.LastTrack.Longitude);
         var connector = Layer(IvaoMapLayers.LiveTrailLayerName);
@@ -279,10 +281,10 @@ public sealed class AircraftMotionTests
 
         clock.Advance(31);
         model.AdvanceAircraft();
-        var frozen = Layer(IvaoMapLayers.LiveTrailLayerName);
+        var frozen = Layer(IvaoMapLayers.LiveTrailLayerName).Features;
         clock.Advance(30);
         model.AdvanceAircraft();
-        Assert.Same(frozen, Layer(IvaoMapLayers.LiveTrailLayerName));
+        Assert.Same(frozen, Layer(IvaoMapLayers.LiveTrailLayerName).Features);
 
         pilot.LastTrack = Track(clock, longitude: longitude == 0 ? 0.2 : -179.8);
         model.UpdateTraffic(Snapshot());

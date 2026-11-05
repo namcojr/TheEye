@@ -44,6 +44,7 @@ public sealed class PilotItem : ObservableObject
     private bool _isSupervisor;
     private string _markerColor = string.Empty;
     private string _iconColor = AircraftMarkerStyles.LightIcon;
+    private string? _paintedColor;
     private int _glyphSize = TheEyeSettings.DefaultAircraftGlyphSize;
 
     public int GlyphSize
@@ -55,6 +56,7 @@ public sealed class PilotItem : ObservableObject
                 TheEyeSettings.MinAircraftGlyphSize, TheEyeSettings.MaxAircraftGlyphSize))) return;
             OnPropertyChanged(nameof(DisplayGlyphSize));
             OnPropertyChanged(nameof(MarkerSize));
+            SyncMarker();
         }
     }
 
@@ -85,6 +87,9 @@ public sealed class PilotItem : ObservableObject
     }
 
     public IvaoPilot Pilot => _pilot;
+
+    /// <summary>What the map paints for this aircraft; see <see cref="AircraftMarker"/>.</summary>
+    public AircraftMarker Marker { get; } = new();
 
     public GeoCoordinate? MapPosition => _motion.Position;
 
@@ -212,6 +217,7 @@ public sealed class PilotItem : ObservableObject
             if (SetProperty(ref _markerColor, value ?? string.Empty))
             {
                 OnPropertyChanged(nameof(HasMarkerColor));
+                SyncMarker();
             }
         }
     }
@@ -226,7 +232,13 @@ public sealed class PilotItem : ObservableObject
     public string IconColor
     {
         get => _iconColor;
-        set => SetProperty(ref _iconColor, value ?? AircraftMarkerStyles.LightIcon);
+        set
+        {
+            if (SetProperty(ref _iconColor, value ?? AircraftMarkerStyles.LightIcon))
+            {
+                SyncMarker();
+            }
+        }
     }
 
     public bool HasFlightPlan => Plan is not null;
@@ -471,30 +483,28 @@ public sealed class PilotItem : ObservableObject
 
     public object? Icon => _icon;
 
-    public double X
-    {
-        get => _x;
-        private set => SetProperty(ref _x, value);
-    }
+    /// <summary>
+    /// Left edge of the pin's box on the map, as of the last hit test or motion
+    /// update. Nothing binds this: the renderer places the pin from
+    /// <see cref="Marker"/>, and the pointer logic reads it.
+    /// </summary>
+    public double X => _x;
 
-    public double Y
-    {
-        get => _y;
-        private set => SetProperty(ref _y, value);
-    }
+    /// <summary>Top edge of the pin's box; see <see cref="X"/>.</summary>
+    public double Y => _y;
 
-    public bool IsVisible
-    {
-        get => _isVisible;
-        private set => SetProperty(ref _isVisible, value);
-    }
+    public bool IsVisible => _isVisible;
 
     public bool IsSelected
     {
         get => _isSelected;
         set
         {
-            if (SetProperty(ref _isSelected, value)) OnPropertyChanged(nameof(DisplayGlyphSize));
+            if (SetProperty(ref _isSelected, value))
+            {
+                OnPropertyChanged(nameof(DisplayGlyphSize));
+                SyncMarker();
+            }
         }
     }
 
@@ -508,12 +518,16 @@ public sealed class PilotItem : ObservableObject
         get => _isHovered;
         set
         {
-            if (SetProperty(ref _isHovered, value)) OnPropertyChanged(nameof(DisplayGlyphSize));
+            if (SetProperty(ref _isHovered, value))
+            {
+                OnPropertyChanged(nameof(DisplayGlyphSize));
+                SyncMarker();
+            }
         }
     }
 
     /// <summary>
-    /// The native tooltip of the pin. The heading is left out on purpose: the
+    /// The tooltip of the pin. The heading is left out on purpose: the
     /// artwork already points the way, and the row is kept to what the traffic
     /// list does not print.
     /// </summary>
@@ -565,9 +579,9 @@ public sealed class PilotItem : ObservableObject
 
     public void SetScreenPosition(double x, double y, bool visible)
     {
-        X = x;
-        Y = y;
-        IsVisible = visible;
+        _x = x;
+        _y = y;
+        _isVisible = visible;
     }
 
     /// <summary>
@@ -636,7 +650,27 @@ public sealed class PilotItem : ObservableObject
             _pilot.SoftwareText
         }).ToLowerInvariant();
 
+        SyncMarker();
         OnPropertyChanged(string.Empty);
+    }
+
+    /// <summary>Copies everything but the position to the object the renderer reads.</summary>
+    private void SyncMarker()
+    {
+        var marker = Marker;
+        marker.Glyph = _iconGlyph ?? Glyph;
+        marker.Heading = HeadingDegrees;
+        marker.Size = DisplayGlyphSize;
+        marker.BoxSize = MarkerSize;
+        marker.IsOnGround = IsOnGround;
+        marker.Callsign = Callsign;
+
+        var color = HasMarkerColor ? _markerColor : _iconColor;
+        if (!ReferenceEquals(color, _paintedColor))
+        {
+            marker.Color = WorldMap.ToArgb(color);
+            _paintedColor = color;
+        }
     }
 
     /// <summary>

@@ -177,6 +177,27 @@ public sealed class NavigraphRouteResolver
 
     public IReadOnlyList<RouteWaypoint> Resolve(string? route, GeoCoordinate? departure = null)
     {
+        // The selected flight asks again every time its position moves on screen,
+        // always with the same filing.
+        if (_lastResolved is { } last &&
+            string.Equals(last.Route, route, StringComparison.Ordinal) &&
+            last.Departure == departure)
+        {
+            return last.Waypoints;
+        }
+
+        var waypoints = ResolveRoute(route, departure);
+        _lastResolved = new ResolvedRoute(route, departure, waypoints);
+        return waypoints;
+    }
+
+    private sealed record ResolvedRoute(
+        string? Route, GeoCoordinate? Departure, IReadOnlyList<RouteWaypoint> Waypoints);
+
+    private ResolvedRoute? _lastResolved;
+
+    private IReadOnlyList<RouteWaypoint> ResolveRoute(string? route, GeoCoordinate? departure)
+    {
         if (string.IsNullOrWhiteSpace(route))
         {
             return [];

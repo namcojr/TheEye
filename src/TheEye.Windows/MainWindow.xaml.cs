@@ -15,12 +15,16 @@ namespace TheEye.Windows;
 public partial class MainWindow : Window
 {
     private readonly MapWheelZoom _mapWheelZoom = new();
+    private readonly TheEye.Rendering.BackdropMapRenderer _mapRenderer = new();
     private readonly DispatcherTimer _aircraftTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
 
     public MainWindow()
     {
-        TheEye.Rendering.AtcGlyphRenderer.Register();
+        TheEye.Rendering.MapRenderers.Register();
         InitializeComponent();
+
+        // SKElement rasterises on the CPU, which is where the backdrop pays off.
+        MapControl.SetMapRenderer(_mapRenderer);
         StateChanged += (_, _) => UpdateMaximizeButton();
         ThemeService.ThemeChanged += OnThemeChanged;
         _aircraftTimer.Tick += OnAircraftTick;
@@ -83,12 +87,16 @@ public partial class MainWindow : Window
         _aircraftTimer.Stop();
         _aircraftTimer.Tick -= OnAircraftTick;
         ThemeService.ThemeChanged -= OnThemeChanged;
+        _mapRenderer.Dispose();
         base.OnClosed(e);
     }
 
     private void OnAircraftTick(object? sender, EventArgs e)
     {
-        if (WindowState != WindowState.Minimized) ViewModel?.Map.AdvanceAircraft();
+        if (WindowState != WindowState.Minimized && ViewModel is { IsMapView: true } viewModel)
+        {
+            viewModel.Map.AdvanceAircraft();
+        }
     }
 
     private void OnThemeChanged(object? sender, EventArgs e)
@@ -146,63 +154,34 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnPilotMarkerEnter(object sender, System.Windows.Input.MouseEventArgs e)
-    {
-        if (sender is Button { DataContext: PilotItem pilot })
-        {
-            ViewModel?.Map.SetHoveredPilot(pilot);
-        }
-    }
-
-    private void OnPilotMarkerLeave(object sender, System.Windows.Input.MouseEventArgs e) =>
-        ViewModel?.Map.SetHoveredPilot(null);
-
-    private void OnPilotMarkerClick(object sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel || sender is not Button { DataContext: PilotItem pilot })
-        {
-            return;
-        }
-
-        viewModel.Map.SetHoveredPilot(null);
-        if (ReferenceEquals(viewModel.SelectedPilot, pilot))
-        {
-            // Clicking the marker that is already selected should still bring the
-            // flight back into view after the map has been panned away, unless the
-            // user switched map-click centring off.
-            if (viewModel.Map is { CenterOnMapClick: true } map)
-            {
-                map.CenterOnPilot(pilot);
-            }
-
-            return;
-        }
-
-        // A marker click selects like the traffic list, but only centres the map
-        // while the option in Settings > Map behaviour is enabled.
-        viewModel.SelectPilotFromMap(pilot);
-    }
-
     private void OnMapMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
     {
+        if (ViewModel is not { } viewModel)
+        {
+            return;
+        }
+
         var point = e.GetPosition(MapControl);
-        ViewModel?.Map.SetHoveredAtc(e.LeftButton == System.Windows.Input.MouseButtonState.Pressed
+        viewModel.Map.SetHoveredAtc(e.LeftButton == System.Windows.Input.MouseButtonState.Pressed
             ? null : new ScreenPosition(point.X, point.Y));
+        MapControl.Cursor = viewModel.Map.IsPointerOverAircraft ? System.Windows.Input.Cursors.Hand : null;
     }
 
-    private void OnMapMouseLeave(object sender, System.Windows.Input.MouseEventArgs e) =>
+    private void OnMapMouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+    {
         ViewModel?.Map.SetHoveredAtc(null);
+        MapControl.Cursor = null;
+    }
 
     private void OnMapTapped(object sender, MapEventArgs e)
     {
-        ViewModel?.Map.SelectAt(e.WorldPosition, e.ScreenPosition);
+        ViewModel?.Map.TapAt(e.WorldPosition, e.ScreenPosition);
     }
 
     /// <summary>
-    /// The aircraft marker buttons and the map overlays sit above the Mapsui
-    /// control, so a wheel turned over them never reaches it. Forwarding the
-    /// wheel from the map host keeps zooming while the pointer rests on a
-    /// marker, a station badge or a zoom button.
+    /// The map overlays sit above the Mapsui control, so a wheel turned over them
+    /// never reaches it. Forwarding the wheel from the map host keeps zooming
+    /// while the pointer rests on a station badge or a zoom button.
     /// </summary>
     private void OnMapWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
     {

@@ -38,7 +38,7 @@ public sealed record ThemePalette(
 
     /// <summary>The palette the offline world map is drawn with.</summary>
     public MapPalette ToMapPalette() =>
-        new(MapWater, MapLand, MapBorder, MapLabel, Accent, IsDark);
+        new(MapWater, MapLand, MapBorder, MapLabel, Accent, IsDark, Text, Shadow);
 
     private static double Luminance(string hex)
     {

@@ -132,12 +132,12 @@ public sealed class HoverRouteTests
         model.UpdateTraffic(Snapshot([pilot]));
         model.SelectPilot(model.Pilots[0], center: false);
         Assert.Empty(Layer(model, IvaoMapLayers.FlightPlanRoutesLayerName).Features);
-        var selectedTrail = Layer(model, IvaoMapLayers.RouteLayerName);
+        var selectedTrail = Layer(model, IvaoMapLayers.RouteLayerName).Features;
 
         model.SetSelectionFlightPlan(new SessionFlightPlanResult(
             new IvaoFlightPlan { SessionId = pilot.Id, Route = "FIXA DCT FIXB DCT FIXC" }, null));
 
-        Assert.NotSame(selectedTrail, Layer(model, IvaoMapLayers.RouteLayerName));
+        Assert.NotSame(selectedTrail, Layer(model, IvaoMapLayers.RouteLayerName).Features);
         AssertRoute();
         model.UpdateTraffic(Snapshot([Summary(longitude: 5.75)]));
         AssertRoute();
@@ -281,11 +281,11 @@ public sealed class HoverRouteTests
         var clock = new Clock();
         using var model = CreateModel(clock);
         model.SetHoveredPilot(model.Pilots[0]);
-        var initial = Hover(model);
+        var initial = Hover(model).Features;
         model.UpdateTraffic(Snapshot([Pilot(1, longitude: 5)]));
         clock.Advance();
         model.AdvanceAircraft();
-        Assert.NotSame(initial, Hover(model));
+        Assert.NotSame(initial, Hover(model).Features);
         var updated = Hover(model).Features.First().Extent!;
         var position = WorldMap.Project(new GeoCoordinate(52.5, 5));
         // The plan folds each leg into one extent, so the projected coordinate can

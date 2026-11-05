@@ -21,18 +21,19 @@ namespace TheEye.Desktop;
 /// <summary>
 /// The Avalonia shell around the shared <see cref="MainViewModel"/>. The window
 /// draws its own chrome, so the caption row moves the window by hand; the map is
-/// a Mapsui control with the aircraft pins layered above it, exactly like the
-/// Windows shell, and the wheel is forwarded from the host so zooming keeps
-/// working while the pointer rests on a pin or an overlay.
+/// a Mapsui control that draws the aircraft itself, exactly like the Windows
+/// shell, and the wheel is forwarded from the host so zooming keeps working
+/// while the pointer rests on an overlay.
 /// </summary>
 public partial class MainWindow : Window
 {
     private readonly MapWheelZoom _mapWheelZoom = new();
     private readonly DispatcherTimer _aircraftTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
+    private static readonly Cursor HandCursor = new(StandardCursorType.Hand);
 
     public MainWindow()
     {
-        TheEye.Rendering.AtcGlyphRenderer.Register();
+        TheEye.Rendering.MapRenderers.Register();
         InitializeComponent();
         MapHost.AddHandler(PointerWheelChangedEvent, OnMapWheel, RoutingStrategies.Tunnel);
         _aircraftTimer.Tick += OnAircraftTick;
@@ -96,7 +97,10 @@ public partial class MainWindow : Window
 
     private void OnAircraftTick(object? sender, EventArgs e)
     {
-        if (WindowState != WindowState.Minimized) ViewModel?.Map.AdvanceAircraft();
+        if (WindowState != WindowState.Minimized && ViewModel is { IsMapView: true } viewModel)
+        {
+            viewModel.Map.AdvanceAircraft();
+        }
     }
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
@@ -231,63 +235,35 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnPilotMarkerEnter(object? sender, PointerEventArgs e)
-    {
-        if (sender is Button { DataContext: PilotItem pilot })
-        {
-            ViewModel?.Map.SetHoveredPilot(pilot);
-        }
-    }
-
-    private void OnPilotMarkerLeave(object? sender, PointerEventArgs e) =>
-        ViewModel?.Map.SetHoveredPilot(null);
-
-    private void OnPilotMarkerClick(object? sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } viewModel || sender is not Button { DataContext: PilotItem pilot })
-        {
-            return;
-        }
-
-        viewModel.Map.SetHoveredPilot(null);
-        if (ReferenceEquals(viewModel.SelectedPilot, pilot))
-        {
-            // Clicking the marker that is already selected should still bring the
-            // flight back into view after the map has been panned away, unless the
-            // user switched map-click centring off.
-            if (viewModel.Map is { CenterOnMapClick: true } map)
-            {
-                map.CenterOnPilot(pilot);
-            }
-
-            return;
-        }
-
-        // A marker click selects like the traffic list, but only centres the map
-        // while the option in Settings > Map behaviour is enabled.
-        viewModel.SelectPilotFromMap(pilot);
-    }
-
     private void OnMapPointerMoved(object? sender, PointerEventArgs e)
     {
+        if (ViewModel is not { } viewModel)
+        {
+            return;
+        }
+
         var point = e.GetCurrentPoint(MapView);
-        ViewModel?.Map.SetHoveredAtc(point.Properties.IsLeftButtonPressed
+        viewModel.Map.SetHoveredAtc(point.Properties.IsLeftButtonPressed
             ? null : new ScreenPosition(point.Position.X, point.Position.Y));
+        MapView.Cursor = viewModel.Map.IsPointerOverAircraft ? HandCursor : Cursor.Default;
     }
 
-    private void OnMapPointerExited(object? sender, PointerEventArgs e) =>
+    private void OnMapPointerExited(object? sender, PointerEventArgs e)
+    {
         ViewModel?.Map.SetHoveredAtc(null);
+        MapView.Cursor = Cursor.Default;
+    }
 
     private void OnMapTapped(object? sender, MapEventArgs e)
     {
-        ViewModel?.Map.SelectAt(e.WorldPosition, e.ScreenPosition);
+        ViewModel?.Map.TapAt(e.WorldPosition, e.ScreenPosition);
     }
 
     /// <summary>
-    /// The aircraft pins and the map overlays sit above the Mapsui control, so a
-    /// wheel turned over them never reaches it. Handle the tunnelling event on
-    /// the host so the map and overlays share one accumulator and Mapsui does
-    /// not also process the same wheel event.
+    /// The map overlays sit above the Mapsui control, so a wheel turned over them
+    /// never reaches it. Handle the tunnelling event on the host so the map and
+    /// overlays share one accumulator and Mapsui does not also process the same
+    /// wheel event.
     /// </summary>
     private void OnMapWheel(object? sender, PointerWheelEventArgs e)
     {

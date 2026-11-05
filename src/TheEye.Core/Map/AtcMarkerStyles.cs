@@ -188,6 +188,23 @@ public static class AtcMarkerStyles
     private static readonly ConcurrentDictionary<string, Image> Images = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// What a station resolves to at any zoom. The renderer asks on every frame, so
+    /// the callsign parsing and the inline SVG are worked out once per station.
+    /// </summary>
+    private sealed record ResolvedMarker(
+        AtcMarkerShape Shape,
+        string Fill,
+        double Diameter,
+        int FillAlpha,
+        bool Dashed,
+        string SvgSource);
+
+    /// <summary>Stations come and go, so the table is emptied rather than left to grow.</summary>
+    private const int ResolvedMarkerLimit = 8192;
+
+    private static readonly ConcurrentDictionary<(string? Facility, string? Callsign), ResolvedMarker> Resolved = new();
+
+    /// <summary>
     /// Resolves the glyph for a station. The facility reported by the API is
     /// preferred; when it is missing or generic the callsign suffix
     /// (<c>EDDB_GND</c>) is used instead. <paramref name="zoom"/> is the
@@ -195,17 +212,34 @@ public static class AtcMarkerStyles
     /// </summary>
     public static AtcMarkerStyle For(string? facility, string? callsign, double zoom = 1)
     {
-        var (shape, fill, diameter) = ResolveGlyph(facility, callsign);
-        var family = FamilyOf(ResolveToken(facility, callsign));
-        var alpha = FillAlpha(facility, callsign);
-        var dashed = family == AtcMarkerFamily.Observer;
+        var key = (facility, callsign);
+        if (!Resolved.TryGetValue(key, out var marker))
+        {
+            if (Resolved.Count >= ResolvedMarkerLimit)
+            {
+                Resolved.Clear();
+            }
+
+            marker = Resolve(facility, callsign);
+            Resolved[key] = marker;
+        }
 
         // The glyph fills GlyphBox units of the artwork, so this draws it at
         // exactly `diameter` screen pixels, contour included, at the reference zoom.
-        var scale = diameter / GlyphBox * NormalizeZoom(zoom, shape);
+        var scale = marker.Diameter / GlyphBox * NormalizeZoom(zoom, marker.Shape);
+        return new AtcMarkerStyle(
+            marker.Shape, marker.Fill, scale, marker.SvgSource, marker.FillAlpha, marker.Dashed);
+    }
+
+    private static ResolvedMarker Resolve(string? facility, string? callsign)
+    {
+        var (shape, fill, diameter) = ResolveGlyph(facility, callsign);
+        var alpha = FillAlpha(facility, callsign);
+        var dashed = FamilyOf(ResolveToken(facility, callsign)) == AtcMarkerFamily.Observer;
+
         // Keep the SVG source stable as the map zooms, so image caching remains
         // bounded; the symbol scale carries the continuous zoom change.
-        return new AtcMarkerStyle(shape, fill, scale, CreateSvg(shape, fill, 1, alpha, dashed), alpha, dashed);
+        return new ResolvedMarker(shape, fill, diameter, alpha, dashed, CreateSvg(shape, fill, 1, alpha, dashed));
     }
 
     /// <summary>

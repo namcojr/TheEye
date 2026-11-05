@@ -19,7 +19,11 @@
   <ItemGroup>
     <ProjectReference Include="..\TheEye.Core\TheEye.Core.csproj" />
     <ProjectReference Include="..\TheEye.Presentation\TheEye.Presentation.csproj" />
+    <Compile Include="..\Shared\AircraftLayerRenderer.cs" Link="Rendering\AircraftLayerRenderer.cs" />
     <Compile Include="..\Shared\AtcGlyphRenderer.cs" Link="Rendering\AtcGlyphRenderer.cs" />
+    <Compile Include="..\Shared\BackdropMapRenderer.cs" Link="Rendering\BackdropMapRenderer.cs" />
+    <Compile Include="..\Shared\CachedPolygonRenderer.cs" Link="Rendering\CachedPolygonRenderer.cs" />
+    <Compile Include="..\Shared\MapRenderers.cs" Link="Rendering\MapRenderers.cs" />
     <Compile Include="..\Shared\RunwayDiagramRenderer.cs" Link="Rendering\RunwayDiagramRenderer.cs" />
     <PackageReference Include="Mapsui.Wpf" Version="5.1.0" />
   </ItemGroup>

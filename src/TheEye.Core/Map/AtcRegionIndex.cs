@@ -42,7 +42,7 @@ public sealed class AtcRegionIndex
         var matches = new List<IvaoAtc>();
         foreach (var (atc, geometry) in _regions)
         {
-            if (geometry.Contains(ntsPoint))
+            if (Covers(geometry, point) && geometry.Contains(ntsPoint))
             {
                 matches.Add(atc);
             }
@@ -56,7 +56,7 @@ public sealed class AtcRegionIndex
         var ntsPoint = new Point(point.X, point.Y);
         foreach (var (atc, geometry) in _regions)
         {
-            if (geometry.Contains(ntsPoint))
+            if (Covers(geometry, point) && geometry.Contains(ntsPoint))
             {
                 return atc;
             }
@@ -64,6 +64,13 @@ public sealed class AtcRegionIndex
 
         return null;
     }
+
+    /// <summary>
+    /// The bounding box answers for almost every sector, and the pointer asks on
+    /// every move, so the exact test only runs for the few that are left.
+    /// </summary>
+    private static bool Covers(Geometry geometry, MPoint point) =>
+        geometry.EnvelopeInternal.Contains(point.X, point.Y);
 
     public IvaoAtc? FindAt(GeoCoordinate coordinate)
     {

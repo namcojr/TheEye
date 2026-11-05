@@ -9,14 +9,15 @@ using TheEye.Core.Reference;
 using TheEye.Core.Services;
 using TheEye.Core.Settings;
 using TheEye.Presentation.Services;
+using TheEye.Presentation.Threading;
 
 namespace TheEye.Presentation.ViewModels;
 
 /// <summary>
 /// Owns the Mapsui map, the theme palettes handed to it, and the live pilot and
-/// ATC collections. Pilot markers are UI elements (an ItemsControl layered over
-/// the map) so they get the full themed marker styling and a native tooltip,
-/// while ATC sectors are rendered natively by Mapsui.
+/// ATC collections. Everything on the map, aircraft included, is drawn by Mapsui
+/// in one pass, so nothing can land on a different frame than the map under it;
+/// the pointer is matched against the same positions here.
 /// </summary>
 public sealed class MapViewModel : ObservableObject, IDisposable
 {
@@ -28,6 +29,27 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     /// zoom all the way down to a single apron.
     /// </summary>
     private const double MinimumFrameSize = 40000;
+
+    /// <summary>
+    /// How far a visible aircraft has to have moved, in pixels, before the map is
+    /// redrawn for it. Airliners crawl at the zooms that show a continent, so most
+    /// of the aircraft timer's ticks would otherwise repaint the same picture.
+    /// </summary>
+    private const double MotionThreshold = 0.25;
+
+    /// <summary>The drop shadow of a pin when the palette names none.</summary>
+    private const string DefaultAircraftShadow = "#66000000";
+
+    /// <summary>The shortest and the longest wait before looking at the aircraft again.</summary>
+    private static readonly TimeSpan ShortestMotionWait = TimeSpan.FromMilliseconds(30);
+
+    private static readonly TimeSpan LongestMotionWait = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// How long after a refresh motion is followed at the full rate: the aircraft
+    /// ease towards their new reports, which the speed they fly at says nothing of.
+    /// </summary>
+    private static readonly TimeSpan CorrectionWindow = AircraftMotion.CorrectionDuration + TimeSpan.FromMilliseconds(100);
 
     private readonly IAircraftIconCache _icons;
     private readonly IImageCache _images;
@@ -44,16 +66,24 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private Map? _map;
     private MapPalette? _palette;
     private AtcRegionIndex? _regionIndex;
-    private ILayer? _atcRegionsLayer;
-    private ILayer? _atcLabelsLayer;
-    private ILayer? _atcStationsLayer;
-    private ILayer? _routeLayer;
-    private ILayer? _liveTrailLayer;
-    private ILayer? _flightPlanRoutesLayer;
-    private ILayer? _hoverRouteLayer;
+    private MemoryLayer? _atcRegionsLayer;
+    private MemoryLayer? _atcLabelsLayer;
+    private MemoryLayer? _atcStationsLayer;
+    private MemoryLayer? _routeLayer;
+    private MemoryLayer? _liveTrailLayer;
+    private MemoryLayer? _flightPlanRoutesLayer;
+    private MemoryLayer? _hoverRouteLayer;
     private PilotItem? _hoveredPilot;
-    private ILayer? _selectedAtcLayer;
-    private ILayer? _airportLayer;
+    private MemoryLayer? _selectedAtcLayer;
+    private MemoryLayer? _airportLayer;
+    private AircraftLayer? _aircraftLayer;
+    private bool _aircraftListChanged;
+    private double[] _motionBuffer = [];
+    private long _nextMotionCheck;
+    private long _lastMotion;
+    private long _correctingUntil;
+    private bool _isPointerOverAircraft;
+    private int? _atcSignature;
     private PilotItem? _selectedPilot;
     private AtcItem? _selectedAtc;
     private AirportRecord? _selectedAirport;
@@ -71,9 +101,18 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private bool _selectionTracksPending;
     private IReadOnlyList<IvaoMapLayers.AtcStationPlacement> _stationPlacements = [];
     private AtcStationHitTarget[] _stationTargets = [];
+    private IReadOnlyList<AirportRecord> _trafficAirports = [];
     private readonly List<(AirportRecord Airport, double X, double Y)> _trafficAirportTargets = [];
-    private double _stationZoom = 1;
     private string _airportsKey = string.Empty;
+
+    /// <summary>
+    /// True when the viewport moved since the screen positions the pointer logic
+    /// uses were worked out. The map can move on every frame and the pointer only
+    /// needs them when it asks, so they wait for that. Set from any thread.
+    /// </summary>
+    private volatile bool _screenPositionsStale;
+
+    private int _pointerResetQueued;
     private bool _disposed;
     private int _aircraftGlyphSize = TheEyeSettings.DefaultAircraftGlyphSize;
     private string _mapStyle = MapBasemap.Offline;
@@ -87,8 +126,25 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             if (!SetProperty(ref _aircraftGlyphSize, size)) return;
             foreach (var pilot in Pilots) pilot.GlyphSize = size;
             UpdatePilotPositions();
+            Map?.RefreshGraphics();
         }
     }
+
+    /// <summary>The interface font scale, which the callsigns on the map follow.</summary>
+    public double AircraftLabelScale
+    {
+        get => _aircraftLabelScale;
+        set
+        {
+            if (SetProperty(ref _aircraftLabelScale, value) && _aircraftLayer is { } layer)
+            {
+                layer.LabelScale = value;
+                Map?.RefreshGraphics();
+            }
+        }
+    }
+
+    private double _aircraftLabelScale = 1;
 
     /// <summary>
     /// The basemap the map is drawn with. <see cref="MapBasemap.Offline"/> paints
@@ -117,6 +173,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             UpdateAircraftIconColors();
             _airportsKey = string.Empty;
             UpdateAirports();
+            Map?.RefreshGraphics();
         }
     }
 
@@ -126,9 +183,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         : AircraftMarkerStyles.LightIcon;
 
     /// <summary>
-    /// Repaints every pin after the basemap or the theme changed. The pins are
-    /// UI elements, so the colour has to be handed to each of them; new traffic
-    /// picks it up when it is created.
+    /// Repaints every pin after the basemap or the theme changed. New traffic picks
+    /// the colour up when it is created.
     /// </summary>
     private void UpdateAircraftIconColors()
     {
@@ -161,6 +217,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         _images = images.SessionImages;
         Pilots = [];
         Atc = [];
+        Pilots.CollectionChanged += (_, _) => _aircraftListChanged = true;
     }
 
     public event EventHandler? SelectionChanged;
@@ -207,6 +264,16 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
     public bool HasHoveredAtc => HoveredAtc is not null;
 
+    /// <summary>
+    /// True while the pointer rests on an aircraft. The pins are painted rather
+    /// than being controls, so the shells read this to show the hand cursor.
+    /// </summary>
+    public bool IsPointerOverAircraft
+    {
+        get => _isPointerOverAircraft;
+        private set => SetProperty(ref _isPointerOverAircraft, value);
+    }
+
     public double AtcHoverX
     {
         get => _atcHoverX;
@@ -250,9 +317,16 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         get => _showPilots;
         set
         {
-            if (SetProperty(ref _showPilots, value) && !value)
+            if (!SetProperty(ref _showPilots, value))
+            {
+                return;
+            }
+
+            SetLayerEnabled(_aircraftLayer, value);
+            if (!value)
             {
                 SetHoveredPilot(null);
+                IsPointerOverAircraft = false;
             }
         }
     }
@@ -303,12 +377,11 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     {
         _palette = palette;
         var map = WorldMap.Create(palette, center, resolution);
-        _stationZoom = AtcMarkerStyles.ZoomScale(map.Navigator.Viewport.Resolution);
 
         _atcRegionsLayer = IvaoMapLayers.CreateAtcRegions([], palette);
         _atcLabelsLayer = IvaoMapLayers.CreateAtcLabels([], palette);
         _atcStationsLayer = CreateStationLayer([]);
-        _routeLayer = new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };
+        _routeLayer = EmptyRouteLayer();
         _liveTrailLayer = IvaoMapLayers.CreateLiveTrail(null, null);
         _flightPlanRoutesLayer = IvaoMapLayers.CreateFlightPlanRoutes([], palette, navData: null);
         _hoverRouteLayer = IvaoMapLayers.CreateHoverRoute(null, palette);
@@ -327,6 +400,12 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         map.Layers.Add(_hoverRouteLayer);
         map.Layers.Add(_selectedAtcLayer);
 
+        // Last, so the aircraft stay above everything else on the map.
+        _aircraftLayer = new AircraftLayer { LabelScale = _aircraftLabelScale };
+        ApplyAircraftColors(palette);
+        map.Layers.Add(_aircraftLayer);
+        SetLayerEnabled(_aircraftLayer, _showPilots);
+
         SetLayerEnabled(_atcRegionsLayer, _showAtc);
         SetLayerEnabled(_atcLabelsLayer, _showAtc);
         SetLayerEnabled(_atcStationsLayer, _showAtc);
@@ -338,7 +417,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         map.Navigator.ViewportChanged += OnViewportChanged;
         Map = map;
         UpdateAircraftIconColors();
-        UpdateStationTargets();
+        _screenPositionsStale = true;
         UpdateAirports();
         map.Refresh();
     }
@@ -356,8 +435,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         ReplaceLayer(ref _atcLabelsLayer, IvaoMapLayers.CreateAtcLabels(Atc.Select(item => item.Atc), palette));
         ReplaceLayer(ref _atcStationsLayer, CreateStationLayer(Atc.Select(item => item.Atc)));
         ReplaceLayer(ref _selectedAtcLayer, SelectedAtc is { } selected
-            ? IvaoMapLayers.CreateSelectedAtc(selected.Atc, palette, _stationZoom)
-            : IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), palette, _stationZoom));
+            ? IvaoMapLayers.CreateSelectedAtc(selected.Atc, palette, StationZoom)
+            : IvaoMapLayers.CreateSelectedAtc(EmptyAtc(), palette, StationZoom));
+        ApplyAircraftColors(palette);
 
         // Repaints the route with the new palette colours; the recorded track of
         // the selection is kept, so a theme switch does not drop the trail.
@@ -369,10 +449,6 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         // rebuilt even when the viewport is looking at the same airports.
         _airportsKey = string.Empty;
         UpdateAirports();
-
-        SetLayerEnabled(_atcRegionsLayer, _showAtc);
-        SetLayerEnabled(_atcLabelsLayer, _showAtc);
-        SetLayerEnabled(_atcStationsLayer, _showAtc);
 
         // The offline map is painted with the palette, so a theme switch can turn
         // a dark map light and has to repaint the pins with it.
@@ -410,14 +486,19 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
         var atc = snapshot.Atc;
         _atc = atc;
-        ReplaceLayer(ref _atcRegionsLayer, IvaoMapLayers.CreateAtcRegions(atc, _palette));
-        ReplaceLayer(ref _atcLabelsLayer, IvaoMapLayers.CreateAtcLabels(atc, _palette));
-        ReplaceLayer(ref _atcStationsLayer, CreateStationLayer(atc));
-        SetLayerEnabled(_atcRegionsLayer, _showAtc);
-        SetLayerEnabled(_atcLabelsLayer, _showAtc);
-        SetLayerEnabled(_atcStationsLayer, _showAtc);
 
-        _regionIndex = AtcRegionIndex.Build(atc);
+        // Controllers stay on for hours, so most refreshes leave the sectors as
+        // they were; rebuilding them would also throw away their cached paths.
+        var signature = AtcSignature(atc, _supervisorUserIds);
+        if (signature != _atcSignature)
+        {
+            _atcSignature = signature;
+            ReplaceLayer(ref _atcRegionsLayer, IvaoMapLayers.CreateAtcRegions(atc, _palette));
+            ReplaceLayer(ref _atcLabelsLayer, IvaoMapLayers.CreateAtcLabels(atc, _palette));
+            ReplaceLayer(ref _atcStationsLayer, CreateStationLayer(atc));
+            _regionIndex = AtcRegionIndex.Build(atc);
+        }
+
         if (HoveredAtc is { } hovered && !_atcById.ContainsKey(hovered.Id))
         {
             SetHoveredAtc(null);
@@ -426,21 +507,66 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         RebuildRouteLayer();
         RebuildFlightPlanRoutesLayer();
         RebuildHoverRouteLayer();
-        _airportsKey = string.Empty;
         UpdateAirports();
-        Map.Refresh();
+
+        // The new reports ease in over a second, so the motion clock starts over.
+        var now = _clock.GetTimestamp();
+        _lastMotion = now;
+        _nextMotionCheck = now;
+        _correctingUntil = now + (long)(CorrectionWindow.TotalSeconds * _clock.TimestampFrequency);
+        Map.RefreshGraphics();
     }
 
+    /// <summary>A fingerprint of what the ATC layers are built from.</summary>
+    private static int AtcSignature(IReadOnlyList<IvaoAtc> atc, IReadOnlySet<long> supervisors)
+    {
+        var hash = new HashCode();
+        foreach (var station in atc)
+        {
+            hash.Add(station.Id);
+            hash.Add(station.Callsign);
+            hash.Add(station.Facility);
+            hash.Add(station.FrequencyText);
+            hash.Add(station.Position);
+            hash.Add(supervisors.Contains(station.UserId));
+            foreach (var point in station.PolygonPoints)
+            {
+                hash.Add(point);
+            }
+        }
+
+        return hash.ToHashCode();
+    }
+
+    /// <summary>
+    /// Reports where the pointer is, or null when it left the map or started a
+    /// drag: everything under it reacts from here, the aircraft included, because
+    /// they are painted and receive no pointer events of their own.
+    /// </summary>
     public void SetHoveredAtc(ScreenPosition? position)
     {
         if (position is not { } screen || Map is not { } map)
         {
+            IsPointerOverAircraft = false;
+            SetHoveredPilot(null);
             HoveredAtc = null;
             MapTooltipText = null;
             return;
         }
 
         var viewport = map.Navigator.Viewport;
+        var marker = PilotMarkerAt(screen);
+        IsPointerOverAircraft = marker is not null;
+
+        // A selected aircraft draws its route anyway, so it takes the plain tooltip below.
+        if (marker is not null && !ReferenceEquals(marker, SelectedPilot))
+        {
+            HoveredAtc = null;
+            SetHoveredPilot(marker);
+            return;
+        }
+
+        SetHoveredPilot(null);
         if (HitTestPilot(screen) is { } pilot)
         {
             HoveredAtc = null;
@@ -499,8 +625,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // The pin under the pointer grows by two pixels; the one it left returns
-        // to its own size. Both markers redraw from their own property change.
+        // The pin under the pointer grows; the one it left returns to its own size.
         if (_hoveredPilot is { } previous)
         {
             previous.IsHovered = false;
@@ -524,7 +649,6 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         RebuildHoverRouteLayer();
-        Map?.Refresh();
     }
 
     public void SelectPilot(PilotItem? pilot) => SelectPilot(pilot, center: true);
@@ -612,7 +736,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         if (atc is not null)
         {
             atc.IsSelected = true;
-            ReplaceLayer(ref _selectedAtcLayer, IvaoMapLayers.CreateSelectedAtc(atc.Atc, _palette ?? DefaultPalette, _stationZoom));
+            ReplaceLayer(ref _selectedAtcLayer, IvaoMapLayers.CreateSelectedAtc(atc.Atc, _palette ?? DefaultPalette, StationZoom));
 
             // Selecting a station in the ATC list centres it too; a click on the
             // map only centres while the option is enabled.
@@ -689,7 +813,6 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         RebuildRouteLayer();
-        Map?.Refresh();
     }
 
     public void SetSelectionFlightPlan(SessionFlightPlanResult result)
@@ -703,7 +826,31 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         RebuildRouteLayer();
         RebuildFlightPlanRoutesLayer();
         RebuildHoverRouteLayer();
-        Map?.Refresh();
+    }
+
+    /// <summary>
+    /// A click or tap on the map. A hit on an aircraft selects it; a further one
+    /// brings the flight back into view, in case the map was panned away, unless
+    /// the user switched map-click centring off. Anything else goes to
+    /// <see cref="SelectAt"/>.
+    /// </summary>
+    public void TapAt(MPoint worldPosition, ScreenPosition screenPosition)
+    {
+        if (PilotMarkerAt(screenPosition) is not { } pilot)
+        {
+            SelectAt(worldPosition, screenPosition);
+            return;
+        }
+
+        SetHoveredPilot(null);
+        if (!ReferenceEquals(SelectedPilot, pilot))
+        {
+            SelectPilot(pilot, CenterOnMapClick);
+        }
+        else if (CenterOnMapClick)
+        {
+            CenterOnPilot(pilot);
+        }
     }
 
     /// <summary>
@@ -713,6 +860,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     /// </summary>
     public void SelectAt(MPoint worldPosition, ScreenPosition screenPosition)
     {
+        RefreshScreenPositions();
         if (HitTestPilot(screenPosition) is { } pilot)
         {
             if (ReferenceEquals(SelectedPilot, pilot) && HitTestAirport(screenPosition) is { } overlappingAirport)
@@ -754,6 +902,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
 
     private AirportRecord? HitTestAirport(ScreenPosition position)
     {
+        RefreshScreenPositions();
         AirportRecord? best = null;
         var bestDistanceSquared = 9d * 9d;
 
@@ -781,6 +930,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             return null;
         }
 
+        RefreshScreenPositions();
         PilotItem? best = null;
         var bestDistanceSquared = 22d * 22d;
 
@@ -805,12 +955,44 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// The aircraft whose pin covers a screen position, if any. The pins are drawn
+    /// in list order, so the last one that covers the position is the one on top.
+    /// </summary>
+    public PilotItem? PilotMarkerAt(ScreenPosition position)
+    {
+        if (!_showPilots)
+        {
+            return null;
+        }
+
+        RefreshScreenPositions();
+        for (var index = Pilots.Count - 1; index >= 0; index--)
+        {
+            var pilot = Pilots[index];
+            if (!pilot.IsVisible)
+            {
+                continue;
+            }
+
+            var size = pilot.MarkerSize;
+            if (position.X >= pilot.X && position.X <= pilot.X + size &&
+                position.Y >= pilot.Y && position.Y <= pilot.Y + size)
+            {
+                return pilot;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Returns the station badge drawn under a screen position, if any. A second
     /// click on the same airport steps on to the next stacked position, so the
     /// rings drawn on top of each other can all be reached.
     /// </summary>
     public AtcItem? HitTestStation(ScreenPosition position)
     {
+        RefreshScreenPositions();
         if (!_showAtc
             || AtcStationHitTest.Find(_stationTargets, position.X, position.Y, SelectedAtc?.Id) is not { } station)
         {
@@ -1004,25 +1186,157 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Moves the aircraft along their predicted paths. The shells call this from a
+    /// fast timer; the map is only redrawn once a visible aircraft has moved far
+    /// enough on screen to show it, and the next look at the aircraft waits for
+    /// about when that will be, so the rate follows what the zoom can show.
+    /// </summary>
     public void AdvanceAircraft()
     {
-        if (_disposed || !_showPilots) return;
-        UpdatePilotPositions();
-        var refresh = false;
+        if (_disposed || !_showPilots || Map is not { } map)
+        {
+            return;
+        }
+
+        var now = _clock.GetTimestamp();
+        if (now < _nextMotionCheck)
+        {
+            return;
+        }
+
+        var viewport = map.Navigator.Viewport;
+        var moved = MeasureMotion(viewport);
+        if (moved >= MotionThreshold)
+        {
+            ApplyMotion(viewport);
+            FollowMovedAircraft();
+            map.RefreshGraphics();
+        }
+
+        ScheduleMotionCheck(now, moved);
+    }
+
+    /// <summary>
+    /// Works out where every aircraft is now and returns how far, in pixels, the
+    /// one that moved most on screen has got. The selected and the hovered aircraft
+    /// count wherever they are, because their routes end at them. Nothing is
+    /// published yet: most of the time the answer is that nothing needs to be.
+    /// </summary>
+    private double MeasureMotion(Viewport viewport)
+    {
+        var count = Pilots.Count;
+        if (_motionBuffer.Length < count * 2)
+        {
+            _motionBuffer = new double[count * 2];
+        }
+
+        var resolution = viewport.Resolution;
+        var reachX = viewport.Width / 2 * resolution;
+        var reachY = viewport.Height / 2 * resolution;
+        var largest = 0d;
+        for (var index = 0; index < count; index++)
+        {
+            var item = Pilots[index];
+            var marker = item.Marker;
+            if (item.MapPosition is not { } position)
+            {
+                _motionBuffer[index * 2] = double.NaN;
+                if (marker.HasPosition)
+                {
+                    largest = double.PositiveInfinity;
+                }
+
+                continue;
+            }
+
+            var (x, y) = WorldMap.ProjectToWorld(position);
+            _motionBuffer[index * 2] = x;
+            _motionBuffer[index * 2 + 1] = y;
+            var followed = ReferenceEquals(item, _selectedPilot) || ReferenceEquals(item, _hoveredPilot);
+            if (followed || (Math.Abs(x - viewport.CenterX) <= reachX && Math.Abs(y - viewport.CenterY) <= reachY))
+            {
+                largest = Math.Max(largest, Math.Max(Math.Abs(x - marker.WorldX), Math.Abs(y - marker.WorldY)));
+            }
+        }
+
+        return largest / resolution;
+    }
+
+    /// <summary>Publishes the positions <see cref="MeasureMotion"/> worked out.</summary>
+    private void ApplyMotion(Viewport viewport)
+    {
+        PublishAircraftList();
+        for (var index = 0; index < Pilots.Count; index++)
+        {
+            var item = Pilots[index];
+            var x = _motionBuffer[index * 2];
+            item.Marker.HasPosition = !double.IsNaN(x);
+            if (item.Marker.HasPosition)
+            {
+                item.Marker.WorldX = x;
+                item.Marker.WorldY = _motionBuffer[index * 2 + 1];
+            }
+
+            PlacePin(item, viewport);
+        }
+    }
+
+    /// <summary>Keeps the lines that end at a moving aircraft attached to it.</summary>
+    private void FollowMovedAircraft()
+    {
         if (SelectedPilot?.MapPosition != _selectedRoutePosition)
         {
             RebuildLiveTrailLayer();
             RebuildFlightPlanRoutesLayer();
-            refresh = true;
         }
+
         if (_hoveredPilot is { } pilot && pilot.MapPosition != _hoverRoutePosition)
         {
             RebuildHoverRouteLayer();
-            refresh = true;
         }
-        if (refresh) Map?.Refresh();
     }
 
+    private void ScheduleMotionCheck(long now, double moved)
+    {
+        var frequency = (double)_clock.TimestampFrequency;
+        var elapsed = (now - _lastMotion) / frequency;
+        var speed = elapsed > 0 ? moved / elapsed : 0;
+        var remaining = moved >= MotionThreshold ? MotionThreshold : MotionThreshold - moved;
+        if (moved >= MotionThreshold)
+        {
+            _lastMotion = now;
+        }
+
+        var wait = now < _correctingUntil
+            ? ShortestMotionWait.TotalSeconds
+            : speed > 0 && double.IsFinite(speed)
+                ? Math.Clamp(remaining / speed, ShortestMotionWait.TotalSeconds, LongestMotionWait.TotalSeconds)
+                : LongestMotionWait.TotalSeconds;
+        _nextMotionCheck = now + (long)(wait * frequency);
+    }
+
+    /// <summary>Tells the map something on the aircraft changed without them moving.</summary>
+    public void RefreshAircraft() => Map?.RefreshGraphics();
+
+    private void PublishAircraftList()
+    {
+        if (!_aircraftListChanged || _aircraftLayer is not { } layer)
+        {
+            return;
+        }
+
+        _aircraftListChanged = false;
+        var markers = new AircraftMarker[Pilots.Count];
+        for (var index = 0; index < markers.Length; index++)
+        {
+            markers[index] = Pilots[index].Marker;
+        }
+
+        layer.Markers = markers;
+    }
+
+    /// <summary>Brings every aircraft up to the moment, whether it moved far or not.</summary>
     private void UpdatePilotPositions()
     {
         if (Map is not { } map)
@@ -1030,37 +1344,90 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             return;
         }
 
+        PublishAircraftList();
         var viewport = map.Navigator.Viewport;
-        var width = viewport.Width;
-        var height = viewport.Height;
-        if (width <= 0 || height <= 0)
+        foreach (var item in Pilots)
+        {
+            var marker = item.Marker;
+            if (item.MapPosition is { } position)
+            {
+                (marker.WorldX, marker.WorldY) = WorldMap.ProjectToWorld(position);
+                marker.HasPosition = true;
+            }
+            else
+            {
+                marker.HasPosition = false;
+            }
+
+            PlacePin(item, viewport);
+        }
+    }
+
+    /// <summary>Works out where the box of a pin sits on the current viewport.</summary>
+    private static void PlacePin(PilotItem item, Viewport viewport)
+    {
+        var marker = item.Marker;
+        if (!marker.HasPosition || viewport.Width <= 0 || viewport.Height <= 0)
+        {
+            item.SetScreenPosition(0, 0, false);
+            return;
+        }
+
+        var (x, y) = viewport.WorldToScreenXY(marker.WorldX, marker.WorldY);
+        var size = item.MarkerSize;
+        var visible = x >= -size && y >= -size && x <= viewport.Width + size && y <= viewport.Height + size;
+        item.SetScreenPosition(x - size / 2d, y - size / 2d, visible);
+    }
+
+    /// <summary>
+    /// Mapsui advances its animations on a worker thread, so during an animated
+    /// zoom this runs there, once per frame. All it does is note that the screen
+    /// positions are out of date: the renderer places everything from the viewport
+    /// of the frame it draws, and the pointer logic catches up when it next asks.
+    /// </summary>
+    private void OnViewportChanged(object? sender, ViewportChangedEventArgs e)
+    {
+        _screenPositionsStale = true;
+
+        // Whatever the pointer was resting on has just moved out from under it.
+        if ((_hoveredPilot is not null || _hoveredAtc is not null || _mapTooltipText is not null || _isPointerOverAircraft) &&
+            Interlocked.Exchange(ref _pointerResetQueued, 1) == 0)
+        {
+            UiThread.Post(ResetPointer);
+        }
+    }
+
+    private void ResetPointer()
+    {
+        Volatile.Write(ref _pointerResetQueued, 0);
+        if (!_disposed)
+        {
+            SetHoveredAtc(null);
+        }
+    }
+
+    /// <summary>Re-projects what the pointer is tested against, if the map has moved.</summary>
+    private void RefreshScreenPositions()
+    {
+        if (!_screenPositionsStale || Map is not { } map)
         {
             return;
         }
 
+        _screenPositionsStale = false;
+        var viewport = map.Navigator.Viewport;
         foreach (var item in Pilots)
         {
-            if (item.MapPosition is not { } position)
-            {
-                item.SetScreenPosition(0, 0, false);
-                continue;
-            }
-
-            var screen = viewport.WorldToScreen(WorldMap.Project(position));
-            var size = item.MarkerSize;
-            var visible = screen.X >= -size && screen.Y >= -size && screen.X <= width + size && screen.Y <= height + size;
-            item.SetScreenPosition(screen.X - size / 2d, screen.Y - size / 2d, visible);
+            PlacePin(item, viewport);
         }
+
+        UpdateStationTargets();
+        UpdateTrafficAirportTargets();
     }
 
-    private void OnViewportChanged(object? sender, ViewportChangedEventArgs e)
-    {
-        SetHoveredAtc(null);
-        UpdatePilotPositions();
-        UpdateStationTargets();
-        UpdateStationZoom();
-        UpdateAirports();
-    }
+    /// <summary>The scale the station badges are laid out with at the current zoom.</summary>
+    private double StationZoom =>
+        _map is { } map ? AtcMarkerStyles.ZoomScale(map.Navigator.Viewport.Resolution) : 1;
 
     /// <summary>
     /// Builds the station layer and keeps the placements used for hit testing in
@@ -1070,12 +1437,13 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     /// </summary>
     private MemoryLayer CreateStationLayer(IEnumerable<IvaoAtc> atc)
     {
-        _stationPlacements = IvaoMapLayers.CreateAtcStationPlacements(atc, _stationZoom);
-        UpdateStationTargets();
+        var zoom = StationZoom;
+        _stationPlacements = IvaoMapLayers.CreateAtcStationPlacements(atc, zoom);
+        _screenPositionsStale = true;
         return IvaoMapLayers.CreateAtcStations(
             _stationPlacements,
             _palette ?? DefaultPalette,
-            _stationZoom,
+            zoom,
             _supervisorUserIds);
     }
 
@@ -1117,26 +1485,6 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Keeps the scale used to build placements in sync. Glyphs and label offsets
-    /// resolve the current resolution at render time, without rebuilding layers.
-    /// </summary>
-    private void UpdateStationZoom()
-    {
-        if (Map is not { } map || _palette is null)
-        {
-            return;
-        }
-
-        var zoom = AtcMarkerStyles.ZoomScale(map.Navigator.Viewport.Resolution);
-        if (Math.Abs(zoom - _stationZoom) < 0.000001)
-        {
-            return;
-        }
-
-        _stationZoom = zoom;
-    }
-
-    /// <summary>
     /// Paints one marker and ICAO label per traffic airport. Runway detail and
     /// other airport labels are left to streamed basemaps.
     /// </summary>
@@ -1148,11 +1496,6 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         var viewport = map.Navigator.Viewport;
-        if (viewport.Width <= 0 || viewport.Height <= 0)
-        {
-            return;
-        }
-
         var trafficAirports = Pilots
             .SelectMany(pilot => new[]
             {
@@ -1164,7 +1507,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             .DistinctBy(airport => airport.Icao)
             .ToArray();
         IReadOnlyList<AirportRecord> visibleTrafficAirports = _showAirports ? trafficAirports : [];
-        UpdateTrafficAirportTargets(visibleTrafficAirports);
+        _trafficAirports = visibleTrafficAirports;
+        _screenPositionsStale = true;
         if (SelectedAirport is { } selectedAirport &&
             !visibleTrafficAirports.Any(airport => airport.Icao == selectedAirport.Icao))
         {
@@ -1180,10 +1524,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         _airportsKey = key;
         ReplaceLayer(ref _airportLayer, IvaoMapLayers.CreateAirports(
             [], _palette, viewport.Resolution, showRunways: false, trafficAirports: visibleTrafficAirports));
-        map.Refresh();
     }
 
-    private void UpdateTrafficAirportTargets(IReadOnlyList<AirportRecord> airports)
+    private void UpdateTrafficAirportTargets()
     {
         _trafficAirportTargets.Clear();
         if (Map is not { } map)
@@ -1192,7 +1535,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         var viewport = map.Navigator.Viewport;
-        foreach (var airport in airports)
+        foreach (var airport in _trafficAirports)
         {
             var screen = viewport.WorldToScreen(WorldMap.Project(airport.Position));
             _trafficAirportTargets.Add((airport, screen.X, screen.Y));
@@ -1244,58 +1587,41 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     /// </summary>
     private void RebuildRouteLayer()
     {
-        ILayer layer = SelectedPilot is { } pilot
+        var layer = SelectedPilot is { } pilot
             ? IvaoMapLayers.CreateRoute(
                 pilot.Pilot,
                 _palette ?? DefaultPalette,
                 _selectionTracks,
                 estimateWhenMissing: !_selectionTracksPending,
                 showAirportLabels: false)
-            : new MemoryLayer(IvaoMapLayers.RouteLayerName) { Features = [], Style = null };
+            : EmptyRouteLayer();
 
         ReplaceLayer(ref _routeLayer, layer);
         RebuildLiveTrailLayer();
     }
 
-    private void ReplaceLayer(ref ILayer? field, ILayer replacement)
+    /// <summary>
+    /// Gives a layer the content of a freshly built one. The layer itself stays:
+    /// taking it out of the map and putting another in has the map recompute its
+    /// resolutions and extent twice, and a renderer on another thread could draw a
+    /// frame in between that lacks the layer. The layers of the map all outlive the
+    /// content they show.
+    /// </summary>
+    private void ReplaceLayer(ref MemoryLayer? field, MemoryLayer replacement)
     {
-        if (Map is not { } map)
+        if (field is null)
         {
             field = replacement;
             return;
         }
 
-        if (field is not null)
+        if (!ReferenceEquals(field.Style, replacement.Style))
         {
-            var index = 0;
-            var found = false;
-            foreach (var layer in map.Layers)
-            {
-                if (ReferenceEquals(layer, field))
-                {
-                    found = true;
-                    break;
-                }
-
-                index++;
-            }
-
-            if (found)
-            {
-                map.Layers.Remove(field);
-                map.Layers.Insert(index, replacement);
-            }
-            else
-            {
-                map.Layers.Add(replacement);
-            }
-        }
-        else
-        {
-            map.Layers.Add(replacement);
+            field.Style = replacement.Style;
         }
 
-        field = replacement;
+        field.Features = replacement.Features;
+        Map?.RefreshGraphics();
     }
 
     private static void SetLayerEnabled(ILayer? layer, bool enabled)
@@ -1305,6 +1631,22 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             layer.Enabled = enabled;
         }
     }
+
+    private void ApplyAircraftColors(MapPalette palette)
+    {
+        if (_aircraftLayer is { } layer)
+        {
+            layer.LabelColor = WorldMap.ToArgb(palette.Text ?? palette.Label);
+            layer.ShadowColor = WorldMap.ToArgb(palette.Shadow ?? DefaultAircraftShadow);
+        }
+    }
+
+    private static MemoryLayer EmptyRouteLayer() => new(IvaoMapLayers.RouteLayerName)
+    {
+        Features = [],
+        Style = null,
+        SortFeatures = WorldMap.KeepOrder
+    };
 
     private static IvaoAtc EmptyAtc() => new() { Id = -1, Callsign = string.Empty };
 

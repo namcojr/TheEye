@@ -456,17 +456,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>The label of the star button of the selection panel.</summary>
     public string FriendActionText => IsSelectionFriend ? "★ REMOVE FRIEND" : "★ ADD FRIEND";
 
-    /// <summary>
-    /// Selection that came from a click on an aircraft marker. The centring
-    /// follows the user's "centre the map when I click an aircraft or station"
-    /// option, while <see cref="SelectedPilot"/> / <see cref="SelectedAtc"/> — the
-    /// two the traffic lists bind to — always frame their selection, so an
-    /// aircraft or a controller can be found from the list whatever the option
-    /// says. Station badges and sectors are picked by the map itself, which
-    /// honours the same option in <see cref="MapViewModel.SelectAt"/>.
-    /// </summary>
-    public void SelectPilotFromMap(PilotItem pilot) => Map.SelectPilot(pilot, Map.CenterOnMapClick);
-
     public bool ShowPilots
     {
         get => Map.ShowPilots;
@@ -740,6 +729,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Map.CenterOnMapClick = _settings.CenterOnMapClick;
         Map.AircraftGlyphSize = _settings.AircraftGlyphSize;
         Map.MapStyle = _settings.MapStyle;
+        Map.AircraftLabelScale = FontScale;
     }
 
     public async Task StartAsync()
@@ -814,6 +804,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Map.CenterOnMapClick = _settings.CenterOnMapClick;
         Map.AircraftGlyphSize = _settings.AircraftGlyphSize;
         Map.MapStyle = _settings.MapStyle;
+        Map.AircraftLabelScale = FontScale;
         TrafficColumnWidth = _settings.TrafficColumnWidth;
         RefreshFriendMarks();
         OnPropertyChanged(nameof(ShowPilots));
@@ -990,6 +981,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // The lists catch up in one go at the end of this refresh.
+        _pilotsView.BeginUpdate();
+        _atcView.BeginUpdate();
+
         RebuildLists(() =>
         {
             Map.UpdateTraffic(snapshot);
@@ -1033,8 +1028,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         RebuildLists(() =>
         {
-            _pilotsView.Refresh();
-            _atcView.Refresh();
+            _pilotsView.EndUpdate();
+            _atcView.EndUpdate();
         });
     }
 
@@ -1562,6 +1557,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             pilot.IsFriend = _settings.IsFriend(pilot.UserId);
             pilot.MarkerColor = _settings.AircraftHighlightFor(pilot.UserId) ?? string.Empty;
         }
+
+        Map.RefreshAircraft();
 
         foreach (var station in Map.Atc)
         {

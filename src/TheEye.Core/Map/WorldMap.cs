@@ -4,6 +4,7 @@ using Mapsui.Nts;
 using Mapsui.Projections;
 using Mapsui.Styles;
 using NetTopologySuite.Geometries;
+using System.Globalization;
 using System.Text.Json;
 using TheEye.Core.Models;
 
@@ -64,13 +65,19 @@ public static class WorldMap
 
         map.Layers.Add(new MemoryLayer(CountriesLayerName)
         {
-            Features = Countries.Value.Borders
+            Features = Countries.Value.Borders,
+            SortFeatures = KeepOrder
         });
 
+        // Ranked once here: the layer asks for its order on every frame, and the
+        // rank of a country never changes.
         map.Layers.Add(new MemoryLayer(CountryLabelsLayerName)
         {
-            Features = Countries.Value.Labels.Select(feature => new PointFeature((PointFeature)feature)).ToArray(),
-            SortFeatures = features => features.OrderBy(feature => feature["LabelRank"] is int rank ? rank : 6)
+            Features = Countries.Value.Labels
+                .Select(feature => new PointFeature((PointFeature)feature))
+                .OrderBy(feature => feature["LabelRank"] is int rank ? rank : 6)
+                .ToArray(),
+            SortFeatures = KeepOrder
         });
 
         ApplyTheme(map, palette);
@@ -118,8 +125,21 @@ public static class WorldMap
         map.Refresh();
     }
 
+    /// <summary>
+    /// Stands in for <see cref="BaseLayer.SortFeatures"/>, whose default sorts the
+    /// visible features again for every frame. The layers of this app are built in
+    /// drawing order, so that work buys nothing.
+    /// </summary>
+    public static IEnumerable<IFeature> KeepOrder(IEnumerable<IFeature> features) => features;
+
     public static MPoint Project(GeoCoordinate coordinate) =>
         Project(coordinate.Latitude, coordinate.Longitude);
+
+    /// <summary>The projection without the point object, for the per-aircraft loops.</summary>
+    public static (double X, double Y) ProjectToWorld(GeoCoordinate coordinate) =>
+        SphericalMercator.FromLonLat(
+            coordinate.Longitude,
+            Math.Clamp(coordinate.Latitude, -85.05112878, 85.05112878));
 
     public static MPoint Project(double latitude, double longitude)
     {
@@ -143,6 +163,23 @@ public static class WorldMap
         {
             return Color.FromString(fallback);
         }
+    }
+
+    /// <summary>
+    /// A colour as 0xAARRGGBB, the form the aircraft renderer takes. Unlike
+    /// <see cref="Parse"/> this reads "#AARRGGBB" too, which is how the themes
+    /// carry the translucent shadow and Mapsui's parser does not understand.
+    /// </summary>
+    public static uint ToArgb(string? hex)
+    {
+        if (hex is { Length: 9 } && hex[0] == '#' &&
+            uint.TryParse(hex.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var argb))
+        {
+            return argb;
+        }
+
+        var color = Parse(hex);
+        return ((uint)color.A << 24) | ((uint)color.R << 16) | ((uint)color.G << 8) | (uint)color.B;
     }
 
     public static Color WithAlpha(Color color, int alpha) =>

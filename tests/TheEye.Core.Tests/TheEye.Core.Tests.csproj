@@ -19,7 +19,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\TheEye.Core\TheEye.Core.csproj" />
     <ProjectReference Include="..\..\src\TheEye.Presentation\TheEye.Presentation.csproj" />
+    <Compile Include="..\..\src\Shared\AircraftLayerRenderer.cs" Link="Rendering\AircraftLayerRenderer.cs" />
     <Compile Include="..\..\src\Shared\AtcGlyphRenderer.cs" Link="Rendering\AtcGlyphRenderer.cs" />
+    <Compile Include="..\..\src\Shared\BackdropMapRenderer.cs" Link="Rendering\BackdropMapRenderer.cs" />
+    <Compile Include="..\..\src\Shared\CachedPolygonRenderer.cs" Link="Rendering\CachedPolygonRenderer.cs" />
+    <Compile Include="..\..\src\Shared\MapRenderers.cs" Link="Rendering\MapRenderers.cs" />
     <Compile Include="..\..\src\Shared\RunwayDiagramRenderer.cs" Link="Rendering\RunwayDiagramRenderer.cs" />
   </ItemGroup>
 
