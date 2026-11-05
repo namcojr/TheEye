@@ -392,11 +392,11 @@ wraps the one before it:
   `ObserverDiameter`, `DefaultDiameter`, `OutlineWidth` and the fill alphas above
   are the tuning variables at the top of
   `src/TheEye.Core/Map/AtcMarkerStyles.cs`.
-- Zoom limits: `WorldMap.MinZoomLevel` (default 3) is the most zoomed out level
+- Zoom limits: `WorldMap.MinZoomLevel` (default 4) is the most zoomed out level
   the navigator offers. `WorldMap.Create` builds `OverrideResolutions` from that
   level down to `DeepestZoomLevel` and sets `OverrideZoomBounds` to
   `MinResolution … MaxZoomOutResolution`, so no gesture, button or restored
-  setting can reach levels 0–2 any more. `MaxZoomOutResolution` is derived from
+  setting can reach levels 0–3 any more. `MaxZoomOutResolution` is derived from
   the level (`MaxResolution / 2^MinZoomLevel`), so changing the level is enough.
   The home view and the default `MapResolution` of the settings use that same
   resolution.
@@ -415,10 +415,11 @@ wraps the one before it:
   spacing and a live offset below the widest badge. Hit radii use the same
   current viewport resolution.
 - Date-line sectors: IVAO polygon longitudes in 0–360 notation are normalized
-  without losing vertices. Adjacent vertices are unwrapped before projection;
-  crossing sectors have complete translated copies at both world edges.
-  Labels, centroids, selection outlines and click geometry use the same
-  date-line-aware calculations, avoiding false edges across the world.
+  without losing vertices. Adjacent vertices are unwrapped before projection, so
+  a crossing sector is one polygon that runs on past the edge of the world and
+  the wrapped map draws it in every copy it reaches. Labels, centroids, selection
+  outlines and click geometry use the same date-line-aware calculations, avoiding
+  false edges across the world.
 - Clicks: `AtcStationHitTest` picks the smallest ring the pointer is inside, so
   the star wins in the middle and the approach ring at the rim. Clicking the same
   airport again walks outwards through the stack, and
@@ -528,6 +529,40 @@ caching use provider-supplied colours; streamed vector tiles or targeted vector
 overlays can use the application's local palettes. This experiment persists its
 requested sample outputs only; it does not add a persistent runtime tile cache.
 
+## WRAP-AROUND MAP (implemented)
+
+Panning east or west never stops: past the date line the map carries on into the
+other side of the world, as on a globe. North and south still stop at the top and
+bottom of the projection.
+
+There is one world and nothing is stored for the copies of it (`WorldWrap`):
+
+- `WrappingViewportLimiter` keeps the navigator's centre inside the world. When
+  the centre leaves it, the centre jumps back by a whole world width, which looks
+  the same, so gestures and animations never notice.
+- `WrappedMapRenderer` (`src/Shared`) draws each layer once per copy that can
+  reach the screen, moving the viewport by whole worlds, so the renderers below it
+  know nothing about wrapping. `layer.Extent` decides which copies those are, which
+  is what makes a sector past the edge of the world appear from the other side. A
+  frame away from the date line goes straight through to Mapsui. The Avalonia shell
+  uses it directly and `BackdropMapRenderer` builds on it.
+- The tile layer cannot do that: Mapsui fetches tiles for one viewport at a time.
+  `MapBasemap.WrappedSchema` carries on two worlds past each edge instead, and
+  `WrappedTileSource` turns a column past the edge into the real tile for the
+  request and the disk cache. The layer draws once.
+- The pointer logic knows the copy of everything nearest the middle of the view
+  (`WorldWrap.ToScreen`), and a pointer further out than that is moved onto it
+  (`WorldWrap.OntoNearestCopy`). `AtcRegionIndex` wraps the position it is given.
+- Centring goes the short way round, and a route across the date line is framed
+  in one piece.
+- Natural Earth cuts Russia, Fiji and Antarctica along 180 degrees. Those features
+  carry `WorldMap.CutAtDateLineField`, so `CachedPolygonRenderer` leaves that edge
+  out of the contour and fills slightly past it. From 40 m per pixel down the stock
+  renderer takes over and the edge shows as a thin line again.
+
+At the shallowest zoom level the world is 4096 pixels wide, so only a window wider
+than that shows anything twice.
+
 ## ONLINE BASEMAP (implemented, evaluation only)
 
 The map can draw a raster basemap under the traffic. It is a diagnostic feature:
@@ -559,9 +594,9 @@ request, because BruTile refuses to send one that names no application.
 ladder. The proxy serves 512 px tiles, so its level `z` covers the same ground
 as view level `z + 1`: the schema uses `UnitsPerPixel = MaxResolution / 2^(level + 1)`
 with `tileWidth = tileHeight = 512`, which makes `{z}` in the URL equal the view
-level minus one. Levels 2 to 14 are the ones the navigator asks for; the schema
-carries 0 to 14 and the extents of the pannable world, north row first, so the
-tiles line up with the offline geometry. A Lisbon mosaic fetched through the
+level minus one. Levels 3 to 14 are the ones the navigator asks for; the schema
+carries 0 to 14 and the extents of the world, north row first, so the tiles line
+up with the offline geometry. A Lisbon mosaic fetched through the
 schema (view level 12, z11, x972/y784) lands on the city itself.
 
 ### Caching and fallback

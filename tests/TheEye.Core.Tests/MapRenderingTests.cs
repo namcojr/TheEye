@@ -681,6 +681,141 @@ public sealed class MapRenderingTests
         Assert.Equal(1, resets);
     }
 
+    [Fact]
+    public void Pointer_FindsAnAircraftPastTheDateLine()
+    {
+        using var model = CreateModel(out _);
+        model.UpdateTraffic(Snapshot(Pilot(1, 0, -176)));
+        model.Map!.Navigator.CenterOnAndZoomTo(WorldMap.Project(0, 179), 4891.96);
+
+        var pin = new ScreenPosition(400 + WorldMap.Project(0, 5).X / 4891.96, 300);
+
+        Assert.Same(model.Pilots[0], model.PilotMarkerAt(pin));
+        Assert.True(model.Pilots[0].IsVisible);
+    }
+
+    [Fact]
+    public void Pointer_FindsAStationPastTheDateLine()
+    {
+        using var model = CreateModel(out _);
+        model.UpdateTraffic(Snapshot([], [Tower("EDDB_TWR", -190)]));
+        var center = WorldMap.Project(52, 178);
+        model.Map!.Navigator.CenterOnAndZoomTo(center, 4891.96);
+
+        var badge = new ScreenPosition(400 + WorldMap.Project(0, 5).X / 4891.96, 300);
+
+        Assert.Equal("EDDB_TWR", model.HitTestStation(badge)?.Callsign);
+    }
+
+    [Fact]
+    public void Pointer_FindsAnAircraftOnEitherCopyInAWindowWiderThanTheWorld()
+    {
+        using var model = CreateModel(out _);
+        model.Map!.Navigator.SetSize(5000, 600);
+        model.UpdateTraffic(Snapshot(Pilot(1, 0, 170)));
+        model.Map.Navigator.CenterOnAndZoomTo(WorldMap.Project(0, 0), WorldMap.MaxZoomOutResolution);
+
+        var east = 2500 + WorldMap.Project(0, 170).X / WorldMap.MaxZoomOutResolution;
+        var west = east - WorldWrap.WorldWidth / WorldMap.MaxZoomOutResolution;
+
+        Assert.Same(model.Pilots[0], model.PilotMarkerAt(new ScreenPosition(east, 300)));
+        Assert.Same(model.Pilots[0], model.PilotMarkerAt(new ScreenPosition(west, 300)));
+    }
+
+    [Fact]
+    public void Motion_FollowsAnAircraftOnTheCopyPastTheDateLine()
+    {
+        var clock = new Clock();
+        using var model = CreateModel(out _, clock);
+        model.Map!.Navigator.CenterOnAndZoomTo(WorldMap.Project(0, 179), 9783.94);
+        model.UpdateTraffic(Snapshot(clock, Pilot(1, 0, -179, speed: 400)));
+        clock.Advance(1.2);
+        model.AdvanceAircraft();
+        var refreshes = 0;
+        model.Map.RefreshGraphicsRequest += (_, _) => refreshes++;
+
+        clock.Advance(30);
+        model.AdvanceAircraft();
+
+        Assert.Equal(1, refreshes);
+    }
+
+    [Fact]
+    public void Centring_TakesTheShortWayAcrossTheDateLine()
+    {
+        using var model = CreateModel(out _);
+        var pilot = Pilot(1, 0, -179);
+        pilot.FlightPlan = null;
+        model.UpdateTraffic(Snapshot(pilot));
+        var navigator = model.Map!.Navigator;
+        navigator.CenterOnAndZoomTo(WorldMap.Project(0, 179), 4891.96);
+        var target = WorldMap.Project(0, -179).X;
+
+        model.CenterOnPilot(model.Pilots[0]);
+
+        var farthest = 0d;
+        while (navigator.UpdateAnimations())
+        {
+            farthest = Math.Max(farthest, Math.Abs(WorldWrap.Wrap(navigator.Viewport.CenterX - target)));
+            Thread.Sleep(10);
+        }
+
+        navigator.UpdateAnimations();
+        Assert.InRange(farthest, 0, WorldMap.Project(0, 3).X);
+        Assert.Equal(target, navigator.Viewport.CenterX, 0);
+    }
+
+    [Fact]
+    public void Centring_FramesARouteAcrossTheDateLine()
+    {
+        using var model = CreateModel(out _);
+        var pilot = Pilot(1, 0, -179);
+        pilot.FlightPlan = new IvaoFlightPlan
+        {
+            Departure = new IvaoAirport { Latitude = 0, Longitude = 170 },
+            Arrival = new IvaoAirport { Latitude = 0, Longitude = -170 }
+        };
+        model.UpdateTraffic(Snapshot(pilot));
+        var navigator = model.Map!.Navigator;
+        navigator.CenterOnAndZoomTo(WorldMap.Project(0, 10), WorldMap.MaxZoomOutResolution);
+
+        model.CenterOnPilot(model.Pilots[0]);
+        while (navigator.UpdateAnimations())
+        {
+            Thread.Sleep(10);
+        }
+
+        navigator.UpdateAnimations();
+        var fromDateLine = Math.Abs(WorldWrap.Wrap(navigator.Viewport.CenterX - WorldWrap.HalfWorldWidth));
+        Assert.InRange(fromDateLine, 0, 1000);
+        Assert.True(navigator.Viewport.Resolution < WorldMap.MaxZoomOutResolution);
+    }
+
+    [Fact]
+    public void Centring_CentresTheAircraftOfARouteTooLongToFrame()
+    {
+        using var model = CreateModel(out _);
+        var pilot = Pilot(1, 10, -171);
+        pilot.FlightPlan = new IvaoFlightPlan
+        {
+            Departure = new IvaoAirport { Latitude = 21, Longitude = -158 },
+            Arrival = new IvaoAirport { Latitude = 14, Longitude = 121 }
+        };
+        model.UpdateTraffic(Snapshot(pilot));
+        var navigator = model.Map!.Navigator;
+        navigator.CenterOnAndZoomTo(WorldMap.Project(0, 150), WorldMap.MaxZoomOutResolution);
+
+        model.CenterOnPilot(model.Pilots[0]);
+        while (navigator.UpdateAnimations())
+        {
+            Thread.Sleep(10);
+        }
+
+        navigator.UpdateAnimations();
+        Assert.Equal(WorldMap.Project(10, -171).X, navigator.Viewport.CenterX, 0);
+        Assert.Equal(WorldMap.MaxZoomOutResolution, navigator.Viewport.Resolution);
+    }
+
     private static MapViewModel CreateModel(out ScreenPosition centre, Clock? clock = null)
     {
         var model = new MapViewModel(new Images(), clock);

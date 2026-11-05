@@ -30,19 +30,16 @@ public sealed class AtcRegionIndex
             }
         }
 
-        return new AtcRegionIndex(regions.OrderBy(region =>
-            region.Geometry is MultiPolygon wrapped
-                ? wrapped.GetGeometryN(0).Area
-                : region.Geometry.Area).ToList());
+        return new AtcRegionIndex(regions.OrderBy(region => region.Geometry.Area).ToList());
     }
 
     public IReadOnlyList<IvaoAtc> FindAllAt(MPoint point)
     {
-        var ntsPoint = new Point(point.X, point.Y);
+        var x = WorldWrap.Wrap(point.X);
         var matches = new List<IvaoAtc>();
         foreach (var (atc, geometry) in _regions)
         {
-            if (Covers(geometry, point) && geometry.Contains(ntsPoint))
+            if (Contains(geometry, x, point.Y))
             {
                 matches.Add(atc);
             }
@@ -53,10 +50,10 @@ public sealed class AtcRegionIndex
 
     public IvaoAtc? FindAt(MPoint point)
     {
-        var ntsPoint = new Point(point.X, point.Y);
+        var x = WorldWrap.Wrap(point.X);
         foreach (var (atc, geometry) in _regions)
         {
-            if (Covers(geometry, point) && geometry.Contains(ntsPoint))
+            if (Contains(geometry, x, point.Y))
             {
                 return atc;
             }
@@ -69,8 +66,17 @@ public sealed class AtcRegionIndex
     /// The bounding box answers for almost every sector, and the pointer asks on
     /// every move, so the exact test only runs for the few that are left.
     /// </summary>
-    private static bool Covers(Geometry geometry, MPoint point) =>
-        geometry.EnvelopeInternal.Contains(point.X, point.Y);
+    /// <summary>
+    /// A sector across the date line runs on past the edge of the world, so a point
+    /// in the main world may lie on it as seen from the copy next door.
+    /// </summary>
+    private static bool Contains(Geometry geometry, double x, double y) =>
+        ContainsExactly(geometry, x, y) ||
+        ContainsExactly(geometry, x + WorldWrap.WorldWidth, y) ||
+        ContainsExactly(geometry, x - WorldWrap.WorldWidth, y);
+
+    private static bool ContainsExactly(Geometry geometry, double x, double y) =>
+        geometry.EnvelopeInternal.Contains(x, y) && geometry.Contains(new Point(x, y));
 
     public IvaoAtc? FindAt(GeoCoordinate coordinate)
     {

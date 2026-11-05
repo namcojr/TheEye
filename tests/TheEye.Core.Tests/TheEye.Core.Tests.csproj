@@ -25,6 +25,7 @@
     <Compile Include="..\..\src\Shared\CachedPolygonRenderer.cs" Link="Rendering\CachedPolygonRenderer.cs" />
     <Compile Include="..\..\src\Shared\MapRenderers.cs" Link="Rendering\MapRenderers.cs" />
     <Compile Include="..\..\src\Shared\RunwayDiagramRenderer.cs" Link="Rendering\RunwayDiagramRenderer.cs" />
+    <Compile Include="..\..\src\Shared\WrappedMapRenderer.cs" Link="Rendering\WrappedMapRenderer.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -35,6 +35,11 @@ namespace TheEye.Rendering;
 /// The Avalonia shell does not use this: it usually draws on the GPU, where the
 /// map is cheap to repaint and a CPU bitmap would have to be uploaded.
 /// </para>
+/// <para>
+/// The map repeats every world width, so the bitmap stays good when the navigator
+/// jumps back a whole world at the date line: every distance from the centre it
+/// was painted at is taken the short way round.
+/// </para>
 /// </remarks>
 public sealed class BackdropMapRenderer : IMapRenderer, IDisposable
 {
@@ -50,7 +55,7 @@ public sealed class BackdropMapRenderer : IMapRenderer, IDisposable
     /// </summary>
     private const int Margin = 256;
 
-    private readonly MapRenderer _map = new();
+    private readonly WrappedMapRenderer _map = new();
     private BackdropLayerState[] _layers = [];
     private SKSurface? _surface;
     private SKImage? _image;
@@ -88,7 +93,7 @@ public sealed class BackdropMapRenderer : IMapRenderer, IDisposable
         }
 
         // Where the bitmap lands, rounded to the pixels it can actually be copied to.
-        var offsetX = (_center.X - viewport.CenterX) / viewport.Resolution;
+        var offsetX = WorldWrap.Wrap(_center.X - viewport.CenterX) / viewport.Resolution;
         var offsetY = (viewport.CenterY - _center.Y) / viewport.Resolution;
         var left = (float)Math.Round((viewport.Width / 2 + offsetX - _size.Width / 2) * density);
         var top = (float)Math.Round((viewport.Height / 2 + offsetY - _size.Height / 2) * density);
@@ -121,7 +126,7 @@ public sealed class BackdropMapRenderer : IMapRenderer, IDisposable
             background != _background ||
             Volatile.Read(ref _dataVersion) != _capturedDataVersion ||
             _size != (viewport.Width + 2 * Margin, viewport.Height + 2 * Margin) ||
-            Math.Abs(_center.X - viewport.CenterX) / viewport.Resolution > Margin ||
+            Math.Abs(WorldWrap.Wrap(_center.X - viewport.CenterX)) / viewport.Resolution > Margin ||
             Math.Abs(_center.Y - viewport.CenterY) / viewport.Resolution > Margin ||
             _layers.Length != backdrop.Length)
         {

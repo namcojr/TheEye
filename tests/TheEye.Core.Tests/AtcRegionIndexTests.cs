@@ -90,18 +90,13 @@ public sealed class AtcRegionIndexTests
         station.AtcPosition!.RegionMapPolygon = station.AtcPosition.RegionMapPolygon
             .Select(point => point with { Longitude = point.Longitude + longitudeOffset }).ToList();
         var points = IvaoMapLayers.GetGeoPoints(station);
-        var geometry = Assert.IsType<NetTopologySuite.Geometries.MultiPolygon>(IvaoMapLayers.CreatePolygon(station));
+        var geometry = Assert.IsType<NetTopologySuite.Geometries.Polygon>(IvaoMapLayers.CreatePolygon(station));
         var index = AtcRegionIndex.Build([station]);
 
         Assert.Equal(12, points.Count);
-        Assert.Equal(2, geometry.NumGeometries);
-        Assert.All(Enumerable.Range(0, geometry.NumGeometries), i =>
-        {
-            var polygon = geometry.GetGeometryN(i);
-            Assert.True(polygon.IsValid);
-            Assert.True(polygon.EnvelopeInternal.Width < WorldMap.Project(0, 40).X);
-            Assert.Equal(13, polygon.Coordinates.Length);
-        });
+        Assert.True(geometry.IsValid);
+        Assert.True(geometry.EnvelopeInternal.Width < WorldMap.Project(0, 40).X);
+        Assert.Equal(13, geometry.Coordinates.Length);
         Assert.Same(station, index.FindAt(new GeoCoordinate(-17, 178)));
         Assert.Same(station, index.FindAt(new GeoCoordinate(-17, -178)));
         Assert.Null(index.FindAt(new GeoCoordinate(-17, 0)));
@@ -109,10 +104,25 @@ public sealed class AtcRegionIndexTests
         var labels = IvaoMapLayers.CreateAtcLabels([station],
             new MapPalette("#000000", "#111111", "#222222", "#FFFFFF", "#FFFFFF", true))
             .Features.Cast<Mapsui.Layers.PointFeature>().ToArray();
-        Assert.Equal(2, labels.Length);
-        Assert.All(labels, label => Assert.True(geometry.Contains(
-            new NetTopologySuite.Geometries.Point(label.Point.X, label.Point.Y))));
-        Assert.Equal(2 * WorldMap.Project(0, 180).X, Math.Abs(labels[0].Point.X - labels[1].Point.X), 6);
+        Assert.Same(station, Assert.Single(index.FindAllAt(Assert.Single(labels).Point)));
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void FindAllAt_FindsADateLineSectorFromEveryCopyOfTheWorld(int copy)
+    {
+        var station = CreateAtc("NZZO_CTR", "CTR", (-25, 165), (-25, -170), (-45, -170), (-45, 165));
+        var index = AtcRegionIndex.Build([station]);
+
+        foreach (var longitude in new[] { 170d, -175d })
+        {
+            var point = WorldMap.Project(-35, longitude);
+            point = new MPoint(point.X + copy * WorldWrap.WorldWidth, point.Y);
+
+            Assert.Same(station, Assert.Single(index.FindAllAt(point)));
+        }
     }
 
     [Fact]

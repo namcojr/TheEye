@@ -19,6 +19,12 @@ public static class WorldMap
     public const string CountriesLayerName = "Countries";
     public const string CountryLabelsLayerName = "Country labels";
 
+    /// <summary>
+    /// Marks a country the source data cuts along the 180 degree meridian. That
+    /// edge is no border: with the map wrapping around, it runs through the land.
+    /// </summary>
+    public const string CutAtDateLineField = "CutAtDateLine";
+
     /// <summary>Resolution of the most zoomed out level, i.e. the whole world in one tile.</summary>
     public const double MaxResolution = 156543.034;
 
@@ -28,7 +34,7 @@ public static class WorldMap
     /// whole world, are not offered by the navigator at all. Set this to 3 to allow
     /// one more step out, or to 0 to allow the whole world again.
     /// </summary>
-    public const int MinZoomLevel = 3;
+    public const int MinZoomLevel = 4;
 
     /// <summary>
     /// Resolution of <see cref="MinZoomLevel"/>: the most zoomed out the map can get,
@@ -59,6 +65,7 @@ public static class WorldMap
             .ToArray();
         map.Navigator.OverrideZoomBounds = new MMinMax(MinResolution, MaxZoomOutResolution);
         map.Navigator.OverridePanBounds = new MRect(-20037508.34, -20037508.34, 20037508.34, 20037508.34);
+        map.Navigator.Limiter = new WrappingViewportLimiter();
         map.Navigator.CenterOnAndZoomTo(
             Project(center),
             Math.Clamp(resolution, MinResolution, MaxZoomOutResolution));
@@ -219,7 +226,13 @@ public static class WorldMap
                 _ => throw new InvalidOperationException("Unsupported country geometry.")
             };
 
-            borders.Add(new GeometryFeature { Geometry = shape });
+            var border = new GeometryFeature { Geometry = shape };
+            if (shape.Coordinates.Any(coordinate => WorldWrap.IsOnDateLine(coordinate.X)))
+            {
+                border[CutAtDateLineField] = true;
+            }
+
+            borders.Add(border);
 
             var properties = country.GetProperty("properties");
             var label = new PointFeature(Project(

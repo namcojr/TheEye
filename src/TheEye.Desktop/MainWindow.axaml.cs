@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     {
         TheEye.Rendering.MapRenderers.Register();
         InitializeComponent();
+        MapView.SetMapRenderer(new TheEye.Rendering.WrappedMapRenderer());
         MapHost.AddHandler(PointerWheelChangedEvent, OnMapWheel, RoutingStrategies.Tunnel);
         _aircraftTimer.Tick += OnAircraftTick;
         Opened += (_, _) =>

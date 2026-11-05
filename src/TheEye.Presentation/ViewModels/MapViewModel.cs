@@ -21,9 +21,6 @@ namespace TheEye.Presentation.ViewModels;
 /// </summary>
 public sealed class MapViewModel : ObservableObject, IDisposable
 {
-    /// <summary>Width of the world in EPSG:3857 metres, used to detect routes that wrap the antimeridian.</summary>
-    private const double WorldWidth = 40075016.68;
-
     /// <summary>
     /// Smallest area framed around a selected flight, so a short hop does not
     /// zoom all the way down to a single apron.
@@ -555,6 +552,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         var viewport = map.Navigator.Viewport;
+        var pointer = OntoNearestCopy(screen);
         var marker = PilotMarkerAt(screen);
         IsPointerOverAircraft = marker is not null;
 
@@ -578,8 +576,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         var airportDistance = 8d;
         foreach (var target in _trafficAirportTargets)
         {
-            var dx = target.X - screen.X;
-            var dy = target.Y - screen.Y;
+            var dx = target.X - pointer.X;
+            var dy = target.Y - pointer.Y;
             var distance = Math.Sqrt(dx * dx + dy * dy);
             if (distance <= airportDistance)
             {
@@ -603,7 +601,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         var world = viewport.ScreenToWorld(screen.X, screen.Y);
-        var station = AtcStationHitTest.Find(_stationTargets, screen.X, screen.Y,
+        var station = AtcStationHitTest.Find(_stationTargets, pointer.X, pointer.Y,
             regions: _regionIndex?.FindAllAt(world));
         HoveredAtc = station is not null && _atcById.TryGetValue(station.Id, out var item) ? item : null;
         AtcHoverX = Math.Clamp(screen.X + 14, 0, Math.Max(0, viewport.Width - 160));
@@ -861,6 +859,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     public void SelectAt(MPoint worldPosition, ScreenPosition screenPosition)
     {
         RefreshScreenPositions();
+        screenPosition = OntoNearestCopy(screenPosition);
         if (HitTestPilot(screenPosition) is { } pilot)
         {
             if (ReferenceEquals(SelectedPilot, pilot) && HitTestAirport(screenPosition) is { } overlappingAirport)
@@ -903,6 +902,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     private AirportRecord? HitTestAirport(ScreenPosition position)
     {
         RefreshScreenPositions();
+        position = OntoNearestCopy(position);
         AirportRecord? best = null;
         var bestDistanceSquared = 9d * 9d;
 
@@ -921,6 +921,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         return best;
     }
 
+    private ScreenPosition OntoNearestCopy(ScreenPosition position) =>
+        Map is { } map ? WorldWrap.OntoNearestCopy(position, map.Navigator.Viewport) : position;
+
     public PilotItem? HitTestPilot(ScreenPosition position)
     {
         // Hidden markers must not swallow clicks, otherwise a parked aircraft
@@ -931,6 +934,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         RefreshScreenPositions();
+        position = OntoNearestCopy(position);
         PilotItem? best = null;
         var bestDistanceSquared = 22d * 22d;
 
@@ -966,6 +970,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         }
 
         RefreshScreenPositions();
+        position = OntoNearestCopy(position);
         for (var index = Pilots.Count - 1; index >= 0; index--)
         {
             var pilot = Pilots[index];
@@ -993,6 +998,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     public AtcItem? HitTestStation(ScreenPosition position)
     {
         RefreshScreenPositions();
+        position = OntoNearestCopy(position);
         if (!_showAtc
             || AtcStationHitTest.Find(_stationTargets, position.X, position.Y, SelectedAtc?.Id) is not { } station)
         {
@@ -1013,7 +1019,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var aircraft = WorldMap.Project(position);
+        // The nearest copy of the aircraft, so the map moves the short way round.
+        var aircraft = NearestCopy(WorldMap.Project(position), map.Navigator.Viewport.CenterX);
         var flightPlan = pilot.Pilot.FlightPlan;
         var departure = flightPlan?.Departure?.Position;
         var arrival = flightPlan?.Arrival?.Position;
@@ -1030,31 +1037,30 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var start = WorldMap.Project(startCoordinate);
-        var end = WorldMap.Project(endCoordinate);
+        // A route across the date line is framed in one piece, past the edge of the world.
+        var start = NearestCopy(WorldMap.Project(startCoordinate), aircraft.X);
+        var end = NearestCopy(WorldMap.Project(endCoordinate), aircraft.X);
         var minX = Math.Min(aircraft.X, Math.Min(start.X, end.X));
         var maxX = Math.Max(aircraft.X, Math.Max(start.X, end.X));
         var minY = Math.Min(aircraft.Y, Math.Min(start.Y, end.Y));
         var maxY = Math.Max(aircraft.Y, Math.Max(start.Y, end.Y));
 
-        // A route that crosses the antimeridian is drawn as two separate lines,
-        // so its projected box would cover the whole world. Centring the aircraft
-        // is far more useful than zooming out to a meaningless world view.
-        if (maxX - minX > WorldWidth / 2)
+        // Keep a little breathing room so the aircraft and both airports never
+        // end up glued to the edge of the map.
+        var paddingX = Math.Max((maxX - minX) * 0.1, MinimumFrameSize / 2);
+        var paddingY = Math.Max((maxY - minY) * 0.1, MinimumFrameSize / 2);
+        var frame = new MRect(minX - paddingX, minY - paddingY, maxX + paddingX, maxY + paddingY);
+
+        // The navigator gives up on an animation that hits the zoom limit, so a
+        // flight too long to frame would not move the map at all.
+        var viewport = map.Navigator.Viewport;
+        if (Math.Max(frame.Width / viewport.Width, frame.Height / viewport.Height) > WorldMap.MaxZoomOutResolution)
         {
             map.Navigator.CenterOn(aircraft, 250);
             return;
         }
 
-        // Keep a little breathing room so the aircraft and both airports never
-        // end up glued to the edge of the map.
-        var paddingX = Math.Max((maxX - minX) * 0.1, MinimumFrameSize / 2);
-        var paddingY = Math.Max((maxY - minY) * 0.1, MinimumFrameSize / 2);
-
-        map.Navigator.ZoomToBox(
-            new MRect(minX - paddingX, minY - paddingY, maxX + paddingX, maxY + paddingY),
-            MBoxFit.Fit,
-            350);
+        map.Navigator.ZoomToBox(frame, MBoxFit.Fit, 350);
     }
 
     /// <summary>Brings an ATC position into view without zooming out from a closer view.</summary>
@@ -1065,7 +1071,11 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             return;
         }
 
-        Map.Navigator.CenterOnAndZoomTo(WorldMap.Project(position), Math.Min(Map.Navigator.Viewport.Resolution, 8000), 300);
+        var viewport = Map.Navigator.Viewport;
+        Map.Navigator.CenterOnAndZoomTo(
+            NearestCopy(WorldMap.Project(position), viewport.CenterX),
+            Math.Min(viewport.Resolution, 8000),
+            300);
     }
 
     public void ZoomIn() => Map?.Navigator.ZoomIn(250);
@@ -1073,7 +1083,13 @@ public sealed class MapViewModel : ObservableObject, IDisposable
     public void ZoomOut() => Map?.Navigator.ZoomOut(250);
 
     public void ResetView(GeoCoordinate center, double resolution) =>
-        Map?.Navigator.CenterOnAndZoomTo(WorldMap.Project(center), resolution, 350);
+        Map?.Navigator.CenterOnAndZoomTo(
+            NearestCopy(WorldMap.Project(center), Map.Navigator.Viewport.CenterX),
+            resolution,
+            350);
+
+    private static MPoint NearestCopy(MPoint point, double x) =>
+        new(WorldWrap.NearestCopy(point.X, x), point.Y);
 
     public (GeoCoordinate Center, double Resolution) GetView()
     {
@@ -1254,7 +1270,8 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             _motionBuffer[index * 2] = x;
             _motionBuffer[index * 2 + 1] = y;
             var followed = ReferenceEquals(item, _selectedPilot) || ReferenceEquals(item, _hoveredPilot);
-            if (followed || (Math.Abs(x - viewport.CenterX) <= reachX && Math.Abs(y - viewport.CenterY) <= reachY))
+            if (followed ||
+                (Math.Abs(WorldWrap.Wrap(x - viewport.CenterX)) <= reachX && Math.Abs(y - viewport.CenterY) <= reachY))
             {
                 largest = Math.Max(largest, Math.Max(Math.Abs(x - marker.WorldX), Math.Abs(y - marker.WorldY)));
             }
@@ -1373,7 +1390,7 @@ public sealed class MapViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var (x, y) = viewport.WorldToScreenXY(marker.WorldX, marker.WorldY);
+        var (x, y) = WorldWrap.ToScreen(viewport, marker.WorldX, marker.WorldY);
         var size = item.MarkerSize;
         var visible = x >= -size && y >= -size && x <= viewport.Width + size && y <= viewport.Height + size;
         item.SetScreenPosition(x - size / 2d, y - size / 2d, visible);
@@ -1470,11 +1487,11 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         var targets = new List<AtcStationHitTarget>(_stationPlacements.Count);
         foreach (var placement in _stationPlacements)
         {
-            var screen = viewport.WorldToScreen(placement.Point);
+            var (x, y) = WorldWrap.ToScreen(viewport, placement.Point.X, placement.Point.Y);
             targets.Add(new AtcStationHitTarget(
                 placement.Station,
-                screen.X,
-                screen.Y,
+                x,
+                y,
                 AtcMarkerStyles.HitRadius(AtcMarkerStyles.For(
                     placement.Station.Facility, placement.Station.Callsign,
                     AtcMarkerStyles.ZoomScale(viewport.Resolution))),
@@ -1537,8 +1554,9 @@ public sealed class MapViewModel : ObservableObject, IDisposable
         var viewport = map.Navigator.Viewport;
         foreach (var airport in _trafficAirports)
         {
-            var screen = viewport.WorldToScreen(WorldMap.Project(airport.Position));
-            _trafficAirportTargets.Add((airport, screen.X, screen.Y));
+            var point = WorldMap.Project(airport.Position);
+            var (x, y) = WorldWrap.ToScreen(viewport, point.X, point.Y);
+            _trafficAirportTargets.Add((airport, x, y));
         }
     }
 

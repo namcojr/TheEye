@@ -89,7 +89,15 @@ public static class MapBasemap
     /// is built for 256 px tiles, hence the extra step in the exponents. Zooming
     /// from view level <c>n</c> therefore requests <c>{z} = n - 1</c>.
     /// </summary>
-    public static ITileSchema Schema { get; } = CreateSchema();
+    public static ITileSchema Schema { get; } = CreateSchema(0);
+
+    /// <summary>
+    /// <see cref="Schema"/> carrying on past both edges of the world, for the layer
+    /// that draws the copies of it (<see cref="WrappedTileSource"/>). The centre of
+    /// the map stays inside the world, so this much is enough for a window eight
+    /// times as wide as the world is at the shallowest zoom level.
+    /// </summary>
+    public static ITileSchema WrappedSchema { get; } = CreateSchema(2);
 
     /// <summary>
     /// The tile source of one style, including its on-disk cache. Public so the
@@ -135,7 +143,8 @@ public static class MapBasemap
 
         if (!offline)
         {
-            map.Layers.Insert(0, new TileLayer(CreateTileSource(style, cacheDirectory)) { Name = LayerName });
+            var source = new WrappedTileSource(CreateTileSource(style, cacheDirectory), WrappedSchema);
+            map.Layers.Insert(0, new TileLayer(source) { Name = LayerName });
         }
 
         map.Refresh();
@@ -175,21 +184,22 @@ public static class MapBasemap
     /// </summary>
     public static bool IsDark(string? styleId) => DarkStyleIds.Contains(Find(styleId).Id);
 
-    private static TileSchema CreateSchema()
+    private static TileSchema CreateSchema(int worldsEachSide)
     {
+        var reach = HalfWorld + worldsEachSide * 2 * HalfWorld;
         var schema = new TileSchema
         {
             Name = "TheEye basemap",
             Srs = "EPSG:3857",
             Format = "webp",
             YAxis = YAxis.OSM,
-            Extent = new Extent(-HalfWorld, -HalfWorld, HalfWorld, HalfWorld),
+            Extent = new Extent(-reach, -HalfWorld, reach, HalfWorld),
             OriginX = -HalfWorld,
             OriginY = HalfWorld
         };
 
-        // View level 3 is the shallowest the navigator offers and 15 the deepest,
-        // so tile levels 2 to 14 are the ones actually requested. Levels 0 and 1
+        // View level 4 is the shallowest the navigator offers and 15 the deepest,
+        // so tile levels 3 to 14 are the ones actually requested. The levels above
         // are kept so the pyramid starts where a tile service expects it to.
         for (var level = 0; level <= WorldMap.DeepestZoomLevel - 1; level++)
         {

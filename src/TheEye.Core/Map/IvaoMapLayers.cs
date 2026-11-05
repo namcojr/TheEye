@@ -4,7 +4,6 @@ using Mapsui.Nts;
 using Mapsui.Styles;
 using Mapsui.Styles.Thematics;
 using NetTopologySuite.Geometries;
-using NetTopologySuite.Geometries.Utilities;
 using TheEye.Core.Models;
 using TheEye.Core.Reference;
 
@@ -104,30 +103,19 @@ public static class IvaoMapLayers
             }
 
             var color = WorldMap.Parse(FacilityPalette.ForFacility(station.Facility));
-            var labelPoint = WorldMap.Project(coordinate);
-            var geometry = CreatePolygon(station);
-            var worldWidth = 2 * WorldMap.Project(0, 180).X;
-            var labelPoints = geometry is MultiPolygon wrapped
-                ? wrapped.Geometries.Select(part => new MPoint(
-                    labelPoint.X + worldWidth * Math.Round((part.Centroid.X - labelPoint.X) / worldWidth),
-                    labelPoint.Y)).ToArray()
-                : new[] { labelPoint };
-            foreach (var point in labelPoints)
+            var feature = new PointFeature(WorldMap.Project(coordinate));
+            feature["Callsign"] = station.Callsign;
+            feature.Styles.Add(new LabelStyle
             {
-                var feature = new PointFeature(point);
-                feature["Callsign"] = station.Callsign;
-                feature.Styles.Add(new LabelStyle
-                {
-                    LabelColumn = "Callsign",
-                    Font = new Font { FontFamily = "Segoe UI", Size = AtcMarkerStyles.LabelFontSize(), Bold = true },
-                    ForeColor = color,
-                    BackColor = null,
-                    Halo = new Pen(WorldMap.Parse(palette.Land), 2.5),
-                    CollisionDetection = true,
-                    MaxVisible = AtcLabelMaxResolution
-                });
-                features.Add(feature);
-            }
+                LabelColumn = "Callsign",
+                Font = new Font { FontFamily = "Segoe UI", Size = AtcMarkerStyles.LabelFontSize(), Bold = true },
+                ForeColor = color,
+                BackColor = null,
+                Halo = new Pen(WorldMap.Parse(palette.Land), 2.5),
+                CollisionDetection = true,
+                MaxVisible = AtcLabelMaxResolution
+            });
+            features.Add(feature);
         }
 
         return new MemoryLayer(AtcLabelsLayerName)
@@ -632,6 +620,11 @@ public static class IvaoMapLayers
     public static IReadOnlyList<GeoCoordinate> GetGeoPoints(IvaoAtc atc) =>
         GeoPolygon.DistinctConsecutive(atc.PolygonPoints.Select(point => point.ToGeoCoordinate()));
 
+    /// <summary>
+    /// The sector in one piece. Longitudes are unwrapped, so a sector across the
+    /// date line runs on past the edge of the world, which needs no second copy:
+    /// the renderer draws it wherever a copy of the world brings it into view.
+    /// </summary>
     public static Geometry? CreatePolygon(IvaoAtc atc)
     {
         var points = GetGeoPoints(atc);
@@ -655,19 +648,7 @@ public static class IvaoMapLayers
             return null;
         }
 
-        var polygon = new Polygon(new LinearRing(coordinates.ToArray()));
-        var extent = polygon.EnvelopeInternal;
-        var halfWorld = WorldMap.Project(0, 180).X;
-        if (extent.MaxX > halfWorld || extent.MinX < -halfWorld)
-        {
-            // Draw a complete copy on both edges of the map, rather than a
-            // false closing edge down the date line or across the whole world.
-            var shift = extent.MaxX > halfWorld ? -2 * halfWorld : 2 * halfWorld;
-            var copy = (Polygon)AffineTransformation.TranslationInstance(shift, 0).Transform(polygon);
-            return new MultiPolygon([polygon, copy]);
-        }
-
-        return polygon;
+        return new Polygon(new LinearRing(coordinates.ToArray()));
     }
 
     /// <summary>
