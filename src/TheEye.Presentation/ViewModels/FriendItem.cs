@@ -1,4 +1,5 @@
 using TheEye.Core.Services;
+using TheEye.Presentation.Theming;
 
 namespace TheEye.Presentation.ViewModels;
 
@@ -79,6 +80,8 @@ public sealed class FriendItem : ObservableObject
         get => _isOnline;
         private set => SetProperty(ref _isOnline, value);
     }
+
+    public string RowTint => ThemeCatalog.FriendRowTint;
 
     /// <summary>The row in one line for the tooltip, which has room for all of it.</summary>
     public string TooltipText => string.Join(

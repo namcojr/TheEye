@@ -20,12 +20,28 @@ namespace TheEye.Presentation.ViewModels;
 /// </summary>
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
+    private enum TableViewKind
+    {
+        Pilot,
+        Atc,
+        Supervisor,
+        Friend
+    }
+
     private readonly SettingsStore _store;
     private readonly TheEyeSettings _settings;
     private readonly IThemeService _theme;
     private readonly FilteredCollection<PilotItem> _pilotsView;
     private readonly FilteredCollection<AtcItem> _atcView;
     private readonly AsyncRelayCommand _refreshCommand;
+    private bool _isPilotTableView;
+    private bool _isAtcTableView;
+    private bool _isSupervisorTableView;
+    private bool _isFriendTableView;
+    private string _pilotTableSortColumn = "Callsign";
+    private bool _pilotTableSortAscending = true;
+    private string _atcTableSortColumn = "Callsign";
+    private bool _atcTableSortAscending = true;
     private readonly AviationWeatherClient _weather = new();
 
     // The SUP and FRIENDS lists are not traffic: the supervisor feed is its own
@@ -82,6 +98,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private int _friendCount;
     private int _worldTourCount;
     private int _uniqueUsers24h;
+    private IReadOnlyList<AirportTrafficStat> _popularAirportStats = [];
+    private IReadOnlyList<DashboardActivitySample> _activitySamples = [];
 
     public MainViewModel(SettingsStore store, TheEyeSettings settings, IThemeService theme, IImagePipeline images)
     {
@@ -107,6 +125,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RefreshCommand = _refreshCommand = new AsyncRelayCommand(RefreshAsync, () => _tracker is not null);
         LocateSelectedCommand = new RelayCommand(LocateSelected, () => SelectedPilot is not null || SelectedAtc is not null);
         ClearSelectionCommand = new RelayCommand(() => Map.ClearSelection(), () => HasSelection);
+        PilotTableCommand = new RelayCommand(TogglePilotTable);
+        AtcTableCommand = new RelayCommand(ToggleAtcTable);
+        SupervisorTableCommand = new RelayCommand(ToggleSupervisorTable);
+        FriendTableCommand = new RelayCommand(ToggleFriendTable);
+        SelectPilotFromTableCommand = new RelayCommand(SelectPilotFromTable);
+        SelectAtcFromTableCommand = new RelayCommand(SelectAtcFromTable);
+        SelectFriendFromTableCommand = new RelayCommand(SelectFriendFromTable);
+        SelectSupervisorFromTableCommand = new RelayCommand(SelectSupervisorFromTable);
+        SortPilotTableCommand = new RelayCommand(SortPilotTable);
+        SortAtcTableCommand = new RelayCommand(SortAtcTable);
         ToggleFriendCommand = _toggleFriendCommand = new RelayCommand(ToggleFriend, parameter => ResolveUserId(parameter) > 0);
         ZoomInCommand = new RelayCommand(() => Map.ZoomIn());
         ZoomOutCommand = new RelayCommand(() => Map.ZoomOut());
@@ -129,6 +157,43 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public FilteredCollection<FriendItem> FriendsView => _friendsView;
 
     public AsyncRelayCommand RefreshCommand { get; }
+
+    public RelayCommand PilotTableCommand { get; }
+
+    public RelayCommand AtcTableCommand { get; }
+
+    public RelayCommand SupervisorTableCommand { get; }
+
+    public RelayCommand FriendTableCommand { get; }
+
+    public RelayCommand SelectPilotFromTableCommand { get; }
+
+    public RelayCommand SelectAtcFromTableCommand { get; }
+
+    public RelayCommand SelectFriendFromTableCommand { get; }
+
+    public RelayCommand SelectSupervisorFromTableCommand { get; }
+
+    public RelayCommand SortPilotTableCommand { get; }
+
+    public RelayCommand SortAtcTableCommand { get; }
+
+    public bool IsMapView => !_isPilotTableView && !_isAtcTableView &&
+                             !_isSupervisorTableView && !_isFriendTableView;
+
+    public bool IsPilotTableView => _isPilotTableView;
+
+    public bool IsAtcTableView => _isAtcTableView;
+
+    public bool IsSupervisorTableView => _isSupervisorTableView;
+
+    public bool IsFriendTableView => _isFriendTableView;
+
+    public string PilotTableSortStatus =>
+        $"SORTED BY {_pilotTableSortColumn.ToUpperInvariant()} {(_pilotTableSortAscending ? "ASC" : "DESC")}";
+
+    public string AtcTableSortStatus =>
+        $"SORTED BY {_atcTableSortColumn.ToUpperInvariant()} {(_atcTableSortAscending ? "ASC" : "DESC")}";
 
     /// <summary>
     /// Adds or drops a friend. The parameter selects the member — a row of the
@@ -627,6 +692,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _uniqueUsers24h, value);
     }
 
+    public IReadOnlyList<AirportTrafficStat> PopularAirportStats => _popularAirportStats;
+
+    public bool HasPopularAirportStats => _popularAirportStats.Count > 0;
+
+    public bool HasNoPopularAirportStats => !HasPopularAirportStats;
+
+    public IReadOnlyList<DashboardActivitySample> ActivitySamples => _activitySamples;
+
+    public int OnlineFriendCount => _friends.Count(friend => friend.IsOnline);
+
+    public bool HasNoOnlineFriends => OnlineFriendCount == 0;
+
+    public IReadOnlyList<FriendItem> OnlineFriends => _friends
+        .Where(friend => friend.IsOnline)
+        .OrderBy(friend => friend.Name, StringComparer.CurrentCultureIgnoreCase)
+        .Take(3)
+        .ToArray();
+
     /// <summary>True while an IVAO sign-in is in place, which is what the trail feed needs.</summary>
     public bool IsSignedIn => _session?.IsSignedIn ?? _settings.HasOAuthTokens;
 
@@ -637,6 +720,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         : "Public tracker summary (no sign-in, no flight trails)";
 
     public string RefreshDescription => $"Every {_settings.RefreshSeconds} seconds";
+
+    public double FontScale => UiFontSizes.Multiplier(_settings.UiFontSize);
 
     public string ThemeDescription => TheEyeThemes.Normalize(_settings.Theme);
 
@@ -737,6 +822,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsSignedIn));
         OnPropertyChanged(nameof(ConnectionDescription));
         OnPropertyChanged(nameof(RefreshDescription));
+        OnPropertyChanged(nameof(FontScale));
         OnPropertyChanged(nameof(ThemeDescription));
 
         SaveSettings();
@@ -935,6 +1021,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SupervisorCount = _stats.Supervisors;
         WorldTourCount = _stats.WorldTours;
         UniqueUsers24h = _stats.UniqueUsers24h;
+        RefreshDashboardStats();
         LastUpdatedText = $"Updated {snapshot.UpdatedAt.ToLocalTime():HH:mm:ss}";
         StatusText = snapshot.IsPartial ? "Live — partial data" : "Live";
         HasWarnings = snapshot.IsPartial;
@@ -1487,6 +1574,73 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    private void RefreshDashboardStats()
+    {
+        var countsByAirport = new Dictionary<string, (int Inbound, int Outbound)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pilot in Map.Pilots)
+        {
+            AddAirport(pilot.Arrival, inbound: true);
+            AddAirport(pilot.Departure, inbound: false);
+        }
+
+        var busiestAirports = countsByAirport
+            .OrderByDescending(entry => entry.Value.Inbound + entry.Value.Outbound)
+            .ThenBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(5)
+            .ToArray();
+        var maxTraffic = busiestAirports
+            .Select(entry => entry.Value.Inbound + entry.Value.Outbound)
+            .DefaultIfEmpty(1)
+            .Max();
+
+        _popularAirportStats = busiestAirports
+            .Select(entry => new AirportTrafficStat(
+                entry.Key,
+                entry.Value.Inbound,
+                entry.Value.Outbound,
+                entry.Value.Inbound * 100d / maxTraffic,
+                entry.Value.Outbound * 100d / maxTraffic))
+            .ToArray();
+
+        OnPropertyChanged(nameof(PopularAirportStats));
+        OnPropertyChanged(nameof(HasPopularAirportStats));
+        OnPropertyChanged(nameof(HasNoPopularAirportStats));
+        var recentConnections = _activitySamples
+            .Select(sample => sample.Connections)
+            .Append(TotalCount)
+            .TakeLast(24)
+            .ToArray();
+        var maxConnections = Math.Max(1, recentConnections.Max());
+        _activitySamples = recentConnections
+            .Select(connections => new DashboardActivitySample(
+                connections,
+                4 + 30d * connections / maxConnections))
+            .ToArray();
+        OnPropertyChanged(nameof(ActivitySamples));
+        RaiseFriendDashboardChanges();
+
+        void AddAirport(string code, bool inbound)
+        {
+            var icao = code.Trim().ToUpperInvariant();
+            if (icao.Length != 4 || !icao.All(char.IsLetterOrDigit))
+            {
+                return;
+            }
+
+            var count = countsByAirport.GetValueOrDefault(icao);
+            countsByAirport[icao] = inbound
+                ? (count.Inbound + 1, count.Outbound)
+                : (count.Inbound, count.Outbound + 1);
+        }
+    }
+
+    private void RaiseFriendDashboardChanges()
+    {
+        OnPropertyChanged(nameof(OnlineFriendCount));
+        OnPropertyChanged(nameof(HasNoOnlineFriends));
+        OnPropertyChanged(nameof(OnlineFriends));
+    }
+
     private void ToggleFriend(object? parameter)
     {
         var userId = ResolveUserId(parameter);
@@ -1502,6 +1656,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // gains or loses its row.
         RebuildLists(SyncFriends);
         FriendCount = _friends.Count;
+        RaiseFriendDashboardChanges();
         OnPropertyChanged(nameof(IsSelectionFriend));
         OnPropertyChanged(nameof(FriendActionText));
     }
@@ -1549,6 +1704,182 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         string.IsNullOrWhiteSpace(_searchText) ||
         item is FriendItem friend &&
         friend.SearchText.Contains(_searchText.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private void TogglePilotTable() => SetTableView(!_isPilotTableView, TableViewKind.Pilot);
+
+    private void ToggleAtcTable() => SetTableView(!_isAtcTableView, TableViewKind.Atc);
+
+    private void ToggleSupervisorTable() => SetTableView(!_isSupervisorTableView, TableViewKind.Supervisor);
+
+    private void ToggleFriendTable() => SetTableView(!_isFriendTableView, TableViewKind.Friend);
+
+    private void SetTableView(bool show, TableViewKind view)
+    {
+        _isPilotTableView = show && view == TableViewKind.Pilot;
+        _isAtcTableView = show && view == TableViewKind.Atc;
+        _isSupervisorTableView = show && view == TableViewKind.Supervisor;
+        _isFriendTableView = show && view == TableViewKind.Friend;
+        if (show)
+        {
+            Map.ClearSelection();
+        }
+
+        NotifyTableViewChanges();
+    }
+
+    private void CloseTableView()
+    {
+        _isPilotTableView = false;
+        _isAtcTableView = false;
+        _isSupervisorTableView = false;
+        _isFriendTableView = false;
+        NotifyTableViewChanges();
+    }
+
+    private void NotifyTableViewChanges()
+    {
+        OnPropertyChanged(nameof(IsMapView));
+        OnPropertyChanged(nameof(IsPilotTableView));
+        OnPropertyChanged(nameof(IsAtcTableView));
+        OnPropertyChanged(nameof(IsSupervisorTableView));
+        OnPropertyChanged(nameof(IsFriendTableView));
+    }
+
+    private void SelectPilotFromTable(object? parameter)
+    {
+        if (parameter is PilotItem pilot)
+        {
+            SelectedPilot = pilot;
+            CloseTableView();
+        }
+    }
+
+    private void SelectAtcFromTable(object? parameter)
+    {
+        if (parameter is AtcItem station)
+        {
+            SelectedAtc = station;
+            CloseTableView();
+        }
+    }
+
+    private void SelectFriendFromTable(object? parameter)
+    {
+        if (parameter is not FriendItem friend)
+        {
+            return;
+        }
+
+        SelectedFriend = friend;
+        if (SelectedPilot is not null || SelectedAtc is not null)
+        {
+            CloseTableView();
+        }
+    }
+
+    private void SelectSupervisorFromTable(object? parameter)
+    {
+        if (parameter is not SupervisorItem supervisor)
+        {
+            return;
+        }
+
+        SelectedSupervisor = supervisor;
+        if (SelectedPilot is not null || SelectedAtc is not null)
+        {
+            CloseTableView();
+        }
+    }
+
+    private void SortPilotTable(object? parameter)
+    {
+        if (parameter is not string column)
+        {
+            return;
+        }
+
+        if (string.Equals(_pilotTableSortColumn, column, StringComparison.Ordinal))
+        {
+            _pilotTableSortAscending = !_pilotTableSortAscending;
+        }
+        else
+        {
+            _pilotTableSortColumn = column;
+            _pilotTableSortAscending = true;
+        }
+
+        var ascending = _pilotTableSortAscending;
+        _pilotsView.Comparer = Comparer<PilotItem>.Create((left, right) =>
+        {
+            if (column == "Online")
+            {
+                return TrafficTableSort.CompareDurationSeconds(
+                    left.OnlineDurationSeconds, right.OnlineDurationSeconds, ascending);
+            }
+
+            var result = StringComparer.CurrentCultureIgnoreCase.Compare(
+                PilotSortValue(left, column), PilotSortValue(right, column));
+            return ascending ? result : -result;
+        });
+        OnPropertyChanged(nameof(PilotTableSortStatus));
+    }
+
+    private void SortAtcTable(object? parameter)
+    {
+        if (parameter is not string column)
+        {
+            return;
+        }
+
+        if (string.Equals(_atcTableSortColumn, column, StringComparison.Ordinal))
+        {
+            _atcTableSortAscending = !_atcTableSortAscending;
+        }
+        else
+        {
+            _atcTableSortColumn = column;
+            _atcTableSortAscending = true;
+        }
+
+        var ascending = _atcTableSortAscending;
+        _atcView.Comparer = Comparer<AtcItem>.Create((left, right) =>
+        {
+            if (column == "Online")
+            {
+                return TrafficTableSort.CompareDurationSeconds(
+                    left.OnlineDurationSeconds, right.OnlineDurationSeconds, ascending);
+            }
+
+            var result = StringComparer.CurrentCultureIgnoreCase.Compare(
+                AtcSortValue(left, column), AtcSortValue(right, column));
+            return ascending ? result : -result;
+        });
+        OnPropertyChanged(nameof(AtcTableSortStatus));
+    }
+
+    private static string PilotSortValue(PilotItem item, string column) => column switch
+    {
+        "Member" => item.MemberText,
+        "Aircraft" => item.Aircraft,
+        "Route" => item.RouteText,
+        "Departure" => item.Departure,
+        "Arrival" => item.Arrival,
+        "Altitude" => item.Altitude,
+        "Speed" => item.Speed,
+        "State" => item.State,
+        _ => item.CallsignLabel
+    };
+
+    private static string AtcSortValue(AtcItem item, string column) => column switch
+    {
+        "Member" => item.MemberText,
+        "Facility" => item.FacilityName,
+        "Frequency" => item.Frequency,
+        "Airport" => item.AirportIcao,
+        "Country" => item.CountryName,
+        "Scope" => item.Scope,
+        _ => item.CallsignLabel
+    };
 
     private void LocateSelected()
     {

@@ -46,10 +46,14 @@ public sealed record AtcMarkerStyle(
 /// </summary>
 public static class AtcMarkerStyles
 {
-    public const string GroundFill = "#F1C40F";
-    public const string TowerFill = "#FF4D4F";
-    public const string ApproachFill = "#3B82F6";
-    public const string ControlFill = "#3498DB";
+    public const string DeliveryFill = "#fb923c";
+    public const string GroundFill = "#facc15";
+    public const string TowerFill = "#f43f5e";
+    public const string DepartureFill = "#d970f5";
+    public const string ApproachFill = "#3b82f6";
+    public const string ControlFill = "#6e91b6";
+    public const string FlightServiceFill = "#2dbeaa";
+    public const string MilitaryFill = "#22a05a";
     public const string InformationFill = "#9B59B6";
     public const string ObserverFill = "#FFFFFF";
     public const string DefaultFill = "#95A5A6";
@@ -454,10 +458,16 @@ public static class AtcMarkerStyles
         return FamilyOf(token) switch
         {
             AtcMarkerFamily.Ground when token == "DEL" =>
-                (AtcMarkerShape.RotatedStar, GroundFill, DeliveryDiameter),
+                (AtcMarkerShape.RotatedStar, DeliveryFill, DeliveryDiameter),
             AtcMarkerFamily.Ground => (AtcMarkerShape.Star, GroundFill, GroundDiameter),
             AtcMarkerFamily.Tower => (AtcMarkerShape.Circle, TowerFill, TowerDiameter),
+            AtcMarkerFamily.Approach when token == "DEP" =>
+                (AtcMarkerShape.Circle, DepartureFill, ApproachDiameter),
             AtcMarkerFamily.Approach => (AtcMarkerShape.Circle, ApproachFill, ApproachDiameter),
+            AtcMarkerFamily.Control when token == "FSS" =>
+                (AtcMarkerShape.Circle, FlightServiceFill, ControlDiameter),
+            AtcMarkerFamily.Control when token == "MIL" =>
+                (AtcMarkerShape.Circle, MilitaryFill, ControlDiameter),
             AtcMarkerFamily.Control => (AtcMarkerShape.Circle, ControlFill, ControlDiameter),
             AtcMarkerFamily.Information => (AtcMarkerShape.Circle, InformationFill, InformationDiameter),
             AtcMarkerFamily.Observer => (AtcMarkerShape.Circle, ObserverFill, ObserverDiameter),
@@ -504,7 +514,7 @@ public static class AtcMarkerStyles
         "GND" or "DEL" => AtcMarkerFamily.Ground,
         "TWR" => AtcMarkerFamily.Tower,
         "APP" or "DEP" or "ARR" => AtcMarkerFamily.Approach,
-        "CTR" or "FSS" or "CEN" => AtcMarkerFamily.Control,
+        "CTR" or "FSS" or "CEN" or "MIL" => AtcMarkerFamily.Control,
         "INFO" => AtcMarkerFamily.Information,
         "OBS" => AtcMarkerFamily.Observer,
         _ => null

@@ -126,13 +126,13 @@ public sealed class AtcMarkerStylesTests
     [Theory]
     [InlineData("APP")]
     [InlineData("DEP")]
-    public void For_ApproachAndDeparturePositions_DrawLargerBlueDisc(string facility)
+    public void For_ApproachAndDeparturePositions_DrawLargerDisc(string facility)
     {
         var marker = AtcMarkerStyles.For(facility, $"EDDB_{facility}");
         var tower = AtcMarkerStyles.For("TWR", "EDDB_TWR");
 
         Assert.Equal(AtcMarkerShape.Circle, marker.Shape);
-        Assert.Equal(AtcMarkerStyles.ApproachFill, marker.Fill);
+        Assert.Equal(facility == "DEP" ? AtcMarkerStyles.DepartureFill : AtcMarkerStyles.ApproachFill, marker.Fill);
         Assert.True(marker.Scale > tower.Scale);
     }
 

@@ -84,6 +84,33 @@ public sealed class SettingsStoreTests
         Assert.Equal(expected, settings.TrafficColumnWidth);
     }
 
+    [Theory]
+    [InlineData("small", "Small", 1d)]
+    [InlineData("MEDIUM", "Medium", 1.16d)]
+    [InlineData("Large", "Large", 1.24d)]
+    [InlineData("unknown", "Small", 1d)]
+    public void FontSize_NormalizesAndCopies(string input, string expected, double scale)
+    {
+        var settings = new TheEyeSettings { UiFontSize = input };
+        settings.Normalize();
+
+        Assert.Equal(expected, settings.UiFontSize);
+        Assert.Equal(scale, UiFontSizes.Multiplier(settings.UiFontSize));
+        Assert.Equal(expected, settings.Clone().UiFontSize);
+    }
+
+    [Fact]
+    public void SaveAndLoad_RoundTripsUiFontSize()
+    {
+        using var temporary = new TemporaryDirectory();
+        var store = new SettingsStore(temporary.FilePath("settings.json"));
+        var settings = new TheEyeSettings { UiFontSize = UiFontSizes.Large };
+
+        store.Save(settings);
+
+        Assert.Equal(UiFontSizes.Large, store.Load().UiFontSize);
+    }
+
     [Fact]
     public void SaveAndLoad_RoundTripsNormalizedSettings()
     {

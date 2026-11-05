@@ -131,4 +131,7 @@ public static class ThemeCatalog
     /// competing with the star of a friend.
     /// </summary>
     public static string SupervisorRowTint => WithAlpha(FacilityPalette.Supervisor, 40);
+
+    /// <summary>The cyan wash behind the whole row of a friend in traffic tables.</summary>
+    public static string FriendRowTint => WithAlpha("#38BDF8", 40);
 }

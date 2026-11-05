@@ -52,6 +52,25 @@ public static class AircraftHighlightColors
         All.FirstOrDefault(color => string.Equals(color.Name, name, StringComparison.OrdinalIgnoreCase));
 }
 
+public static class UiFontSizes
+{
+    public const string Small = "Small";
+    public const string Medium = "Medium";
+    public const string Large = "Large";
+
+    public static IReadOnlyList<string> All { get; } = [Small, Medium, Large];
+
+    public static string Normalize(string? size) =>
+        All.FirstOrDefault(value => string.Equals(value, size, StringComparison.OrdinalIgnoreCase)) ?? Small;
+
+    public static double Multiplier(string? size) => Normalize(size) switch
+    {
+        Medium => 1.16,
+        Large => 1.24,
+        _ => 1
+    };
+}
+
 /// <summary>
 /// User preferences persisted as JSON in %AppData%\TheEyeIVAO\settings.json.
 /// Keeping this in the core library means a future Linux shell can use the
@@ -111,6 +130,8 @@ public sealed class TheEyeSettings
     public string OAuthAccount { get; set; } = string.Empty;
 
     public string Theme { get; set; } = TheEyeThemes.Dark;
+
+    public string UiFontSize { get; set; } = UiFontSizes.Small;
 
     /// <summary>
     /// The basemap the map is drawn with. <see cref="MapBasemap.Offline"/> keeps
@@ -258,6 +279,7 @@ public sealed class TheEyeSettings
         OAuthExpiresAt = OAuthExpiresAt,
         OAuthAccount = OAuthAccount,
         Theme = Theme,
+        UiFontSize = UiFontSize,
         MapStyle = MapStyle,
         RefreshSeconds = RefreshSeconds,
         AircraftGlyphSize = AircraftGlyphSize,
@@ -285,6 +307,7 @@ public sealed class TheEyeSettings
         OAuthExpiresAt = other.OAuthExpiresAt;
         OAuthAccount = other.OAuthAccount;
         Theme = other.Theme;
+        UiFontSize = other.UiFontSize;
         MapStyle = other.MapStyle;
         RefreshSeconds = other.RefreshSeconds;
         AircraftGlyphSize = other.AircraftGlyphSize;
@@ -316,6 +339,7 @@ public sealed class TheEyeSettings
         OAuthExpiresAt = OAuthExpiresAt?.Trim() ?? string.Empty;
         OAuthAccount = OAuthAccount?.Trim() ?? string.Empty;
         Theme = TheEyeThemes.Normalize(Theme);
+        UiFontSize = UiFontSizes.Normalize(UiFontSize);
         MapStyle = MapBasemap.Normalize(MapStyle);
         AircraftGlyphSize = Math.Clamp(AircraftGlyphSize, MinAircraftGlyphSize, MaxAircraftGlyphSize);
 

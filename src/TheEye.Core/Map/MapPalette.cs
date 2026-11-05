@@ -14,10 +14,14 @@ public sealed record MapPalette(
 
 public static class FacilityPalette
 {
-    public const string Tower = "#2ECC71";
-    public const string Ground = "#F1C40F";
-    public const string Approach = "#E67E22";
-    public const string Control = "#3498DB";
+    public const string Delivery = "#fb923c";
+    public const string Ground = "#facc15";
+    public const string Tower = "#f43f5e";
+    public const string Departure = "#d970f5";
+    public const string Approach = "#3b82f6";
+    public const string Control = "#6e91b6";
+    public const string FlightService = "#2dbeaa";
+    public const string Military = "#22a05a";
     public const string Information = "#9B59B6";
     public const string Default = "#95A5A6";
 
@@ -34,9 +38,13 @@ public static class FacilityPalette
     public static string ForFacility(string? facility) => facility?.Trim().ToUpperInvariant() switch
     {
         "TWR" => Tower,
-        "GND" or "DEL" => Ground,
-        "APP" or "DEP" or "ARR" => Approach,
-        "CTR" or "FSS" or "CEN" => Control,
+        "DEL" => Delivery,
+        "GND" => Ground,
+        "DEP" => Departure,
+        "APP" or "ARR" => Approach,
+        "CTR" or "CEN" => Control,
+        "FSS" => FlightService,
+        "MIL" => Military,
         "INFO" => Information,
         _ => Default
     };
@@ -50,7 +58,8 @@ public static class FacilityPalette
         "DEP" => "Departure",
         "ARR" => "Arrival",
         "CTR" => "Control",
-        "FSS" => "Flight Service",
+        "FSS" => "Information",
+        "MIL" => "Military",
         "CEN" => "Control",
         "INFO" => "Information",
         "OBS" => "Observer",

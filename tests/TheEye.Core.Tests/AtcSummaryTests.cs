@@ -179,6 +179,29 @@ public sealed class AtcSummaryTests
         Assert.Equal(AtcMarkerStyles.ObserverFill, AtcMarkerStyles.For("OBS", "LROP_OBS").Fill);
     }
 
+      [Theory]
+      [InlineData("DEL", "#fb923c")]
+      [InlineData("GND", "#facc15")]
+      [InlineData("TWR", "#f43f5e")]
+      [InlineData("DEP", "#d970f5")]
+      [InlineData("APP", "#3b82f6")]
+      [InlineData("CTR", "#6e91b6")]
+      [InlineData("FSS", "#2dbeaa")]
+      [InlineData("MIL", "#22a05a")]
+      public void FacilityPalette_UsesRequestedPositionColors(string facility, string expected)
+      {
+        Assert.Equal(expected, FacilityPalette.ForFacility(facility));
+        Assert.Equal(expected, AtcMarkerStyles.For(facility, $"EDDB_{facility}").Fill);
+      }
+
+      [Theory]
+      [InlineData("FSS", "Information")]
+      [InlineData("MIL", "Military")]
+      public void FacilityPalette_UsesNamesForNewPositions(string facility, string expected)
+      {
+        Assert.Equal(expected, FacilityPalette.DisplayName(facility));
+      }
+
     private static IvaoAtc Read(string json) =>
         JsonSerializer.Deserialize<IvaoAtcSummary>(json, IvaoJson.Options)!.ToAtc();
 }

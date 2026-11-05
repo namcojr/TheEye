@@ -1,6 +1,7 @@
 <Window x:Class="TheEye.Desktop.SettingsWindow"
         xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="using:TheEye.Desktop.Helpers"
         Title="Settings — The Eye of IVAO"
         Width="560" Height="760"
         SystemDecorations="None"
@@ -8,7 +9,8 @@
         ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource WindowBackgroundBrush}"
-        Foreground="{DynamicResource TextBrush}">
+        Foreground="{DynamicResource TextBrush}"
+        helpers:FontScaleBehavior.Scale="{Binding FontScale}">
 
     <!-- The whole window is hand-drawn, like the main shell, so the palette owns
          the frame and the caption row still drags the dialog. -->
@@ -87,6 +89,24 @@
                                                    VerticalAlignment="Center" />
                                     </StackPanel>
                                 </RadioButton>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="TEXT SIZE" Classes="section" Margin="0,18,0,0" />
+                    <TextBlock Classes="muted" Margin="0,5,0,9" TextWrapping="Wrap"
+                               Text="Choose the global text size. Small is the current size." />
+                    <ItemsControl ItemsSource="{Binding FontSizeOptions}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <RadioButton Theme="{StaticResource ChoiceButton}" GroupName="FontSize"
+                                             Content="{Binding Name}" Margin="0,0,8,8"
+                                             IsChecked="{Binding IsSelected, Mode=TwoWay}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

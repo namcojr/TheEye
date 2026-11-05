@@ -1,6 +1,7 @@
 using TheEye.Core.Maps;
 using TheEye.Core.Models;
 using TheEye.Presentation.Services;
+using TheEye.Presentation.Theming;
 using TheEye.Presentation.ViewModels;
 
 namespace TheEye.Core.Tests;
@@ -36,6 +37,42 @@ public sealed class PilotItemTests
         Assert.Equal("S D", item.EquipmentText);
         Assert.Equal("C E", item.TransponderTypeText);
         Assert.True(item.Pilot.FlightPlan!.HasExtendedDetails);
+    }
+
+    [Theory]
+    [InlineData(540L)]
+    [InlineData(19800L)]
+    public void OnlineDurationSeconds_UsesNumericElapsedSeconds(long seconds)
+    {
+        var images = new EmptyImages();
+        var item = new PilotItem(new IvaoPilot { Time = seconds }, images, images);
+
+        Assert.Equal(seconds, item.OnlineDurationSeconds);
+    }
+
+    [Fact]
+    public void FriendAndSupervisorMarksTintRowsWithoutChangingCallsigns()
+    {
+        var images = new EmptyImages();
+        var pilot = new PilotItem(new IvaoPilot { Callsign = "TEST1" }, images, images)
+        {
+            IsFriend = true
+        };
+        var atc = new AtcItem(new IvaoAtc { Callsign = "TEST_TWR" }, images)
+        {
+            IsFriend = true
+        };
+
+        Assert.Equal("TEST1", pilot.CallsignLabel);
+        Assert.Equal(ThemeCatalog.FriendRowTint, pilot.RowTint);
+        Assert.Equal("TEST_TWR", atc.CallsignLabel);
+        Assert.Equal(ThemeCatalog.FriendRowTint, atc.RowTint);
+
+        pilot.IsSupervisor = true;
+        atc.IsSupervisor = true;
+
+        Assert.Equal(ThemeCatalog.SupervisorRowTint, pilot.RowTint);
+        Assert.Equal(ThemeCatalog.SupervisorRowTint, atc.RowTint);
     }
 
     private sealed class EmptyImages : IAircraftIconCache, IImageCache

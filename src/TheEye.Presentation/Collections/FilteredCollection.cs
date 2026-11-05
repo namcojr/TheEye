@@ -15,6 +15,7 @@ public sealed class FilteredCollection<T> : ObservableCollection<T>
 {
     private readonly ObservableCollection<T> _source;
     private Func<T, bool> _filter;
+    private IComparer<T>? _comparer;
 
     public FilteredCollection(ObservableCollection<T> source, Func<T, bool>? filter = null)
     {
@@ -32,6 +33,17 @@ public sealed class FilteredCollection<T> : ObservableCollection<T>
         set
         {
             _filter = value ?? throw new ArgumentNullException(nameof(value));
+            Rebuild();
+        }
+    }
+
+    /// <summary>Orders matching items before publishing the refreshed projection.</summary>
+    public IComparer<T>? Comparer
+    {
+        get => _comparer;
+        set
+        {
+            _comparer = value;
             Rebuild();
         }
     }
@@ -56,6 +68,11 @@ public sealed class FilteredCollection<T> : ObservableCollection<T>
             {
                 matched.Add(item);
             }
+        }
+
+        if (_comparer is not null)
+        {
+            matched.Sort(_comparer);
         }
 
         Items.Clear();

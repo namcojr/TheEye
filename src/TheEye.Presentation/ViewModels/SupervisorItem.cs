@@ -1,6 +1,7 @@
 using TheEye.Core.Models;
 using TheEye.Core.Reference;
 using TheEye.Core.Services;
+using TheEye.Presentation.Theming;
 
 namespace TheEye.Presentation.ViewModels;
 
@@ -77,19 +78,16 @@ public sealed class SupervisorItem : ObservableObject
         get => _isFriend;
         set
         {
-            if (SetProperty(ref _isFriend, value))
-            {
-                OnPropertyChanged(nameof(CallsignLabel));
-            }
+            SetProperty(ref _isFriend, value);
         }
     }
 
     /// <summary>
-    /// The callsign as the list prints it. A star in front of the callsign marks
-    /// a friend, like the star of the traffic lists: the SUP list is about who
-    /// watches the network, so it offers no button to add one.
+    /// The callsign as the list prints it.
     /// </summary>
-    public string CallsignLabel => IsFriend ? $"★ {Callsign}" : Callsign;
+    public string CallsignLabel => Callsign;
+
+    public string RowTint => ThemeCatalog.SupervisorRowTint;
 
     public string SearchText { get; private set; }
 

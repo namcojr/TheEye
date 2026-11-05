@@ -164,7 +164,7 @@ public sealed class PilotItem : ObservableObject
         {
             if (SetProperty(ref _isFriend, value))
             {
-                OnPropertyChanged(nameof(CallsignLabel));
+                OnPropertyChanged(nameof(RowTint));
             }
         }
     }
@@ -187,19 +187,17 @@ public sealed class PilotItem : ObservableObject
     }
 
     /// <summary>
-    /// The wash the traffic list paints behind the whole row of a supervisor:
-    /// the pink of the ring the map draws around the badge, at a low opacity. A
-    /// row of a pilot nobody watches binds a fully transparent colour, so the
-    /// view needs no trigger to un-tint it.
+    /// The wash the traffic list paints behind the whole row. Supervisor status
+    /// takes priority over friend status; an unmarked row binds a transparent colour.
     /// </summary>
-    public string RowTint => IsSupervisor ? ThemeCatalog.SupervisorRowTint : TransparentTint;
+    public string RowTint => IsSupervisor
+        ? ThemeCatalog.SupervisorRowTint
+        : IsFriend ? ThemeCatalog.FriendRowTint : TransparentTint;
 
     /// <summary>
-    /// The callsign as the traffic list prints it. A star in front of the
-    /// callsign marks a friend, because a three-column list has no room for a
-    /// column of its own and the star survives a narrow panel.
+    /// The callsign as the traffic list prints it.
     /// </summary>
-    public string CallsignLabel => IsFriend ? $"★ {Callsign}" : Callsign;
+    public string CallsignLabel => Callsign;
 
     /// <summary>
     /// The "#RRGGBB" the map pin is painted with when the aircraft is the user's
@@ -390,6 +388,11 @@ public sealed class PilotItem : ObservableObject
         (_detail?.Online(DateTimeOffset.Now) ?? _pilot.Online(DateTimeOffset.Now)) is { } online
             ? DurationText.Format(online)
             : "—";
+
+    public long? OnlineDurationSeconds =>
+        (_detail?.Online(DateTimeOffset.Now) ?? _pilot.Online(DateTimeOffset.Now)) is { } online
+            ? (long)online.TotalSeconds
+            : null;
 
     public string ConnectedText => (_detail?.CreatedAt ?? _pilot.CreatedAt) is { } connectedAt
         ? connectedAt.ToLocalTime().ToString("HH:mm")

@@ -64,6 +64,21 @@ public sealed class SettingsViewModel : ObservableObject
             ?? IntervalOptions[2];
         interval.IsSelected = true;
 
+        FontSizeOptions = UiFontSizes.All.Select(size => new UiFontSizeOption(size)).ToList();
+        foreach (var option in FontSizeOptions)
+        {
+            option.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(UiFontSizeOption.IsSelected) && option.IsSelected)
+                {
+                    SelectFontSize(option);
+                }
+            };
+        }
+
+        FontSizeOptions.First(option =>
+            string.Equals(option.Name, UiFontSizes.Normalize(Draft.UiFontSize), StringComparison.Ordinal)).IsSelected = true;
+
         // The basemap lives beside the theme: the shell palette recolours the
         // traffic layers, the map style decides what is drawn underneath them.
         MapStyleOptions = MapBasemap.Styles
@@ -108,7 +123,11 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string AircraftGlyphSizeLabel => $"{AircraftGlyphSize} px";
 
+    public double FontScale => UiFontSizes.Multiplier(Draft.UiFontSize);
+
     public IReadOnlyList<ThemeOption> ThemeOptions { get; }
+
+    public IReadOnlyList<UiFontSizeOption> FontSizeOptions { get; }
 
     /// <summary>The basemaps the map can be drawn with, offline first.</summary>
     public IReadOnlyList<MapStyleOption> MapStyleOptions { get; }
@@ -232,6 +251,21 @@ public sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(Draft));
     }
 
+    private void SelectFontSize(UiFontSizeOption selected)
+    {
+        Draft.UiFontSize = selected.Name;
+        foreach (var option in FontSizeOptions)
+        {
+            if (!ReferenceEquals(option, selected))
+            {
+                option.IsSelected = false;
+            }
+        }
+
+        OnPropertyChanged(nameof(FontScale));
+        OnPropertyChanged(nameof(Draft));
+    }
+
     private List<ColorOption> CreateColorOptions(string current, Action<string> apply)
     {
         var options = AircraftHighlightColors.All
@@ -349,6 +383,24 @@ public sealed class IntervalOption : ObservableObject
     public int Seconds { get; }
 
     public string Label { get; }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value);
+    }
+}
+
+public sealed class UiFontSizeOption : ObservableObject
+{
+    private bool _isSelected;
+
+    public UiFontSizeOption(string name)
+    {
+        Name = name;
+    }
+
+    public string Name { get; }
 
     public bool IsSelected
     {

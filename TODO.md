@@ -10,3 +10,17 @@ THINGS TO ADD / CORRECTIONS
 - [x] Remove the future route and waypoint markers when the aircraft is unselected; only the selected aircraft displays its filed route.
 - [x] Enlarge departure/arrival circles by another 25% and increase their opacity from 20% to approximately 35%.
 - [x] Draw a translucent connector from the last reported aircraft position to its animated position between data updates, keeping the future route attached to the moving aircraft without changing recorded telemetry.
+- [x] Implement these colours for the ATC positions:
+    - DEL #fb923c
+    - GND #facc15
+    - TWR #f43f5e
+    - DEP #d970f5
+    - APP #3b82f6
+    - CTR #6e91b6
+    - FSS #2dbeaa (Information - new)
+    - MIL #22a05a (Military - new)
+- [x] In this application's main window, to the left side of the "REFRESH" icon at the top left, let's also add "PILOT" and "ATC"
+  icons. Clicking on either will automatically deselect any selected pilot or station and replace the map view with a detailed, sortable, searchable table view of all pilots online or ATC online.
+  This table should be fed by our live data.
+- [x] Redraw the ATC, supervisor and friend table icons; enlarge the radar glyph, use a star for supervisors and a person glyph for friends.
+- [x] Remove friend stars from callsigns, add a floating FRIENDS/SUP colour legend, and tint friend rows cyan and supervisor rows red.
